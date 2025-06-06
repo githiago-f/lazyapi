@@ -1,0 +1,17 @@
+requests:
+  - info:
+      title: Buscar users
+      description: Buscar os usuários da api
+    method: GET
+    url: /users
+    headers:
+      Authorization: "Bearer ${env:TOKEN}"
+  - info:
+      title: Buscar arquivos
+      description: Buscar os arquivos da api
+    method: GET
+    url: /files
+    headers:
+      Authorization: "Bearer ${env:TOKEN}"
+envs:
+  TOKEN: tokenstr
