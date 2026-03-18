@@ -35,6 +35,10 @@ func NewTui() Tui {
 		requestlist.Item(model.PUT, "/", "Update/Create profile", 0.121),
 		requestlist.Item(model.DELETE, "/", "Delete profile", 432),
 	}
+	actualList := list.New(requests, list.NewDefaultDelegate(), 0, 0)
+	actualList.Title = "Requests"
+	actualList.SetShowHelp(false)
+	actualList.SetShowStatusBar(false)
 
 	return Tui{
 		config: config.Config{
@@ -45,7 +49,7 @@ func NewTui() Tui {
 				Border(lipgloss.NormalBorder(), false, false, true, false),
 		},
 		requestList: requestlist.RequestList{
-			List: list.New(requests, list.NewDefaultDelegate(), 0, 0),
+			List: actualList,
 		},
 		keymap: KeyMap{},
 		options: components.NewOptionsPane(

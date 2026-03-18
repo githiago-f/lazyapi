@@ -26,6 +26,7 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
+			rl.List.Select(rl.List.GlobalIndex())
 			return rl, tea.Printf("%d", rl.List.GlobalIndex())
 		}
 	}
