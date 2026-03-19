@@ -8,7 +8,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/components"
 	requestlist "github.com/githiago-f/lazyapi/internal/components/request_list"
 	"github.com/githiago-f/lazyapi/internal/config"
-	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/store"
 )
 
 const (
@@ -28,14 +28,7 @@ type Tui struct {
 }
 
 func NewTui() Tui {
-	requests := []list.Item{
-		requestlist.Item(model.GET, "/", "Get profile", 1.91),
-		requestlist.Item(model.POST, "/", "Create profile", 0.2),
-		requestlist.Item(model.PATCH, "/", "Update profile", 10),
-		requestlist.Item(model.PUT, "/", "Update/Create profile", 0.121),
-		requestlist.Item(model.DELETE, "/", "Delete profile", 432),
-	}
-	actualList := list.New(requests, list.NewDefaultDelegate(), 0, 0)
+	actualList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	actualList.Title = "Requests"
 	actualList.SetShowHelp(false)
 	actualList.SetShowStatusBar(false)
@@ -72,13 +65,25 @@ func (t Tui) View() string {
 }
 
 func (t Tui) Init() tea.Cmd {
-	return tea.Batch(tea.EnterAltScreen, tea.WindowSize())
+	return tea.Batch(tea.EnterAltScreen, tea.WindowSize(), store.FindRequestFiles())
 }
 
 func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case store.RequestFilesMsg:
+		return t, store.LoadRequestsList(msg.Paths)
+	case store.LoadedRequestListMsg:
+		if len(msg.Items) == 0 {
+			// TODO redirect to create file
+			return t, cmd
+		}
+		cmd = t.requestList.List.SetItems(msg.Items)
+		return t, cmd
+	case requestlist.OpenRequestViewMsg:
+		t.titleBar.Title = msg.FileName
+		return t, cmd
 	case tea.WindowSizeMsg:
 		t.options.Style = t.options.Style.Width(msg.Width)
 		t.titleBar.Width = msg.Width

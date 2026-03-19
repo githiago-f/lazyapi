@@ -7,12 +7,18 @@ import (
 
 type TitleBar struct {
 	config config.Config
-	Width  int
-	Style  lipgloss.Style
+
+	Title string
+	Width int
+	Style lipgloss.Style
 }
 
 func (t TitleBar) View() string {
+	name := t.config.Name()
+	if t.Title != "" {
+		name = t.Title
+	}
 	return t.Style.
 		Width(t.Width).
-		Render(t.config.Name())
+		Render(name)
 }

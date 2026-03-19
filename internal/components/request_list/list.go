@@ -6,6 +6,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type OpenRequestViewMsg struct {
+	FileName string
+}
+
+func OpenRequestView(fileName string) tea.Cmd {
+	return func() tea.Msg {
+		return OpenRequestViewMsg{
+			FileName: fileName,
+		}
+	}
+}
+
 type RequestList struct {
 	List list.Model
 }
@@ -26,8 +38,8 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
-			rl.List.Select(rl.List.GlobalIndex())
-			return rl, tea.Printf("%d", rl.List.GlobalIndex())
+			item, _ := rl.List.SelectedItem().(RequestItem)
+			return rl, OpenRequestView(item.FileName)
 		}
 	}
 

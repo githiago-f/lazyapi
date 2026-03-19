@@ -42,23 +42,16 @@ var (
 )
 
 type RequestItem struct {
-	method       model.Method
-	uri, summary string
-	requestTime  float32
-}
-
-func Item(method model.Method, uri, summary string, requestTime float32) RequestItem {
-	return RequestItem{
-		method:      method,
-		uri:         uri,
-		summary:     summary,
-		requestTime: requestTime,
-	}
+	Method      model.Method `yaml:"method"`
+	URI         string       `yaml:"uri"`
+	Summary     string       `yaml:"summary"`
+	FileName    string
+	RequestTime float32 `yaml:"request_time"`
 }
 
 func (ri RequestItem) Title() string {
 	var methodStyle lipgloss.Style
-	switch ri.method {
+	switch ri.Method {
 	case model.GET:
 		methodStyle = getStyle
 	case model.POST:
@@ -72,13 +65,13 @@ func (ri RequestItem) Title() string {
 	default:
 		methodStyle = anyStyle
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Left, methodStyle.Render(ri.method.Label()), " ", ri.uri)
+	return lipgloss.JoinHorizontal(lipgloss.Left, methodStyle.Render(ri.Method.Label()), " ", ri.URI)
 }
 
 func (ri RequestItem) Description() string {
-	return lipgloss.JoinHorizontal(lipgloss.Left, ri.summary, " - ", fmt.Sprintf("%.1fms", ri.requestTime))
+	return lipgloss.JoinHorizontal(lipgloss.Left, ri.Summary, " - ", fmt.Sprintf("%.1fms", ri.RequestTime))
 }
 
 func (ri RequestItem) FilterValue() string {
-	return fmt.Sprintf("%s %s", ri.uri, ri.summary)
+	return fmt.Sprintf("%s %s", ri.URI, ri.Summary)
 }

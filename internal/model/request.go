@@ -1,6 +1,12 @@
 // Package model implements every possible value that deals with data
 package model
 
+import (
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
 type Method int
 
 const (
@@ -12,6 +18,32 @@ const (
 	OPTIONS
 	HEAD
 )
+
+func (m *Method) UnmarshalYAML(node *yaml.Node) error {
+	var value string
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+
+	switch strings.ToUpper(value) {
+	case "GET":
+		*m = GET
+	case "POST":
+		*m = POST
+	case "PATCH":
+		*m = PATCH
+	case "PUT":
+		*m = PUT
+	case "DELETE":
+		*m = DELETE
+	case "OPTIONS":
+		*m = OPTIONS
+	case "HEAD":
+		*m = HEAD
+	}
+
+	return nil
+}
 
 func (m Method) Label() string {
 	switch m {
