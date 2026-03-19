@@ -1,0 +1,21 @@
+method: post
+uri: '{{envs["go"].BASE_URL}}/teste'
+
+summary: |
+  Only access the correct endpoint
+
+request_time: 124
+body:
+  - type: application/json
+    raw: | 
+      {
+        "test_data": "it is a string",
+      }
+responses:
+  - status_code: 200
+    body:
+      type: application/json
+      raw: |
+        {
+          "response": "Hello, it is a string!"
+        }

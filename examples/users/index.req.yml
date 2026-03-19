@@ -1,0 +1,4 @@
+method: put
+uri: '{{envs["go"].BASE_URL}}/teste'
+
+
