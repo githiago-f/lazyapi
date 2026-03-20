@@ -24,5 +24,7 @@ func (f Field) View() string {
 }
 
 func (f Field) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return f, nil
+	var cmd tea.Cmd
+	f.textField, cmd = f.textField.Update(msg)
+	return f, cmd
 }

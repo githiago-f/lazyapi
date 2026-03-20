@@ -13,6 +13,7 @@ import (
 
 const (
 	RequestList config.PageIndex = iota
+	RequestEditor
 )
 
 type Tui struct {
@@ -23,7 +24,6 @@ type Tui struct {
 	titleBar    components.TitleBar
 	requestList requestlist.RequestList
 	request     pane.RequestPane
-	response    components.View
 	options     components.OptionsPane
 }
 
@@ -44,6 +44,9 @@ func NewTui() Tui {
 		requestList: requestlist.RequestList{
 			List: actualList,
 		},
+		request: pane.RequestPane{
+			URI: components.InitField("https://example.com/hello_world"),
+		},
 		keymap: KeyMap{},
 		options: components.NewOptionsPane(
 			components.NewOption("quit", "q", "^c"),
@@ -56,10 +59,18 @@ func NewTui() Tui {
 }
 
 func (t Tui) View() string {
+	var currentView string
+	switch t.config.Active {
+	case RequestList:
+		currentView = t.requestList.View()
+	case RequestEditor:
+		currentView = t.request.View()
+	}
+
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		t.titleBar.View(),
-		t.requestList.View(),
+		currentView,
 		t.options.View(),
 	)
 }
@@ -69,11 +80,15 @@ func (t Tui) Init() tea.Cmd {
 }
 
 func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var (
+		model tea.Model
+		cmd   tea.Cmd
+	)
 
 	switch msg := msg.(type) {
 	case store.RequestFilesMsg:
 		return t, store.LoadRequestsList(msg.Paths)
+
 	case store.LoadedRequestListMsg:
 		if len(msg.Items) == 0 {
 			// TODO redirect to create file
@@ -81,9 +96,19 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmd = t.requestList.List.SetItems(msg.Items)
 		return t, cmd
+
 	case requestlist.OpenRequestViewMsg:
 		t.titleBar.Title = msg.FileName
+		t.config.Active = RequestEditor
+		t.config.CurrentFile = msg.FileName
 		return t, cmd
+
+	case pane.CloseRequestPaneMsg:
+		t.titleBar.Title = t.config.Name()
+		t.config.Active = RequestList
+		t.config.CurrentFile = ""
+		return t, cmd
+
 	case tea.WindowSizeMsg:
 		t.options.Style = t.options.Style.Width(msg.Width)
 		t.titleBar.Width = msg.Width
@@ -96,15 +121,22 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, nil
 	case tea.KeyMsg:
 		switch msg.String() {
-		case t.keymap.Quit(), t.keymap.Kill():
+		case t.keymap.Quit():
+			if t.config.Active == RequestList {
+				return t, tea.Quit
+			}
+		case t.keymap.Kill():
 			return t, tea.Quit
 		}
 	}
 
-	if t.config.Active == RequestList {
-		var list tea.Model
-		list, cmd = t.requestList.Update(msg)
-		t.requestList, _ = list.(requestlist.RequestList)
+	switch t.config.Active {
+	case RequestList:
+		model, cmd = t.requestList.Update(msg)
+		t.requestList, _ = model.(requestlist.RequestList)
+	case RequestEditor:
+		model, cmd = t.request.Update(msg)
+		t.request, _ = model.(pane.RequestPane)
 	}
 
 	return t, cmd

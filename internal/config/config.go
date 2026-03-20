@@ -33,9 +33,10 @@ const (
 type PageIndex int
 
 type Config struct {
-	Width  int
-	Height int
-	Active PageIndex
+	Width       int
+	Height      int
+	Active      PageIndex
+	CurrentFile string
 }
 
 func (c Config) Name() string {
