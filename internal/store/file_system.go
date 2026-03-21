@@ -8,7 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	requestlist "github.com/githiago-f/lazyapi/internal/components/request_list"
+	requestlist "github.com/githiago-f/lazyapi/internal/app/pane/requestlist"
 	"gopkg.in/yaml.v3"
 )
 

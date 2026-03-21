@@ -1,7 +1,8 @@
-// Package pane implements pages for request, response and others.
-package pane
+// Package requesteditor implements editor page for request data
+package requesteditor
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/githiago-f/lazyapi/internal/components"
@@ -24,20 +25,22 @@ const (
 	uri
 )
 
-func (f field) next() field {
-	switch f {
-	case method:
-		return uri
-	case uri:
-		return method
-	}
+const fieldsLen = 2
 
-	return method
+func (f field) next() field {
+	return field((int(f) + 1) % fieldsLen)
+}
+
+func (f field) prev() field {
+	prev := int(f) - 1
+	if prev < 0 {
+		return field(fieldsLen - 1)
+	}
+	return field(prev)
 }
 
 type RequestPane struct {
 	tea.Model
-	config       config.Config
 	currentField field
 
 	URI    components.Field
@@ -55,11 +58,14 @@ func (rp RequestPane) View() string {
 func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "tab":
+		switch {
+		case key.Matches(msg, config.DefaultKeyMap.Next):
 			rp.currentField = rp.currentField.next()
 			return rp, nil
-		case "esc":
+		case key.Matches(msg, config.DefaultKeyMap.Prev):
+			rp.currentField = rp.currentField.prev()
+			return rp, nil
+		case key.Matches(msg, config.DefaultKeyMap.Back):
 			return rp, Close()
 		}
 	}

@@ -19,6 +19,8 @@ const (
 	HEAD
 )
 
+type MethodSelector struct{}
+
 func (m *Method) UnmarshalYAML(node *yaml.Node) error {
 	var value string
 	if err := node.Decode(&value); err != nil {

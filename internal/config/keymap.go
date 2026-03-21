@@ -1,0 +1,80 @@
+package config
+
+import (
+	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+type KeyMap struct {
+	Up     key.Binding
+	Down   key.Binding
+	Select key.Binding
+	Filter key.Binding
+	Back   key.Binding
+	Next   key.Binding
+	Prev   key.Binding
+	Quit   key.Binding
+	Kill   key.Binding
+	Help   key.Binding
+}
+
+func (k KeyMap) ShortHelp() []key.Binding {
+	if DefaultConfig.Active == RequestEditor {
+		return []key.Binding{k.Back, k.Next, k.Prev, k.Help}
+	}
+
+	return []key.Binding{k.Select, k.Up, k.Down, k.Filter, k.Help}
+}
+
+func (k KeyMap) FullHelp() [][]key.Binding {
+	if DefaultConfig.Active == RequestEditor {
+		return [][]key.Binding{
+			{k.Next, k.Prev},
+			{k.Back, k.Kill},
+		}
+	}
+
+	return [][]key.Binding{
+		{k.Select, k.Up, k.Down, k.Filter},
+		{k.Quit, k.Kill},
+	}
+}
+
+var DefaultKeyMap = KeyMap{
+	Up: key.NewBinding(
+		key.WithKeys("k", "up"),
+		key.WithHelp("↑/k", "move up"),
+	),
+	Filter: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "filter"),
+	),
+	Down: key.NewBinding(
+		key.WithKeys("down", "j"),
+		key.WithHelp("↓/j", "move down"),
+	),
+	Select: key.NewBinding(
+		key.WithKeys(tea.KeyEnter.String(), tea.KeySpace.String()),
+		key.WithHelp("enter/space", "select"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("q"),
+		key.WithHelp("q", "quit"),
+	),
+	Kill: key.NewBinding(
+		key.WithKeys(tea.KeyCtrlC.String()),
+		key.WithHelp("ctrl+c", "exit"),
+	),
+	Next: key.NewBinding(
+		key.WithKeys(tea.KeyTab.String()),
+		key.WithHelp("tab", "next"),
+	),
+	Prev: key.NewBinding(
+		key.WithKeys(tea.KeyShiftTab.String()),
+		key.WithHelp("shift+tab", "prev"),
+	),
+	Back: key.NewBinding(
+		key.WithKeys(tea.KeyEsc.String()),
+		key.WithHelp("esc", "back"),
+	),
+}

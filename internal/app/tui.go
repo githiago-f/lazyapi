@@ -1,30 +1,24 @@
 package app
 
 import (
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/githiago-f/lazyapi/internal/app/pane"
+	requesteditor "github.com/githiago-f/lazyapi/internal/app/pane/requesteditor"
+	requestlist "github.com/githiago-f/lazyapi/internal/app/pane/requestlist"
 	"github.com/githiago-f/lazyapi/internal/components"
-	requestlist "github.com/githiago-f/lazyapi/internal/components/request_list"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/store"
 )
 
-const (
-	RequestList config.PageIndex = iota
-	RequestEditor
-)
-
 type Tui struct {
 	tea.Model
-	keymap KeyMap
-	config config.Config
-
 	titleBar    components.TitleBar
+	help        help.Model
 	requestList requestlist.RequestList
-	request     pane.RequestPane
-	options     components.OptionsPane
+	request     requesteditor.RequestPane
 }
 
 func NewTui() Tui {
@@ -34,36 +28,26 @@ func NewTui() Tui {
 	actualList.SetShowStatusBar(false)
 
 	return Tui{
-		config: config.Config{
-			Active: RequestList,
-		},
 		titleBar: components.TitleBar{
 			Style: lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), false, false, true, false),
 		},
+		help: help.New(),
 		requestList: requestlist.RequestList{
 			List: actualList,
 		},
-		request: pane.RequestPane{
+		request: requesteditor.RequestPane{
 			URI: components.InitField("https://example.com/hello_world"),
 		},
-		keymap: KeyMap{},
-		options: components.NewOptionsPane(
-			components.NewOption("quit", "q", "^c"),
-			components.NewOption("New request", "n", "+"),
-			components.NewOption("filter", "/"),
-			components.NewOption("up", "k", "↑"),
-			components.NewOption("down", "j", "↓"),
-		),
 	}
 }
 
 func (t Tui) View() string {
 	var currentView string
-	switch t.config.Active {
-	case RequestList:
+	switch config.DefaultConfig.Active {
+	case config.RequestList:
 		currentView = t.requestList.View()
-	case RequestEditor:
+	case config.RequestEditor:
 		currentView = t.request.View()
 	}
 
@@ -71,7 +55,7 @@ func (t Tui) View() string {
 		lipgloss.Left,
 		t.titleBar.View(),
 		currentView,
-		t.options.View(),
+		t.help.View(config.DefaultKeyMap),
 	)
 }
 
@@ -99,44 +83,39 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case requestlist.OpenRequestViewMsg:
 		t.titleBar.Title = msg.FileName
-		t.config.Active = RequestEditor
-		t.config.CurrentFile = msg.FileName
+		config.DefaultConfig.Active = config.RequestEditor
+		config.DefaultConfig.CurrentFile = msg.FileName
 		return t, cmd
 
-	case pane.CloseRequestPaneMsg:
-		t.titleBar.Title = t.config.Name()
-		t.config.Active = RequestList
-		t.config.CurrentFile = ""
+	case requesteditor.CloseRequestPaneMsg:
+		t.titleBar.Title = config.DefaultConfig.Name()
+		config.DefaultConfig.Active = config.RequestList
+		config.DefaultConfig.CurrentFile = ""
 		return t, cmd
 
 	case tea.WindowSizeMsg:
-		t.options.Style = t.options.Style.Width(msg.Width)
 		t.titleBar.Width = msg.Width
-
-		_, optionsHeight := t.options.Style.GetFrameSize()
 		_, titleBarHeight := t.titleBar.Style.GetFrameSize()
 
-		t.requestList.List.SetSize(msg.Width, msg.Height-(optionsHeight+titleBarHeight+2))
+		t.requestList.List.SetSize(msg.Width, msg.Height-(titleBarHeight+2))
 
 		return t, nil
 	case tea.KeyMsg:
-		switch msg.String() {
-		case t.keymap.Quit():
-			if t.config.Active == RequestList {
-				return t, tea.Quit
-			}
-		case t.keymap.Kill():
+		switch {
+		case key.Matches(msg, config.DefaultKeyMap.Quit) && config.DefaultConfig.Active == config.PageIndex(0):
+			return t, tea.Quit
+		case key.Matches(msg, config.DefaultKeyMap.Kill):
 			return t, tea.Quit
 		}
 	}
 
-	switch t.config.Active {
-	case RequestList:
+	switch config.DefaultConfig.Active {
+	case config.RequestList:
 		model, cmd = t.requestList.Update(msg)
 		t.requestList, _ = model.(requestlist.RequestList)
-	case RequestEditor:
+	case config.RequestEditor:
 		model, cmd = t.request.Update(msg)
-		t.request, _ = model.(pane.RequestPane)
+		t.request, _ = model.(requesteditor.RequestPane)
 	}
 
 	return t, cmd

@@ -39,6 +39,13 @@ type Config struct {
 	CurrentFile string
 }
 
+var DefaultConfig = Config{
+	Width:       0,
+	Height:      0,
+	Active:      PageIndex(0),
+	CurrentFile: "",
+}
+
 func (c Config) Name() string {
 	return ">_ lazyapi"
 }

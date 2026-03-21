@@ -2,8 +2,10 @@
 package requestlist
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/githiago-f/lazyapi/internal/config"
 )
 
 type OpenRequestViewMsg struct {
@@ -36,8 +38,8 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "enter":
+		switch {
+		case key.Matches(msg, config.DefaultKeyMap.Select):
 			item, _ := rl.List.SelectedItem().(RequestItem)
 			return rl, OpenRequestView(item.FileName)
 		}
