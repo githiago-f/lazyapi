@@ -6,16 +6,23 @@ import (
 )
 
 type KeyMap struct {
-	Up     key.Binding
-	Down   key.Binding
+	Up    key.Binding
+	Down  key.Binding
+	Left  key.Binding
+	Right key.Binding
+
 	Select key.Binding
 	Filter key.Binding
-	Back   key.Binding
-	Next   key.Binding
-	Prev   key.Binding
-	Quit   key.Binding
-	Kill   key.Binding
-	Help   key.Binding
+
+	Back key.Binding
+
+	Next key.Binding
+	Prev key.Binding
+
+	Quit key.Binding
+	Kill key.Binding
+
+	Help key.Binding
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
@@ -44,6 +51,14 @@ var DefaultKeyMap = KeyMap{
 	Up: key.NewBinding(
 		key.WithKeys("k", "up"),
 		key.WithHelp("↑/k", "move up"),
+	),
+	Left: key.NewBinding(
+		key.WithKeys("h", tea.KeyLeft.String()),
+		key.WithHelp("h", "move left"),
+	),
+	Right: key.NewBinding(
+		key.WithKeys("l", tea.KeyRight.String()),
+		key.WithHelp("l", "move right"),
 	),
 	Filter: key.NewBinding(
 		key.WithKeys("/"),

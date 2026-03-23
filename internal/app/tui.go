@@ -36,9 +36,7 @@ func NewTui() Tui {
 		requestList: requestlist.RequestList{
 			List: actualList,
 		},
-		request: requesteditor.RequestPane{
-			URI: components.InitField("https://example.com/hello_world"),
-		},
+		request: requesteditor.New(),
 	}
 }
 
@@ -65,8 +63,8 @@ func (t Tui) Init() tea.Cmd {
 
 func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
-		model tea.Model
-		cmd   tea.Cmd
+		subModel tea.Model
+		cmd      tea.Cmd
 	)
 
 	switch msg := msg.(type) {
@@ -82,23 +80,27 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, cmd
 
 	case requestlist.OpenRequestViewMsg:
-		t.titleBar.Title = msg.FileName
 		config.DefaultConfig.Active = config.RequestEditor
-		config.DefaultConfig.CurrentFile = msg.FileName
-		return t, cmd
+		return t, store.OpenRequestFile(msg.FileName)
 
 	case requesteditor.CloseRequestPaneMsg:
-		t.titleBar.Title = config.DefaultConfig.Name()
 		config.DefaultConfig.Active = config.RequestList
-		config.DefaultConfig.CurrentFile = ""
 		return t, cmd
 
 	case tea.WindowSizeMsg:
 		t.titleBar.Width = msg.Width
-		_, titleBarHeight := t.titleBar.Style.GetFrameSize()
+		t.request.Tabs.Width = msg.Width - 2
+		methodWidth, _ := lipgloss.Size(t.request.Method.View())
+		sendWidth, _ := lipgloss.Size(t.request.Send.View())
+
+		t.request.URI.Style = t.request.URI.Style.Width(msg.Width - (methodWidth + sendWidth + 2))
+		_, titleBarHeight := lipgloss.Size(t.titleBar.View())
 
 		t.requestList.List.SetSize(msg.Width, msg.Height-(titleBarHeight+2))
 
+		return t, nil
+	case store.LoadedFile:
+		t.request.FormData = msg.Data
 		return t, nil
 	case tea.KeyMsg:
 		switch {
@@ -111,11 +113,11 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch config.DefaultConfig.Active {
 	case config.RequestList:
-		model, cmd = t.requestList.Update(msg)
-		t.requestList, _ = model.(requestlist.RequestList)
+		subModel, cmd = t.requestList.Update(msg)
+		t.requestList, _ = subModel.(requestlist.RequestList)
 	case config.RequestEditor:
-		model, cmd = t.request.Update(msg)
-		t.request, _ = model.(requesteditor.RequestPane)
+		subModel, cmd = t.request.Update(msg)
+		t.request, _ = subModel.(requesteditor.RequestPane)
 	}
 
 	return t, cmd

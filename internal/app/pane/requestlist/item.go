@@ -9,36 +9,28 @@ import (
 )
 
 var (
-	getStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(config.Saphire)).
-			Foreground(lipgloss.Color(config.Crust)).
-			Bold(true).
-			Padding(0, 4, 0, 1)
-	postStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(config.Green)).
-			Foreground(lipgloss.Color(config.Crust)).
-			Bold(true).
-			Padding(0, 3, 0, 1)
-	patchStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(config.Yellow)).
-			Foreground(lipgloss.Color(config.Crust)).
-			Bold(true).
-			Padding(0, 2, 0, 1)
-	deleteStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(config.Red)).
-			Foreground(lipgloss.Color(config.Crust)).
-			Bold(true).
-			Padding(0, 1)
-	putStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(config.Yellow)).
-			Foreground(lipgloss.Color(config.Crust)).
-			Bold(true).
-			Padding(0, 4, 0, 1)
 	anyStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(config.Overlay2)).
 			Foreground(lipgloss.Color(config.Crust)).
 			Bold(true).
-			Padding(0, 1)
+			Padding(0, 2).
+			Width(10).
+			Align(lipgloss.Center, lipgloss.Center)
+	getStyle = anyStyle.
+			Background(lipgloss.Color(config.Saphire)).
+			Foreground(lipgloss.Color(config.Crust))
+	postStyle = anyStyle.
+			Background(lipgloss.Color(config.Green)).
+			Foreground(lipgloss.Color(config.Crust))
+	patchStyle = anyStyle.
+			Background(lipgloss.Color(config.Yellow)).
+			Foreground(lipgloss.Color(config.Crust))
+	deleteStyle = anyStyle.
+			Background(lipgloss.Color(config.Red)).
+			Foreground(lipgloss.Color(config.Crust))
+	putStyle = anyStyle.
+			Background(lipgloss.Color(config.Yellow)).
+			Foreground(lipgloss.Color(config.Crust))
 )
 
 type RequestItem struct {

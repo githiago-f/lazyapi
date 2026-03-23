@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	requestlist "github.com/githiago-f/lazyapi/internal/app/pane/requestlist"
+	"github.com/githiago-f/lazyapi/internal/model"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,6 +19,10 @@ type RequestFilesMsg struct {
 
 type LoadedRequestListMsg struct {
 	Items []list.Item
+}
+
+type LoadedFile struct {
+	Data model.Request
 }
 
 func FindRequestFiles() tea.Cmd {
@@ -54,5 +59,22 @@ func LoadRequestsList(paths []string) tea.Cmd {
 		return LoadedRequestListMsg{
 			Items: requests,
 		}
+	}
+}
+
+func OpenRequestFile(filePath string) tea.Cmd {
+	return func() tea.Msg {
+		file, err := os.Open(filePath)
+		if err != nil {
+			msg := fmt.Sprintf("Error when trying to open file, %v", err)
+			return tea.Batch(tea.Println(msg), tea.Quit)
+		}
+
+		decoder := yaml.NewDecoder(file)
+
+		var request model.Request
+		decoder.Decode(&request)
+
+		return LoadedFile{Data: request}
 	}
 }

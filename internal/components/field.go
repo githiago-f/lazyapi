@@ -16,14 +16,19 @@ type Field struct {
 var defaultStyle = lipgloss.NewStyle().
 	Border(lipgloss.NormalBorder())
 
-func InitField(placeholder string) Field {
+func InitField(placeholder, value string) Field {
 	ti := textinput.New()
 	ti.Placeholder = placeholder
 	ti.Prompt = ""
+	ti.SetValue(value)
 
 	ti.Focus()
 
 	return Field{textField: ti}
+}
+
+func (f Field) Init() tea.Cmd {
+	return nil
 }
 
 func (f Field) View() string {
