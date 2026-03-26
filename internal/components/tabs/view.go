@@ -9,24 +9,22 @@ import (
 )
 
 type Model struct {
-	tabs   []tab
-	cursor int
+	Tabs   []Tab
+	Cursor int
 	Width  int
+
+	Style lipgloss.Style
 }
 
-func New(tabs ...tab) Model {
+func New(tabs ...Tab) Model {
 	return Model{
-		tabs:   tabs,
-		cursor: 0,
+		Tabs:   tabs,
+		Cursor: 0,
 	}
 }
 
 var style = lipgloss.NewStyle().
 	Border(lipgloss.NormalBorder())
-
-func (t Model) Value() int {
-	return t.cursor
-}
 
 var (
 	defaultTabStyle = lipgloss.NewStyle().
@@ -40,18 +38,20 @@ var (
 
 func (t Model) View() string {
 	tabs := ""
-	for i, tab := range t.tabs {
+	for i, tab := range t.Tabs {
 		tab.Style = inactiveTabStyle
-		if i == t.cursor {
+		if i == t.Cursor {
 			tab.Style = activeTabStyle
 		}
 
 		tabs = lipgloss.JoinHorizontal(lipgloss.Left, tabs, tab.View())
 	}
 
-	tabContent := t.tabs[t.cursor].content
+	tabContent := t.Tabs[t.Cursor].Content
 
-	return style.Width(t.Width).
+	return t.Style.
+		Inherit(style).
+		Width(t.Width).
 		Render(
 			lipgloss.JoinVertical(
 				lipgloss.Left,
@@ -69,14 +69,24 @@ func (t Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, config.DefaultKeyMap.Left):
-			t.cursor = inmath.Cicle(t.cursor-1, 0, len(t.tabs)-1)
-		case key.Matches(msg, config.DefaultKeyMap.Right):
-			t.cursor = inmath.Cicle(t.cursor+1, 0, len(t.tabs)-1)
+		case key.Matches(msg, config.DefaultKeyMap.Select):
+			t.Tabs[t.Cursor].Active = true
+			t.Tabs[t.Cursor].Content = t.Tabs[t.Cursor].Content.SetActive(true)
+		case key.Matches(msg, config.DefaultKeyMap.Back):
+			t.Tabs[t.Cursor].Active = false
+			t.Tabs[t.Cursor].Content = t.Tabs[t.Cursor].Content.SetActive(false)
+		case key.Matches(msg, config.DefaultKeyMap.Left) && !t.Tabs[t.Cursor].Active:
+			t.Cursor = inmath.Cicle(t.Cursor-1, 0, len(t.Tabs)-1)
+		case key.Matches(msg, config.DefaultKeyMap.Right) && !t.Tabs[t.Cursor].Active:
+			t.Cursor = inmath.Cicle(t.Cursor+1, 0, len(t.Tabs)-1)
 		}
 	}
 
-	var cmd tea.Cmd
-	t.tabs[t.cursor].content, cmd = t.tabs[t.cursor].content.Update(msg)
+	var (
+		model tea.Model
+		cmd   tea.Cmd
+	)
+	model, cmd = t.Tabs[t.Cursor].Update(msg)
+	t.Tabs[t.Cursor], _ = model.(Tab)
 	return t, cmd
 }

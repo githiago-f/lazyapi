@@ -8,7 +8,7 @@ import (
 
 type Field struct {
 	tea.Model
-	textField textinput.Model
+	TextInput textinput.Model
 	Focused   bool
 	Style     lipgloss.Style
 }
@@ -24,7 +24,15 @@ func InitField(placeholder, value string) Field {
 
 	ti.Focus()
 
-	return Field{textField: ti}
+	return Field{TextInput: ti}
+}
+
+func (f Field) Value() string {
+	return f.TextInput.Value()
+}
+
+func (f Field) SetValue(s string) {
+	f.TextInput.SetValue(s)
 }
 
 func (f Field) Init() tea.Cmd {
@@ -32,11 +40,11 @@ func (f Field) Init() tea.Cmd {
 }
 
 func (f Field) View() string {
-	return f.Style.Inherit(defaultStyle).Render(f.textField.View())
+	return f.Style.Inherit(defaultStyle).Render(f.TextInput.View())
 }
 
 func (f Field) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	f.textField, cmd = f.textField.Update(msg)
+	f.TextInput, cmd = f.TextInput.Update(msg)
 	return f, cmd
 }

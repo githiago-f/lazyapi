@@ -2,6 +2,9 @@ package requestlist
 
 import (
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/githiago-f/lazyapi/internal/config"
@@ -36,9 +39,9 @@ var (
 type RequestItem struct {
 	Method      model.Method `yaml:"method"`
 	URI         string       `yaml:"uri"`
-	Summary     string       `yaml:"summary"`
+	About       model.About  `yaml:"about"`
 	FileName    string
-	RequestTime float32 `yaml:"request_time"`
+	RequestTime float64 `yaml:"request_time"`
 }
 
 func (ri RequestItem) Title() string {
@@ -57,13 +60,44 @@ func (ri RequestItem) Title() string {
 	default:
 		methodStyle = anyStyle
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Left, methodStyle.Render(ri.Method.Label()), " ", ri.URI)
+	return lipgloss.JoinHorizontal(lipgloss.Left, methodStyle.Render(ri.Method.Label()), " ", ri.About.Title, " ", ri.URI)
+}
+
+func getDecimalPart(f float64) string {
+	_, decimal := math.Modf(f)
+	formatted := fmt.Sprintf("%.10g", decimal)
+	if strings.Contains(formatted, ".") {
+		return formatted[2:]
+	}
+	return formatted
 }
 
 func (ri RequestItem) Description() string {
-	return lipgloss.JoinHorizontal(lipgloss.Left, ri.Summary, " - ", fmt.Sprintf("%.1fms", ri.RequestTime))
+	metric := ""
+
+	if ri.RequestTime >= 0.0001 {
+		decimal := getDecimalPart(ri.RequestTime)
+		value, err := strconv.Atoi(decimal)
+		if err != nil {
+			return lipgloss.JoinHorizontal(lipgloss.Left, ri.About.Summary)
+		}
+
+		switch {
+		case value == 0:
+			metric = fmt.Sprintf(" - %.0f", ri.RequestTime)
+		case value >= 1:
+			metric = fmt.Sprintf(" - %.1f", ri.RequestTime)
+		case value >= 10:
+			metric = fmt.Sprintf(" - %.2f", ri.RequestTime)
+		case value >= 100:
+			metric = fmt.Sprintf(" - %.3f", ri.RequestTime)
+		case value >= 1000:
+			metric = fmt.Sprintf(" - %.4f", ri.RequestTime)
+		}
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Left, ri.About.Summary, metric)
 }
 
 func (ri RequestItem) FilterValue() string {
-	return fmt.Sprintf("%s %s", ri.URI, ri.Summary)
+	return fmt.Sprintf("%s %s %s", ri.URI, ri.About.Summary, ri.About.Title)
 }

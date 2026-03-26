@@ -9,18 +9,15 @@ import (
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
-type buttonColorMsg int
+type ButtonClickedMsg struct{}
 
 type Button struct {
-	Label   string
-	Active  bool
-	Hovered bool
+	Label  string
+	Active bool
 
-	clicked bool
+	Clicked bool
 
-	Style        lipgloss.Style
-	HoverStyle   lipgloss.Style
-	ClickedStyle lipgloss.Style
+	Style lipgloss.Style
 }
 
 func (b Button) Init() tea.Cmd {
@@ -29,14 +26,10 @@ func (b Button) Init() tea.Cmd {
 
 func (b Button) View() string {
 	switch {
-	case b.Hovered:
-		return b.HoverStyle.Render(b.Label)
 	case !b.Active:
 		return b.Style.
 			Background(lipgloss.Color(config.Overlay1)).
 			Render(b.Label)
-	case b.clicked:
-		return b.ClickedStyle.Render(b.Label)
 	default:
 		return b.Style.Render(b.Label)
 	}
@@ -44,14 +37,14 @@ func (b Button) View() string {
 
 func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case buttonColorMsg:
-		b.clicked = false
+	case ButtonClickedMsg:
+		b.Clicked = false
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Select) && b.Active:
-			b.clicked = true
+			b.Clicked = true
 			return b, tea.Tick(300, func(t time.Time) tea.Msg {
-				return buttonColorMsg(0)
+				return ButtonClickedMsg{}
 			})
 		}
 	}

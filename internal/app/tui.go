@@ -1,3 +1,4 @@
+// Package app implements the tui main view
 package app
 
 import (
@@ -80,27 +81,28 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, cmd
 
 	case requestlist.OpenRequestViewMsg:
-		config.DefaultConfig.Active = config.RequestEditor
 		return t, store.OpenRequestFile(msg.FileName)
 
 	case requesteditor.CloseRequestPaneMsg:
+		if msg.SaveToFile {
+			// TODO save to file
+			cmd = store.SaveFile(t.request.GetAsRequestData())
+		}
+		t.request = t.request.Reset()
 		config.DefaultConfig.Active = config.RequestList
 		return t, cmd
 
 	case tea.WindowSizeMsg:
-		t.titleBar.Width = msg.Width
-		t.request.Tabs.Width = msg.Width - 2
-		methodWidth, _ := lipgloss.Size(t.request.Method.View())
-		sendWidth, _ := lipgloss.Size(t.request.Send.View())
-
-		t.request.URI.Style = t.request.URI.Style.Width(msg.Width - (methodWidth + sendWidth + 2))
 		_, titleBarHeight := lipgloss.Size(t.titleBar.View())
+		t.titleBar.Width = msg.Width
 
 		t.requestList.List.SetSize(msg.Width, msg.Height-(titleBarHeight+2))
 
-		return t, nil
+		subModel, cmd = t.request.Update(msg)
+		t.request, _ = subModel.(requesteditor.RequestPane)
 	case store.LoadedFile:
-		t.request.FormData = msg.Data
+		t.request = t.request.SetValue(msg.Data)
+		config.DefaultConfig.Active = config.RequestEditor
 		return t, nil
 	case tea.KeyMsg:
 		switch {

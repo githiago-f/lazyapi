@@ -1,10 +1,12 @@
 method: post
 uri: '{{envs["go"].BASE_URL}}/teste'
 
-summary: |
-  Only access the correct endpoint
+about:
+  title: Endpoint 1
+  summary: |
+    Only access the correct endpoint
 
-request_time: 124
+request_time: 124.5
 body:
   - type: application/json
     raw: | 

@@ -25,6 +25,8 @@ type LoadedFile struct {
 	Data model.Request
 }
 
+type FileSaved int
+
 func FindRequestFiles() tea.Cmd {
 	return func() tea.Msg {
 		files, err := Glob("./**/*.req.yml")
@@ -76,5 +78,20 @@ func OpenRequestFile(filePath string) tea.Cmd {
 		decoder.Decode(&request)
 
 		return LoadedFile{Data: request}
+	}
+}
+
+func SaveFile(data model.Request) tea.Cmd {
+	return func() tea.Msg {
+		file, err := os.Open(data.FileName)
+		if err != nil {
+			msg := fmt.Sprintf("Error when trying to open file, %v", err)
+			return tea.Batch(tea.Println(msg), tea.Quit)
+		}
+
+		encoder := yaml.NewEncoder(file)
+		encoder.Encode(data)
+
+		return FileSaved(0)
 	}
 }

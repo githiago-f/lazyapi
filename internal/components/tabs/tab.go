@@ -6,26 +6,44 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type tab struct {
+type StatefulInputBase interface {
+	tea.Model
+	SetActive(b bool) StatefulInputBase
+}
+
+type StatefulInput[T any] interface {
+	StatefulInputBase
+	SetValue(val T) StatefulInput[T]
+	Value() T
+}
+
+type Tab struct {
 	label string
 
-	content tea.Model
+	Active  bool
+	Content StatefulInputBase
 
 	Style lipgloss.Style
 }
 
-func NewTab(label string, content tea.Model) tab {
-	return tab{label: label, content: content}
+func NewTab(label string, content StatefulInputBase) Tab {
+	return Tab{label: label, Content: content}
 }
 
-func (t tab) View() string {
+func (t Tab) View() string {
 	return t.Style.Render(t.label)
 }
 
-func (t tab) Init() tea.Cmd {
+func (t Tab) Init() tea.Cmd {
 	return nil
 }
 
-func (t tab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return t, nil
+func (t Tab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		model tea.Model
+		cmd   tea.Cmd
+	)
+	model, cmd = t.Content.Update(msg)
+	t.Content, _ = model.(StatefulInputBase)
+	return t, cmd
 }

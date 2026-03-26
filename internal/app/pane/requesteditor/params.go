@@ -1,8 +1,19 @@
 package requesteditor
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/githiago-f/lazyapi/internal/components/tabs"
+)
 
-type params struct{}
+type params struct {
+	active bool
+}
+
+// SetActive implements [tabs.StatefulInputBase].
+func (p params) SetActive(b bool) tabs.StatefulInputBase {
+	p.active = b
+	return p
+}
 
 func ParamsTab() params {
 	return params{}
