@@ -88,7 +88,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// TODO save to file
 			cmd = store.SaveFile(t.request.GetAsRequestData())
 		}
-		t.request = t.request.Reset()
+		t.request.Reset()
 		config.DefaultConfig.Active = config.RequestList
 		return t, cmd
 
@@ -101,12 +101,12 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		subModel, cmd = t.request.Update(msg)
 		t.request, _ = subModel.(requesteditor.RequestPane)
 	case store.LoadedFile:
-		t.request = t.request.SetValue(msg.Data)
+		t.request.SetValue(msg.Data)
 		config.DefaultConfig.Active = config.RequestEditor
 		return t, nil
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, config.DefaultKeyMap.Quit) && config.DefaultConfig.Active == config.PageIndex(0):
+		case config.DefaultConfig.Active == config.PageIndex(0) && key.Matches(msg, config.DefaultKeyMap.Quit):
 			return t, tea.Quit
 		case key.Matches(msg, config.DefaultKeyMap.Kill):
 			return t, tea.Quit

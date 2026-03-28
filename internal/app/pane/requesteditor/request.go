@@ -133,38 +133,38 @@ func (rp RequestPane) View() string {
 	)
 }
 
-func (rp RequestPane) SetValue(formData model.Request) RequestPane {
+func (rp *RequestPane) SetValue(formData model.Request) {
 	rp.Method.Cursor = int(formData.Method)
 	rp.URI.TextInput.SetValue(formData.URI)
 
-	docsTab := rp.RequestTabs.Tabs[Documentation].Content
-
-	if m, ok := docsTab.(tabs.StatefulInput[model.About]); ok {
-		rp.RequestTabs.Tabs[Documentation].Content = m.SetValue(formData.About)
+	if m, ok := rp.RequestTabs.Tabs[Documentation].Content.(tabs.StatefulInput[model.About]); ok {
+		m.SetValue(formData.About)
 	}
-
-	return rp
 }
 
-func (rp RequestPane) Reset() RequestPane {
+func (rp *RequestPane) Reset() {
 	rp.Method.Cursor = 0
 	rp.fieldsCursor = 0
 	rp.URI.TextInput.SetValue("")
 
-	docsTab := rp.RequestTabs.Tabs[Documentation].Content
+	rp.RequestTabs.Cursor = 0
 
-	if m, ok := docsTab.(tabs.StatefulInput[model.About]); ok {
-		rp.RequestTabs.Tabs[Documentation].Content = m.SetValue(model.About{})
+	if m, ok := rp.RequestTabs.Tabs[Documentation].Content.(tabs.StatefulInput[model.About]); ok {
+		m.SetValue(model.About{})
 	}
-
-	return rp
 }
 
 func (rp RequestPane) GetAsRequestData() model.Request {
+	var about model.About
+
+	if s, ok := rp.RequestTabs.Tabs[Documentation].Content.(tabs.StatefulInput[model.About]); ok {
+		about = s.Value()
+	}
+
 	return model.Request{
 		URI:       rp.URI.TextInput.Value(),
 		Method:    rp.Method.Value(),
-		About:     model.About{},
+		About:     about,
 		Time:      0.0,
 		Responses: []model.Response{},
 		Body:      model.Body{},
@@ -202,11 +202,11 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		sendWidth, _ := lipgloss.Size(rp.Send.View())
 
 		rp.URI.Style = rp.URI.Style.Width(msg.Width - (methodWidth + sendWidth + 2))
-		tabsHeight := msg.Height - (methodHeight + 4)
+		tabsHeight := msg.Height - (methodHeight + 5)
 		rp.RequestTabs.Style = rp.RequestTabs.Style.Height(tabsHeight)
 		rp.ResponsePreview.Style = rp.ResponsePreview.Style.
 			Height(tabsHeight).
-			Width(msg.Width - (rp.RequestTabs.Width + 4))
+			Width(msg.Width - (rp.RequestTabs.Width + 5))
 
 		childrenMsg := tea.WindowSizeMsg{Width: rp.RequestTabs.Width - 2, Height: tabsHeight}
 

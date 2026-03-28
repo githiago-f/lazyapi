@@ -13,7 +13,7 @@ type StatefulInputBase interface {
 
 type StatefulInput[T any] interface {
 	StatefulInputBase
-	SetValue(val T) StatefulInput[T]
+	SetValue(val T)
 	Value() T
 }
 

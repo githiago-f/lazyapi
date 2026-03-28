@@ -29,8 +29,8 @@ type documentation struct {
 	Description components.Text
 }
 
-func DocumentationTab() documentation {
-	return documentation{
+func DocumentationTab() *documentation {
+	return &documentation{
 		Title:       components.InitField("Title", ""),
 		Summary:     components.InitField("Summary", ""),
 		Description: components.NewTextarea("Longer request description", ""),
@@ -38,16 +38,14 @@ func DocumentationTab() documentation {
 }
 
 // SetValue implements [tabs.StatefulInput].
-func (d documentation) SetValue(val model.About) tabs.StatefulInput[model.About] {
+func (d *documentation) SetValue(val model.About) {
 	d.Title.SetValue(val.Title)
 	d.Summary.SetValue(val.Summary)
 	d.Description.SetValue(val.Description)
-
-	return d
 }
 
 // Value implements [tabs.StatefulInput].
-func (d documentation) Value() model.About {
+func (d *documentation) Value() model.About {
 	return model.About{
 		Title:       d.Title.Value(),
 		Summary:     d.Summary.Value(),

@@ -13,6 +13,7 @@ type KeyMap struct {
 
 	Select key.Binding
 	Filter key.Binding
+	New    key.Binding
 
 	Back key.Binding
 
@@ -91,5 +92,13 @@ var DefaultKeyMap = KeyMap{
 	Back: key.NewBinding(
 		key.WithKeys(tea.KeyEsc.String()),
 		key.WithHelp("esc", "back"),
+	),
+	New: key.NewBinding(
+		key.WithKeys("n", "+"),
+		key.WithHelp("+/n", "add"),
+	),
+	Help: key.NewBinding(
+		key.WithKeys("h"),
+		key.WithHelp("h", "help"),
 	),
 }
