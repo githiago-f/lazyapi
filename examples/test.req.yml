@@ -1,23 +1,22 @@
 method: post
 uri: '{{envs["go"].BASE_URL}}/teste'
 
-about:
-  title: Endpoint 1
-  summary: |
-    Only access the correct endpoint
+summary: |
+  Only access the correct endpoint
+description: |
+  All of the correct endpoints here are important and can be tested
 
-request_time: 124.5
 body:
-  - type: application/json
-    raw: | 
-      {
-        "test_data": "it is a string",
-      }
-responses:
-  - status_code: 200
-    body:
-      type: application/json
-      raw: |
-        {
-          "response": "Hello, it is a string!"
-        }
+  type: application/json
+  raw: | 
+    {
+      "gess": "is it a string?",
+    }
+
+
+examples:
+  "200":
+    uri: ""
+    params: {}
+    query: {}
+    body: {}
