@@ -1,22 +1,15 @@
-method: post
-uri: '{{envs["go"].BASE_URL}}/teste'
+id: test-req
+method: get
+uri: 'https://example.com/api/users/:id'
 
-summary: |
-  Only access the correct endpoint
-description: |
-  All of the correct endpoints here are important and can be tested
+about:
+  summary: Only access the correct endpoint
+  description: |
+    All of the correct endpoints here are important and can be tested
 
-body:
-  type: application/json
-  raw: | 
-    {
-      "gess": "is it a string?",
-    }
+params:
+  id: '59048'
 
+query:
+  status: "active"
 
-examples:
-  "200":
-    uri: ""
-    params: {}
-    query: {}
-    body: {}
