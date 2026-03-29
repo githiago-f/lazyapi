@@ -18,6 +18,7 @@ func NewTextarea(placeholder, value string) Text {
 	t := textarea.New()
 	t.Placeholder = placeholder
 	t.Prompt = ""
+	t.ShowLineNumbers = false
 	t.SetValue(value)
 	t.Focus()
 

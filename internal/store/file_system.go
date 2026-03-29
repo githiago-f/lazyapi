@@ -76,6 +76,7 @@ func OpenRequestFile(filePath string) tea.Cmd {
 
 		var request model.Request
 		decoder.Decode(&request)
+		request.FileName = filePath
 
 		return LoadedFile{Data: request}
 	}

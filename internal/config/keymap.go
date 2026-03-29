@@ -14,6 +14,7 @@ type KeyMap struct {
 	Select key.Binding
 	Filter key.Binding
 	New    key.Binding
+	Ok     key.Binding
 
 	Back key.Binding
 
@@ -72,6 +73,10 @@ var DefaultKeyMap = KeyMap{
 	Select: key.NewBinding(
 		key.WithKeys(tea.KeyEnter.String(), tea.KeySpace.String()),
 		key.WithHelp("enter/space", "select"),
+	),
+	Ok: key.NewBinding(
+		key.WithKeys(tea.KeyEnter.String()),
+		key.WithHelp("enter", "Accept"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q"),

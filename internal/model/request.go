@@ -5,8 +5,7 @@ type Request struct {
 
 	About About `yaml:"about"`
 
-	URI       string           `yaml:"uri"`
-	Method    Method           `yaml:"method"`
-	Body      Body             `yaml:"body"`
-	Responses map[int]Response `yaml:"responses"`
+	URI    string `yaml:"uri"`
+	Method Method `yaml:"method"`
+	Body   Body   `yaml:"body"`
 }

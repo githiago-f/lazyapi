@@ -66,7 +66,19 @@ func (t Model) Init() tea.Cmd {
 }
 
 func (t Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		model tea.Model
+		cmd   tea.Cmd
+	)
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		for i := range t.Tabs {
+			model, cmd = t.Tabs[i].Update(msg)
+			if cmd != nil {
+				return t, cmd
+			}
+			t.Tabs[i] = model.(Tab)
+		}
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Select):
@@ -82,10 +94,6 @@ func (t Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	var (
-		model tea.Model
-		cmd   tea.Cmd
-	)
 	model, cmd = t.Tabs[t.Cursor].Update(msg)
 	t.Tabs[t.Cursor], _ = model.(Tab)
 	return t, cmd
