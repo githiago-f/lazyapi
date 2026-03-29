@@ -14,8 +14,7 @@ import (
 type docField int
 
 const (
-	title docField = iota
-	summary
+	summary docField = iota
 	description
 )
 
@@ -24,14 +23,12 @@ type documentation struct {
 	fieldCursor int
 	active      bool
 
-	Title       components.Field
 	Summary     components.Field
 	Description components.Text
 }
 
 func DocumentationTab() *documentation {
 	return &documentation{
-		Title:       components.InitField("Title", ""),
 		Summary:     components.InitField("Summary", ""),
 		Description: components.NewTextarea("Longer request description", ""),
 	}
@@ -39,7 +36,6 @@ func DocumentationTab() *documentation {
 
 // SetValue implements [tabs.StatefulInput].
 func (d *documentation) SetValue(val model.About) {
-	d.Title.SetValue(val.Title)
 	d.Summary.SetValue(val.Summary)
 	d.Description.SetValue(val.Description)
 }
@@ -47,7 +43,6 @@ func (d *documentation) SetValue(val model.About) {
 // Value implements [tabs.StatefulInput].
 func (d *documentation) Value() model.About {
 	return model.About{
-		Title:       d.Title.Value(),
 		Summary:     d.Summary.Value(),
 		Description: d.Description.Value(),
 	}
@@ -63,8 +58,6 @@ func (d documentation) View() string {
 
 	if d.active {
 		switch docField(d.fieldCursor) {
-		case title:
-			d.Title.Style = d.Title.Style.BorderForeground(activeColor)
 		case summary:
 			d.Summary.Style = d.Summary.Style.BorderForeground(activeColor)
 		case description:
@@ -73,7 +66,6 @@ func (d documentation) View() string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Top,
-		d.Title.View(),
 		d.Summary.View(),
 		d.Description.View(),
 	)
@@ -94,7 +86,6 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
-		d.Title.Style = d.Title.Style.Width(msg.Width)
 		d.Summary.Style = d.Summary.Style.Width(msg.Width)
 		d.Description.Style = d.Description.Style.Width(msg.Width)
 	}
@@ -104,9 +95,6 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd   tea.Cmd
 	)
 	switch docField(d.fieldCursor) {
-	case title:
-		model, cmd = d.Title.Update(msg)
-		d.Title, _ = model.(components.Field)
 	case summary:
 		model, cmd = d.Summary.Update(msg)
 		d.Summary, _ = model.(components.Field)

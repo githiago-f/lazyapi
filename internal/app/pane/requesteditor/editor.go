@@ -137,9 +137,12 @@ func (rp *RequestPane) SetValue(formData model.Request) {
 	rp.Method.Cursor = int(formData.Method)
 	rp.URI.TextInput.SetValue(formData.URI)
 
-	if m, ok := rp.RequestTabs.Tabs[Documentation].Content.(tabs.StatefulInput[model.About]); ok {
+	if m, ok := rp.RequestTabs.Tabs[Documentation].Content.(documentation); ok {
 		m.SetValue(formData.About)
 	}
+
+	// if _, ok := rp.RequestTabs.Tabs[Params].Content.(params); ok {
+	// }
 }
 
 func (rp *RequestPane) Reset() {
@@ -149,8 +152,11 @@ func (rp *RequestPane) Reset() {
 
 	rp.RequestTabs.Cursor = 0
 
-	if m, ok := rp.RequestTabs.Tabs[Documentation].Content.(tabs.StatefulInput[model.About]); ok {
+	if m, ok := rp.RequestTabs.Tabs[Documentation].Content.(documentation); ok {
 		m.SetValue(model.About{})
+	}
+	if m, ok := rp.RequestTabs.Tabs[Params].Content.(params); ok {
+		m.Reset()
 	}
 }
 
@@ -162,13 +168,11 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 	}
 
 	return model.Request{
-		URI:       rp.URI.TextInput.Value(),
-		Method:    rp.Method.Value(),
-		About:     about,
-		Time:      0.0,
-		Responses: []model.Response{},
-		Body:      model.Body{},
-		FileName:  "",
+		URI:      rp.URI.TextInput.Value(),
+		Method:   rp.Method.Value(),
+		About:    about,
+		Body:     model.Body{},
+		FileName: "",
 	}
 }
 

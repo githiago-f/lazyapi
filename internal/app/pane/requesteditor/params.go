@@ -4,16 +4,9 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
-
-type paramField struct {
-	enabled bool
-	name    components.Field
-	value   components.Field
-}
 
 type params struct {
 	active        bool
@@ -21,7 +14,7 @@ type params struct {
 
 	width int
 
-	cmdBuffer string
+	prevKey rune
 
 	params []paramField
 	query  []paramField
@@ -35,36 +28,38 @@ func (p params) SetActive(b bool) tabs.StatefulInputBase {
 
 func ParamsTab() params {
 	return params{
-		query: []paramField{{
-			enabled: true,
-			name:    components.InitField("Name", ""),
-			value:   components.InitField("Value", ""),
-		}},
-		params: []paramField{{
-			enabled: true,
-			name:    components.InitField("Name", ""),
-			value:   components.InitField("Value", ""),
-		}},
+		query:  []paramField{createParam()},
+		params: []paramField{createParam()},
 	}
 }
 
 var titleStyle = lipgloss.NewStyle().
 	Bold(true).
-	Align(lipgloss.Center)
+	Align(lipgloss.Center).
+	BorderStyle(lipgloss.NormalBorder()).
+	BorderBottom(true)
+
+func (p *params) Reset() {
+	p.query = []paramField{createParam()}
+	p.params = []paramField{createParam()}
+}
 
 func (p params) View() string {
+	width := (p.width / 2)
+
+	titleStyle = titleStyle.Width(p.width)
 	customParams := titleStyle.Render("Query")
 
 	for _, param := range p.query {
-		customParam := lipgloss.JoinHorizontal(lipgloss.Top, param.name.View(), param.value.View())
-		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, customParam)
+		param.SetWidth(width)
+		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, param.View())
 	}
 
 	customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, titleStyle.Render("Path params"))
 
 	for _, param := range p.params {
-		customParam := lipgloss.JoinHorizontal(lipgloss.Top, param.name.View(), param.value.View())
-		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, customParam)
+		param.SetWidth(width)
+		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, param.View())
 	}
 
 	return customParams
@@ -75,47 +70,29 @@ func (p params) Init() tea.Cmd {
 }
 
 func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	width := (p.width / 2) - 4
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		p.width = msg.Width
-
-		for i := range p.params {
-			p.params[i].name.Style = p.params[i].name.Style.Width(width)
-			p.params[i].value.Style = p.params[i].value.Style.Width(width)
-		}
-		for i := range p.query {
-			p.query[i].name.Style = p.query[i].name.Style.Width(width)
-			p.query[i].value.Style = p.query[i].value.Style.Width(width)
-		}
-
-		return p, nil
 	case tea.KeyMsg:
+		if !p.active {
+			return p, nil
+		}
+
+		isNewCmd := p.prevKey == 'n'
+
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.New):
-			p.cmdBuffer = "n"
-		case msg.String() == "q" && p.cmdBuffer[0] == 'n':
-			query := paramField{
-				enabled: true,
-				name:    components.InitField("Name", ""),
-				value:   components.InitField("Value", ""),
-			}
-			query.name.Style = query.name.Style.Width(width)
-			query.value.Style = query.value.Style.Width(width)
-			p.query = append(p.query, query)
+			p.prevKey = 'n'
+		case msg.String() == "q" && isNewCmd:
+			p.query = append(p.query, createParam())
+			p.prevKey = '0'
 
-		case msg.String() == "p" && p.cmdBuffer[0] == 'n':
-			param := paramField{
-				enabled: true,
-				name:    components.InitField("Name", ""),
-				value:   components.InitField("Value", ""),
-			}
-			param.name.Style = param.name.Style.Width(width)
-			param.value.Style = param.value.Style.Width(width)
-			p.params = append(p.params, param)
+		case msg.String() == "p" && isNewCmd:
+			p.params = append(p.params, createParam())
+			p.prevKey = '0'
 
 		default:
-			p.cmdBuffer = ""
+			p.prevKey = '0'
 		}
 	}
 
