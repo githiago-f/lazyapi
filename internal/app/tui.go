@@ -20,6 +20,7 @@ type Tui struct {
 	help        help.Model
 	requestList requestlist.RequestList
 	request     requesteditor.RequestPane
+	prompt      components.PromptModel
 }
 
 func NewTui() Tui {
@@ -38,6 +39,7 @@ func NewTui() Tui {
 			List: actualList,
 		},
 		request: requesteditor.New(),
+		prompt:  components.Prompt(""),
 	}
 }
 
@@ -50,12 +52,14 @@ func (t Tui) View() string {
 		currentView = t.request.View()
 	}
 
-	return lipgloss.JoinVertical(
+	view := lipgloss.JoinVertical(
 		lipgloss.Left,
 		t.titleBar.View(),
 		currentView,
 		t.help.View(config.DefaultKeyMap),
 	)
+
+	return view
 }
 
 func (t Tui) Init() tea.Cmd {
@@ -74,7 +78,6 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case store.LoadedRequestListMsg:
 		if len(msg.Items) == 0 {
-			// TODO redirect to create file
 			return t, cmd
 		}
 		cmd = t.requestList.List.SetItems(msg.Items)
@@ -85,7 +88,6 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case requesteditor.CloseRequestPaneMsg:
 		if msg.SaveToFile {
-			// TODO save to file
 			cmd = store.SaveFile(t.request.GetAsRequestData())
 		}
 		t.request.Reset()
@@ -96,10 +98,16 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, titleBarHeight := lipgloss.Size(t.titleBar.View())
 		t.titleBar.Width = msg.Width
 
-		t.requestList.List.SetSize(msg.Width, msg.Height-(titleBarHeight+2))
+		t.requestList.List.SetSize(msg.Width, msg.Height-(titleBarHeight+1))
 
-		subModel, cmd = t.request.Update(msg)
+		subModel, _ = t.request.Update(msg)
 		t.request, _ = subModel.(requesteditor.RequestPane)
+
+		subModel, _ = t.prompt.Update(msg)
+		t.prompt, _ = subModel.(components.PromptModel)
+
+		t.prompt.SetWidth(25)
+		t.prompt.SetPosition((msg.Width / 2), (msg.Height / 2))
 	case store.LoadedFile:
 		t.request.SetValue(msg.Data)
 		config.DefaultConfig.Active = config.RequestEditor
