@@ -34,13 +34,11 @@ func DocumentationTab() *documentation {
 	}
 }
 
-// SetValue implements [tabs.StatefulInput].
 func (d *documentation) SetValue(val model.About) {
 	d.Summary.SetValue(val.Summary)
 	d.Description.SetValue(val.Description)
 }
 
-// Value implements [tabs.StatefulInput].
 func (d *documentation) Value() model.About {
 	return model.About{
 		Summary:     d.Summary.Value(),

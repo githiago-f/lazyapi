@@ -26,8 +26,8 @@ func (p params) SetActive(b bool) tabs.StatefulInputBase {
 	return p
 }
 
-func ParamsTab() params {
-	return params{
+func ParamsTab() *params {
+	return &params{
 		query:  []paramField{createParam()},
 		params: []paramField{createParam()},
 	}

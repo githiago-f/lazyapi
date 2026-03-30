@@ -15,8 +15,8 @@ func (a auth) SetActive(b bool) tabs.StatefulInputBase {
 	return a
 }
 
-func AuthorizeTab() auth {
-	return auth{}
+func AuthorizeTab() *auth {
+	return &auth{}
 }
 
 func (a auth) Init() tea.Cmd {

@@ -38,7 +38,7 @@ func NewTui() Tui {
 		requestList: requestlist.RequestList{
 			List: actualList,
 		},
-		request: requesteditor.New(),
+		request: *requesteditor.New(),
 		prompt:  components.Prompt(""),
 	}
 }
@@ -86,13 +86,16 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case requestlist.OpenRequestViewMsg:
 		return t, store.OpenRequestFile(msg.FileName)
 
+	case store.LoadedFile:
+		t.request.SetValue(msg.Data)
+		config.DefaultConfig.Active = config.RequestEditor
+
 	case requesteditor.CloseRequestPaneMsg:
 		if msg.SaveToFile {
 			cmd = store.SaveFile(t.request.GetAsRequestData())
 		}
 		t.request.Reset()
 		config.DefaultConfig.Active = config.RequestList
-		return t, cmd
 
 	case tea.WindowSizeMsg:
 		_, titleBarHeight := lipgloss.Size(t.titleBar.View())
@@ -108,10 +111,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		t.prompt.SetWidth(25)
 		t.prompt.SetPosition((msg.Width / 2), (msg.Height / 2))
-	case store.LoadedFile:
-		t.request.SetValue(msg.Data)
-		config.DefaultConfig.Active = config.RequestEditor
-		return t, nil
+
 	case tea.KeyMsg:
 		switch {
 		case config.DefaultConfig.Active == config.PageIndex(0) && key.Matches(msg, config.DefaultKeyMap.Quit):

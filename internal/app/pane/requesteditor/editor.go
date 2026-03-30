@@ -54,11 +54,20 @@ type RequestPane struct {
 	tea.Model
 	fieldsCursor int
 
+	debug string
+
 	BlockTab bool
 
 	Method components.MethodSelector
 	URI    components.Field
 	Send   components.Button
+
+	documentation *documentation
+	params        *params
+	authorize     *auth
+	header        *header
+	body          *body
+	tests         *testsPane
 
 	RequestTabs tabs.Model
 
@@ -71,8 +80,15 @@ var defaultBtnStyle = lipgloss.NewStyle().
 	Border(lipgloss.InnerHalfBlockBorder()).
 	Foreground(lipgloss.Color(config.Crust))
 
-func New() RequestPane {
-	return RequestPane{
+func New() *RequestPane {
+	docs := DocumentationTab()
+	params := ParamsTab()
+	authorize := AuthorizeTab()
+	header := HeaderTab()
+	body := BodyTab()
+	tests := TestsTab()
+
+	return &RequestPane{
 		URI:    components.InitField("https://example.com/hello_world", ""),
 		Method: components.MethodSelector{Cursor: 0},
 		Send: components.Button{
@@ -83,13 +99,20 @@ func New() RequestPane {
 				BorderForeground(lipgloss.Color(config.Flamingo)),
 		},
 
+		documentation: docs,
+		params:        params,
+		authorize:     authorize,
+		header:        header,
+		body:          body,
+		tests:         tests,
+
 		RequestTabs: tabs.New(
-			tabs.NewTab("Documentation", DocumentationTab()),
-			tabs.NewTab("Params", ParamsTab()),
-			tabs.NewTab("Authorize", AuthorizeTab()),
-			tabs.NewTab("Header", HeaderTab()),
-			tabs.NewTab("Body", BodyTab()),
-			tabs.NewTab("Tests", TestsTab()),
+			tabs.NewTab("Documentation", docs),
+			tabs.NewTab("Params", params),
+			tabs.NewTab("Authorize", authorize),
+			tabs.NewTab("Header", header),
+			tabs.NewTab("Body", body),
+			tabs.NewTab("Tests", tests),
 		),
 
 		ResponsePreview: responses.New(),
@@ -115,6 +138,10 @@ func (rp RequestPane) View() string {
 		rp.ResponsePreview.Style = rp.ResponsePreview.Style.BorderForeground(activeColor)
 	}
 
+	if rp.debug != "" {
+		rp.Send.Label = rp.debug
+	}
+
 	requestURL := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		rp.Method.View(),
@@ -136,13 +163,8 @@ func (rp RequestPane) View() string {
 func (rp *RequestPane) SetValue(formData model.Request) {
 	rp.Method.Cursor = int(formData.Method)
 	rp.URI.TextInput.SetValue(formData.URI)
-
-	if m, ok := rp.RequestTabs.Tabs[Documentation].Content.(documentation); ok {
-		m.SetValue(formData.About)
-	}
-
-	// if _, ok := rp.RequestTabs.Tabs[Params].Content.(params); ok {
-	// }
+	rp.documentation.SetValue(formData.About)
+	rp.body.SetValue(formData.Body.Raw)
 }
 
 func (rp *RequestPane) Reset() {

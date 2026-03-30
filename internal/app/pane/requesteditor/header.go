@@ -21,8 +21,8 @@ func (h header) SetActive(b bool) tabs.StatefulInputBase {
 	return h
 }
 
-func HeaderTab() header {
-	return header{
+func HeaderTab() *header {
+	return &header{
 		headers: []paramField{createParam()},
 	}
 }

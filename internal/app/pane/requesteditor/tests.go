@@ -15,8 +15,8 @@ func (tp testsPane) SetActive(b bool) tabs.StatefulInputBase {
 	return tp
 }
 
-func TestsTab() testsPane {
-	return testsPane{}
+func TestsTab() *testsPane {
+	return &testsPane{}
 }
 
 func (tp testsPane) Init() tea.Cmd {
