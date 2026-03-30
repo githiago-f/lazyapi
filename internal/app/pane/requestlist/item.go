@@ -60,7 +60,7 @@ func (ri RequestItem) Title() string {
 	default:
 		methodStyle = anyStyle
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Left, methodStyle.Render(ri.Method.Label()), " ", ri.About.Title, " ", ri.URI)
+	return lipgloss.JoinHorizontal(lipgloss.Left, methodStyle.Render(ri.Method.Label()), " ", ri.URI)
 }
 
 func getDecimalPart(f float64) string {
@@ -99,5 +99,5 @@ func (ri RequestItem) Description() string {
 }
 
 func (ri RequestItem) FilterValue() string {
-	return fmt.Sprintf("%s %s %s", ri.URI, ri.About.Summary, ri.About.Title)
+	return fmt.Sprintf("%s %s", ri.URI, ri.About.Summary)
 }
