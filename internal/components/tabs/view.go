@@ -8,10 +8,15 @@ import (
 	"github.com/githiago-f/lazyapi/internal/inmath"
 )
 
+type SetActiveTabMsg struct {
+	Active bool
+}
+
 type Model struct {
-	Tabs   []Tab
-	Cursor int
-	Width  int
+	selected bool
+	Tabs     []Tab
+	Cursor   int
+	Width    int
 
 	Style lipgloss.Style
 }
@@ -39,12 +44,12 @@ var (
 func (t Model) View() string {
 	tabs := ""
 	for i, tab := range t.Tabs {
-		tab.Style = inactiveTabStyle
+		tabStyle := inactiveTabStyle
 		if i == t.Cursor {
-			tab.Style = activeTabStyle
+			tabStyle = activeTabStyle
 		}
 
-		tabs = lipgloss.JoinHorizontal(lipgloss.Left, tabs, tab.View())
+		tabs = lipgloss.JoinHorizontal(lipgloss.Left, tabs, tabStyle.Render(tab.label))
 	}
 
 	tabContent := t.Tabs[t.Cursor].Content
@@ -66,35 +71,40 @@ func (t Model) Init() tea.Cmd {
 }
 
 func (t Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var (
-		model tea.Model
-		cmd   tea.Cmd
-	)
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		for i := range t.Tabs {
-			model, cmd = t.Tabs[i].Update(msg)
+			t.Tabs[i].Content, cmd = t.Tabs[i].Content.Update(msg)
 			if cmd != nil {
 				return t, cmd
 			}
-			t.Tabs[i] = model.(Tab)
 		}
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Select):
-			t.Tabs[t.Cursor].Active = true
-			t.Tabs[t.Cursor].Content = t.Tabs[t.Cursor].Content.SetActive(true)
+			t.selected = true
+
+			activeMsg := SetActiveTabMsg{Active: true}
+			t.Tabs[t.Cursor].Content, cmd = t.Tabs[t.Cursor].Content.Update(activeMsg)
+
+			return t, cmd
+
 		case key.Matches(msg, config.DefaultKeyMap.Back):
-			t.Tabs[t.Cursor].Active = false
-			t.Tabs[t.Cursor].Content = t.Tabs[t.Cursor].Content.SetActive(false)
-		case key.Matches(msg, config.DefaultKeyMap.Left) && !t.Tabs[t.Cursor].Active:
+			t.selected = false
+
+			activeMsg := SetActiveTabMsg{Active: false}
+			t.Tabs[t.Cursor].Content, cmd = t.Tabs[t.Cursor].Content.Update(activeMsg)
+
+			return t, cmd
+
+		case key.Matches(msg, config.DefaultKeyMap.Left) && !t.selected:
 			t.Cursor = inmath.Cicle(t.Cursor-1, 0, len(t.Tabs)-1)
-		case key.Matches(msg, config.DefaultKeyMap.Right) && !t.Tabs[t.Cursor].Active:
+		case key.Matches(msg, config.DefaultKeyMap.Right) && !t.selected:
 			t.Cursor = inmath.Cicle(t.Cursor+1, 0, len(t.Tabs)-1)
 		}
 	}
 
-	model, cmd = t.Tabs[t.Cursor].Update(msg)
-	t.Tabs[t.Cursor], _ = model.(Tab)
+	t.Tabs[t.Cursor].Content, cmd = t.Tabs[t.Cursor].Content.Update(msg)
 	return t, cmd
 }

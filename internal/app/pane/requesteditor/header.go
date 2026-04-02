@@ -4,7 +4,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
@@ -16,9 +15,8 @@ type header struct {
 }
 
 // SetActive implements [tabs.StatefulInputBase].
-func (h header) SetActive(b bool) tabs.StatefulInputBase {
+func (h *header) SetActive(b bool) {
 	h.active = b
-	return h
 }
 
 func HeaderTab() *header {

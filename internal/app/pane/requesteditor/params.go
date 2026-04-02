@@ -4,7 +4,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
@@ -20,10 +19,8 @@ type params struct {
 	query  []paramField
 }
 
-// SetActive implements [tabs.StatefulInputBase].
-func (p params) SetActive(b bool) tabs.StatefulInputBase {
+func (p *params) SetActive(b bool) {
 	p.active = b
-	return p
 }
 
 func ParamsTab() *params {

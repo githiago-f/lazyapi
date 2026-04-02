@@ -25,7 +25,7 @@ type Tui struct {
 
 func NewTui() Tui {
 	actualList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
-	actualList.Title = "Requests"
+	actualList.SetShowTitle(false)
 	actualList.SetShowHelp(false)
 	actualList.SetShowStatusBar(false)
 
@@ -87,8 +87,9 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, store.OpenRequestFile(msg.FileName)
 
 	case store.LoadedFile:
-		t.request.SetValue(msg.Data)
+		t.request = t.request.SetValue(msg.Data)
 		config.DefaultConfig.Active = config.RequestEditor
+		return t, nil
 
 	case requesteditor.CloseRequestPaneMsg:
 		if msg.SaveToFile {

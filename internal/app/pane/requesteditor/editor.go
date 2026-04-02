@@ -2,10 +2,11 @@
 package requesteditor
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
@@ -18,7 +19,7 @@ type CloseRequestPaneMsg struct {
 	File       string
 }
 
-func Close() tea.Cmd {
+func close() tea.Cmd {
 	return func() tea.Msg {
 		return CloseRequestPaneMsg{
 			SaveToFile: false,
@@ -54,7 +55,7 @@ type RequestPane struct {
 	tea.Model
 	fieldsCursor int
 
-	debug string
+	fileName string
 
 	BlockTab bool
 
@@ -62,16 +63,9 @@ type RequestPane struct {
 	URI    components.Field
 	Send   components.Button
 
-	documentation *documentation
-	params        *params
-	authorize     *auth
-	header        *header
-	body          *body
-	tests         *testsPane
-
 	RequestTabs tabs.Model
 
-	ResponsePreview responses.ResponseView
+	ResponsePreview components.View
 }
 
 var defaultBtnStyle = lipgloss.NewStyle().
@@ -99,13 +93,6 @@ func New() *RequestPane {
 				BorderForeground(lipgloss.Color(config.Flamingo)),
 		},
 
-		documentation: docs,
-		params:        params,
-		authorize:     authorize,
-		header:        header,
-		body:          body,
-		tests:         tests,
-
 		RequestTabs: tabs.New(
 			tabs.NewTab("Documentation", docs),
 			tabs.NewTab("Params", params),
@@ -115,7 +102,7 @@ func New() *RequestPane {
 			tabs.NewTab("Tests", tests),
 		),
 
-		ResponsePreview: responses.New(),
+		ResponsePreview: components.View{},
 	}
 }
 
@@ -138,9 +125,7 @@ func (rp RequestPane) View() string {
 		rp.ResponsePreview.Style = rp.ResponsePreview.Style.BorderForeground(activeColor)
 	}
 
-	if rp.debug != "" {
-		rp.Send.Label = rp.debug
-	}
+	rp.ResponsePreview.Content = fmt.Sprintf("%s %p", rp.ResponsePreview.Content, &rp.RequestTabs.Tabs[Documentation].Content)
 
 	requestURL := lipgloss.JoinHorizontal(
 		lipgloss.Left,
@@ -160,11 +145,14 @@ func (rp RequestPane) View() string {
 	)
 }
 
-func (rp *RequestPane) SetValue(formData model.Request) {
+func (rp RequestPane) SetValue(formData model.Request) RequestPane {
+	rp.fileName = formData.FileName
 	rp.Method.Cursor = int(formData.Method)
 	rp.URI.TextInput.SetValue(formData.URI)
-	rp.documentation.SetValue(formData.About)
-	rp.body.SetValue(formData.Body.Raw)
+
+	rp.RequestTabs.Tabs[Documentation].Content = rp.RequestTabs.Tabs[Documentation].Content.(documentation).SetValue(formData.About)
+
+	return rp
 }
 
 func (rp *RequestPane) Reset() {
@@ -174,26 +162,19 @@ func (rp *RequestPane) Reset() {
 
 	rp.RequestTabs.Cursor = 0
 
-	if m, ok := rp.RequestTabs.Tabs[Documentation].Content.(documentation); ok {
-		m.SetValue(model.About{})
-	}
-	if m, ok := rp.RequestTabs.Tabs[Params].Content.(params); ok {
-		m.Reset()
-	}
+	// rp.documentation.SetValue(model.About{})
+	// rp.params.Reset()
 }
 
 func (rp RequestPane) GetAsRequestData() model.Request {
-	var about model.About
-
-	if s, ok := rp.RequestTabs.Tabs[Documentation].Content.(tabs.StatefulInput[model.About]); ok {
-		about = s.Value()
-	}
-
 	return model.Request{
-		URI:      rp.URI.TextInput.Value(),
-		Method:   rp.Method.Value(),
-		About:    about,
-		Body:     model.Body{},
+		URI:    rp.URI.TextInput.Value(),
+		Method: rp.Method.Value(),
+		// About:  rp.documentation.Value(),
+		Body: model.Body{
+			Type: model.ApplicationJSON,
+			// Raw:  rp.body.Value(),
+		},
 		FileName: "",
 	}
 }
@@ -216,9 +197,9 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case reqTabs:
 		model, cmd = rp.RequestTabs.Update(msg)
 		rp.RequestTabs, _ = model.(tabs.Model)
-	case response:
-		model, cmd = rp.ResponsePreview.Update(msg)
-		rp.ResponsePreview, _ = model.(responses.ResponseView)
+		// case response:
+		// 	model, cmd = rp.ResponsePreview.Update(msg)
+		// 	rp.ResponsePreview, _ = model.(responses.ResponseView)
 	}
 
 	switch msg := msg.(type) {
@@ -250,7 +231,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, config.DefaultKeyMap.Prev) && !rp.BlockTab:
 			rp.fieldsCursor = inmath.Cicle(rp.fieldsCursor-1, 0, int(lastField))
 		case key.Matches(msg, config.DefaultKeyMap.Back) && !rp.BlockTab:
-			return rp, Close()
+			return rp, close()
 		}
 	}
 

@@ -2,17 +2,14 @@ package requesteditor
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/githiago-f/lazyapi/internal/components/tabs"
 )
 
 type auth struct {
 	active bool
 }
 
-// SetActive implements [tabs.StatefulInputBase].
-func (a auth) SetActive(b bool) tabs.StatefulInputBase {
+func (a *auth) SetActive(b bool) {
 	a.active = b
-	return a
 }
 
 func AuthorizeTab() *auth {

@@ -5,7 +5,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/githiago-f/lazyapi/internal/components"
-	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/inmath"
 	"github.com/githiago-f/lazyapi/internal/model"
@@ -34,9 +33,11 @@ func DocumentationTab() *documentation {
 	}
 }
 
-func (d *documentation) SetValue(val model.About) {
+func (d documentation) SetValue(val model.About) documentation {
 	d.Summary.SetValue(val.Summary)
 	d.Description.SetValue(val.Description)
+
+	return d
 }
 
 func (d *documentation) Value() model.About {
@@ -46,9 +47,8 @@ func (d *documentation) Value() model.About {
 	}
 }
 
-func (d documentation) SetActive(b bool) tabs.StatefulInputBase {
+func (d *documentation) SetActive(b bool) {
 	d.active = b
-	return d
 }
 
 func (d documentation) View() string {

@@ -3,7 +3,6 @@ package requesteditor
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/githiago-f/lazyapi/internal/components"
-	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
@@ -12,9 +11,8 @@ type body struct {
 	editor components.Text
 }
 
-func (b body) SetActive(active bool) tabs.StatefulInputBase {
+func (b *body) SetActive(active bool) {
 	b.active = active
-	return b
 }
 
 func BodyTab() *body {
