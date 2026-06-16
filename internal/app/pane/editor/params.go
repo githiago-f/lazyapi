@@ -1,4 +1,4 @@
-package requesteditor
+package editor
 
 import (
 	"github.com/charmbracelet/bubbles/key"

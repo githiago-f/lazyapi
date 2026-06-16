@@ -1,4 +1,4 @@
-package requesteditor
+package editor
 
 import (
 	"github.com/charmbracelet/bubbles/key"
@@ -33,7 +33,7 @@ func createParam() paramField {
 }
 
 func (pf *paramField) SetWidth(w int) {
-	pf.name.Style = pf.name.Style.Width(w - 1)
+	pf.name.Style = pf.name.Style.Width(w - 2)
 	pf.value.Style = pf.value.Style.Width(w)
 }
 

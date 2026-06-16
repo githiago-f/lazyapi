@@ -1,5 +1,5 @@
-// Package requesteditor implements editor page for request data
-package requesteditor
+// Package editor implements editor page for request data
+package editor
 
 import (
 	"fmt"
@@ -74,7 +74,7 @@ var defaultBtnStyle = lipgloss.NewStyle().
 	Border(lipgloss.InnerHalfBlockBorder()).
 	Foreground(lipgloss.Color(config.Crust))
 
-func New() *RequestPane {
+func New(request *model.Request) *RequestPane {
 	docs := DocumentationTab()
 	params := ParamsTab()
 	authorize := AuthorizeTab()
@@ -161,19 +161,14 @@ func (rp *RequestPane) Reset() {
 	rp.URI.TextInput.SetValue("")
 
 	rp.RequestTabs.Cursor = 0
-
-	// rp.documentation.SetValue(model.About{})
-	// rp.params.Reset()
 }
 
 func (rp RequestPane) GetAsRequestData() model.Request {
 	return model.Request{
 		URI:    rp.URI.TextInput.Value(),
 		Method: rp.Method.Value(),
-		// About:  rp.documentation.Value(),
 		Body: model.Body{
 			Type: model.ApplicationJSON,
-			// Raw:  rp.body.Value(),
 		},
 		FileName: "",
 	}
