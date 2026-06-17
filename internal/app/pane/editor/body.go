@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/components/tabs"
 )
 
 type body struct {
@@ -13,6 +14,15 @@ type body struct {
 
 func (b *body) SetActive(active bool) {
 	b.active = active
+	if !active {
+		b.editor.Blur()
+	} else {
+		b.editor.Focus()
+	}
+}
+
+func (b *body) IsActive() bool {
+	return b.active
 }
 
 func BodyTab() *body {
@@ -46,13 +56,17 @@ func (b body) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		b.editor.Style = b.editor.Style.
 			Width(msg.Width - 1).
 			Height(msg.Height - 4)
+
+	case tabs.SetActiveTabMsg:
+		b.SetActive(msg.Active)
+		return &b, nil
 	}
+
 	if b.active {
 		model, cmd := b.editor.Update(msg)
 		b.editor, _ = model.(components.Text)
-
-		return b, cmd
+		return &b, cmd
 	}
 
-	return b, nil
+	return &b, nil
 }

@@ -92,9 +92,16 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case requests.OpenRequestViewMsg:
 		return t, store.OpenRequestFile(msg.FileName)
 
+	case store.FileSaved:
+		cmd = store.RemoveTempFile(msg.Path)
+		return t, cmd
+
 	case editor.CloseRequestPaneMsg:
 		if msg.SaveToFile {
-			cmd = store.SaveFile(t.editor.GetAsRequestData())
+			cmd = tea.Batch(
+				store.SaveFile(t.editor.GetAsRequestData()),
+				store.FindRequestFiles(),
+			)
 		}
 		t.editor.Reset()
 		config.DefaultConfig.Active = config.RequestList
@@ -117,6 +124,8 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case store.LoadedFile:
 		t.currentRequest = &msg.Data
+		rp := t.editor.SetValue(msg.Data)
+		t.editor = &rp
 		config.DefaultConfig.Active = config.RequestEditor
 		return t, nil
 

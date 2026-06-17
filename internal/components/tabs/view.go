@@ -82,7 +82,7 @@ func (t Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, config.DefaultKeyMap.Select):
+		case key.Matches(msg, config.DefaultKeyMap.Select) && !t.selected:
 			t.selected = true
 
 			activeMsg := SetActiveTabMsg{Active: true}

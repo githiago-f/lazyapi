@@ -31,8 +31,16 @@ func (t Text) Value() string {
 	return t.TextArea.Value()
 }
 
-func (t Text) SetValue(s string) {
+func (t *Text) SetValue(s string) {
 	t.TextArea.SetValue(s)
+}
+
+func (t *Text) Focus() {
+	t.TextArea.Focus()
+}
+
+func (t *Text) Blur() {
+	t.TextArea.Blur()
 }
 
 func (t Text) View() string {

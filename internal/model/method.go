@@ -7,6 +7,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func (m Method) MarshalYAML() (interface{}, error) {
+	return strings.ToLower(m.Label()), nil
+}
+
 type Method int
 
 const (

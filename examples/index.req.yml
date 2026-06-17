@@ -1,3 +1,12 @@
+filename: examples/index.req.yml
+about:
+    summary: i was just jkng
+    description: ""
+uri: http://localhost:3000/teste
 method: put
-uri: '{{envs["go"].BASE_URL}}/teste'
-
+body:
+    type: application/json
+    raw: ""
+headers: {}
+pathParams: {}
+query: {}

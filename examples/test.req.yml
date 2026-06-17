@@ -1,15 +1,15 @@
-id: test-req
-method: get
-uri: 'https://example.com/api/users/:id'
-
+filename: examples/test.req.yml
 about:
-  summary: Only access the correct endpoint
-  description: |
-    All of the correct endpoints here are important and can be tested
-
-params:
-  id: '59048'
-
+    summary: Only access the correct endpoint
+    description: |-
+        All of the endpoints here are important and can be tested
+        give it a try
+uri: https://example.com/api/users/:id
+method: post
+body:
+    type: application/json
+    raw: ""
+headers: {}
+pathParams: {}
 query:
-  status: "active"
-
+    status: active

@@ -31,7 +31,7 @@ func (f Field) Value() string {
 	return f.TextInput.Value()
 }
 
-func (f Field) SetValue(s string) {
+func (f *Field) SetValue(s string) {
 	f.TextInput.SetValue(s)
 }
 
