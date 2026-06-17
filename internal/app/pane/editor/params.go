@@ -9,8 +9,8 @@ import (
 )
 
 type params struct {
-	active        bool
-	selectedField int
+	active bool
+	// selectedField int
 
 	width int
 

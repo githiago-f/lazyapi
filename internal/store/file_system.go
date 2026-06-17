@@ -99,7 +99,11 @@ func OpenRequestFile(ref model.OpenAPIRef) tea.Cmd {
 				msg := fmt.Sprintf("Error when trying to open temp file, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			defer file.Close()
+			defer func() {
+				if err = file.Close(); err != nil {
+					panic(err)
+				}
+			}()
 
 			var request model.Request
 			decoder := yaml.NewDecoder(file)
@@ -126,7 +130,6 @@ func OpenDraftFile(draftPath, fileName string) tea.Cmd {
 			msg := fmt.Sprintf("Error when trying to open draft file, %v", err)
 			return tea.Batch(tea.Println(msg), tea.Quit)
 		}
-		defer file.Close()
 
 		var request model.Request
 		decoder := yaml.NewDecoder(file)
@@ -137,6 +140,13 @@ func OpenDraftFile(draftPath, fileName string) tea.Cmd {
 		request.DraftPath = draftPath
 		request.FileName = fileName
 		request.Servers, request.ServerURL = LoadServers(fileName)
+
+		err = file.Close()
+		if err != nil {
+			msg := fmt.Sprintf("Error closing file: %v", err)
+			return tea.Batch(tea.Println(msg), tea.Quit)
+		}
+
 		return LoadedFile{Data: request}
 	}
 }
@@ -206,12 +216,17 @@ func SaveTempFile(data model.Request) tea.Cmd {
 			msg := fmt.Sprintf("Error when trying to save temp file, %v", err)
 			return tea.Batch(tea.Println(msg), tea.Quit)
 		}
-		defer file.Close()
 
 		encoder := yaml.NewEncoder(file)
 		err = encoder.Encode(data)
 		if err != nil {
 			msg := fmt.Sprintf("Error when encoding temp file, %v", err)
+			return tea.Batch(tea.Println(msg), tea.Quit)
+		}
+
+		err = file.Close()
+		if err != nil {
+			msg := fmt.Sprintf("Error when closing temp file, %v", err)
 			return tea.Batch(tea.Println(msg), tea.Quit)
 		}
 
@@ -227,7 +242,13 @@ func LoadForDuplicate(item requests.RequestItem) tea.Cmd {
 				msg := fmt.Sprintf("Error when opening draft for duplicate, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			defer file.Close()
+
+			err = file.Close()
+			if err != nil {
+				msg := fmt.Sprintf("Error closing file: %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
+
 			var req model.Request
 			decoder := yaml.NewDecoder(file)
 			if err := decoder.Decode(&req); err != nil {
@@ -295,7 +316,12 @@ func SaveFile(data model.Request) tea.Cmd {
 				msg := fmt.Sprintf("Error when trying to save file, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			defer file.Close()
+
+			err = file.Close()
+			if err != nil {
+				msg := fmt.Sprintf("Error closing file: %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
 
 			encoder := yaml.NewEncoder(file)
 			err = encoder.Encode(data)

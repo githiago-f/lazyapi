@@ -58,7 +58,11 @@ func (r *Request) RunRequest() tea.Cmd {
 		}
 
 		body := io.NopCloser(strings.NewReader(r.Body.Raw))
-		defer body.Close()
+
+		err = body.Close()
+		if err != nil {
+			return Failure("Failed closing request body: " + err.Error())
+		}
 
 		response, err := http.DefaultClient.Do(&http.Request{
 			Method: r.Method.Label(),
