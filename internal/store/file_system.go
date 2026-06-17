@@ -1,3 +1,4 @@
+// Package store defines mappers and filesystem commands
 package store
 
 import (
@@ -283,16 +284,19 @@ func SaveFile(data model.Request) tea.Cmd {
 				msg := fmt.Sprintf("Error when trying to save file, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			if err := AddOperationToSpec(spec, data.URI, data.Method.Label(), data); err != nil {
+			if err = AddOperationToSpec(spec, data.URI, data.Method.Label(), data); err != nil {
 				msg := fmt.Sprintf("Error when adding operation to spec, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			if err := SaveSpec(data.FileName, spec); err != nil {
+			if err = SaveSpec(data.FileName, spec); err != nil {
 				msg := fmt.Sprintf("Error when writing file, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
 			savedPath = data.FileName
-			os.Remove(data.DraftPath)
+			if err = os.Remove(data.DraftPath); err != nil {
+				msg := fmt.Sprintf("Error removing tmp file: %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
 		} else if data.OpenAPIRef != nil {
 			ref := *data.OpenAPIRef
 			spec, err := ParseSpec(ref.FilePath)
@@ -300,16 +304,20 @@ func SaveFile(data model.Request) tea.Cmd {
 				msg := fmt.Sprintf("Error when trying to save file, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			if err := ApplyRequestToOperation(spec, ref, data); err != nil {
+			if err = ApplyRequestToOperation(spec, ref, data); err != nil {
 				msg := fmt.Sprintf("Error when applying changes to spec, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			if err := SaveSpec(ref.FilePath, spec); err != nil {
+			if err = SaveSpec(ref.FilePath, spec); err != nil {
 				msg := fmt.Sprintf("Error when writing file, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
 			savedPath = ref.FilePath
-			os.Remove(tempPathForRef(ref))
+
+			if err = os.Remove(tempPathForRef(ref)); err != nil {
+				msg := fmt.Sprintf("Error removing tmp file: %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
 		} else {
 			file, err := os.Create(data.FileName)
 			if err != nil {
@@ -331,7 +339,10 @@ func SaveFile(data model.Request) tea.Cmd {
 			}
 
 			savedPath = data.FileName
-			os.Remove(TempPath(data.FileName))
+			if err = os.Remove(TempPath(data.FileName)); err != nil {
+				msg := fmt.Sprintf("Error removing tmp file: %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
 		}
 
 		return FileSaved{Path: savedPath}
@@ -355,15 +366,18 @@ func DeleteRequestFile(item requests.RequestItem) tea.Cmd {
 				msg := fmt.Sprintf("Error when parsing spec: %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			if err := RemoveOperationFromSpec(spec, ref); err != nil {
+			if err = RemoveOperationFromSpec(spec, ref); err != nil {
 				msg := fmt.Sprintf("Error when removing operation: %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			if err := SaveSpec(ref.FilePath, spec); err != nil {
+			if err = SaveSpec(ref.FilePath, spec); err != nil {
 				msg := fmt.Sprintf("Error when writing file: %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-			os.Remove(tempPathForRef(ref))
+			if err = os.Remove(tempPathForRef(ref)); err != nil {
+				msg := fmt.Sprintf("Error removing tmp file: %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
 			return FileSaved{Path: ref.FilePath}
 		}
 
