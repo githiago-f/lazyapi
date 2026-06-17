@@ -32,6 +32,7 @@ type Request struct {
 	Servers   []string `yaml:"-"`
 
 	OpenAPIRef *OpenAPIRef `yaml:"-"`
+	DraftPath  string      `yaml:"-"`
 }
 
 type FailureMsg struct {

@@ -57,7 +57,8 @@ type RequestPane struct {
 	tea.Model
 	fieldsCursor int
 
-	fileName string
+	fileName  string
+	draftPath string
 
 	openAPIRef *model.OpenAPIRef
 
@@ -170,6 +171,7 @@ func (rp RequestPane) View() string {
 
 func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	rp.fileName = formData.FileName
+	rp.draftPath = formData.DraftPath
 	rp.openAPIRef = formData.OpenAPIRef
 	rp.Method.Cursor = int(formData.Method)
 	rp.URI.TextInput.SetValue(formData.URI)
@@ -204,6 +206,7 @@ func (rp *RequestPane) Reset() {
 	rp.fieldsCursor = 0
 	rp.URI.TextInput.SetValue("")
 	rp.openAPIRef = nil
+	rp.draftPath = ""
 
 	rp.RequestTabs.Cursor = 0
 }
@@ -216,6 +219,7 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 
 	return model.Request{
 		FileName:   rp.fileName,
+		DraftPath:  rp.draftPath,
 		OpenAPIRef: rp.openAPIRef,
 		About:      docs.Value(),
 		URI:        rp.URI.TextInput.Value(),

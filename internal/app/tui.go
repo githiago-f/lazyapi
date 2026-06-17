@@ -2,6 +2,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -25,15 +27,19 @@ type Tui struct {
 	requestList requests.RequestList
 	editor      *editor.RequestPane
 	prompt      components.PromptModel
+
+	defaultFile  string
+	openAPIFiles []string
 }
 
-func NewTui() Tui {
+func NewTui(defaultFile string) Tui {
 	actualList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	actualList.Title = "Requests"
 	actualList.SetShowHelp(false)
 	actualList.SetShowStatusBar(false)
 
 	tui := Tui{
+		defaultFile: defaultFile,
 		titleBar: components.TitleBar{
 			Style: lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), false, false, true, false),
@@ -69,6 +75,21 @@ func (t Tui) View() string {
 }
 
 func (t Tui) Init() tea.Cmd {
+	if t.defaultFile != "" {
+		if !store.IsOpenAPIFile(t.defaultFile) {
+			return tea.Batch(
+				tea.Println(fmt.Sprintf("Error: %q is not a valid OpenAPI file", t.defaultFile)),
+				tea.Quit,
+			)
+		}
+		return tea.Batch(
+			tea.EnterAltScreen,
+			tea.WindowSize(),
+			func() tea.Msg {
+				return store.RequestFilesMsg{Paths: []string{t.defaultFile}}
+			},
+		)
+	}
 	return tea.Batch(tea.EnterAltScreen, tea.WindowSize(), store.FindRequestFiles())
 }
 
@@ -80,6 +101,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case store.RequestFilesMsg:
+		t.openAPIFiles = msg.Paths
 		return t, store.LoadRequestsList(msg.Paths)
 
 	case store.LoadedRequestListMsg:
@@ -90,7 +112,76 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, cmd
 
 	case requests.OpenRequestViewMsg:
+		if msg.DraftPath != "" {
+			return t, store.OpenDraftFile(msg.DraftPath, msg.FileName)
+		}
 		return t, store.OpenRequestFile(*msg.OpenAPIRef)
+
+	case requests.CreateNewRequestMsg:
+		target := t.defaultFile
+		if target == "" && len(t.openAPIFiles) > 0 {
+			target = t.openAPIFiles[0]
+		}
+		if target == "" {
+			return t, nil
+		}
+		servers, serverURL := store.LoadServers(target)
+		req := model.Request{
+			FileName:  target,
+			URI:       "",
+			Method:    model.GET,
+			About:     model.About{},
+			Body:      model.Body{Type: model.ApplicationJSON, Raw: ""},
+			Headers:   map[string]string{},
+			Params:    map[string]string{},
+			Query:     map[string]string{},
+			Servers:   servers,
+			ServerURL: serverURL,
+			DraftPath: store.NewDraftPath(target),
+		}
+		t.currentRequest = &req
+		rp := t.editor.SetValue(req)
+		t.editor = &rp
+		config.DefaultConfig.Active = config.RequestEditor
+		return t, store.SaveTempFile(req)
+
+	case requests.DuplicateRequestMsg:
+		return t, store.LoadForDuplicate(msg.Item)
+
+	case requests.DeleteRequestMsg:
+		return t, tea.Batch(
+			store.DeleteRequestFile(msg.Item),
+			store.FindRequestFiles(),
+		)
+
+	case store.DuplicateData:
+		target := msg.Data.FileName
+		if target == "" {
+			target = t.defaultFile
+		}
+		if target == "" && len(t.openAPIFiles) > 0 {
+			target = t.openAPIFiles[0]
+		}
+		if target == "" {
+			return t, nil
+		}
+		dup := msg.Data
+		dup.URI = dup.URI + "-copy"
+		dup.FileName = target
+		dup.OpenAPIRef = nil
+		dup.DraftPath = store.NewDraftPath(target)
+		t.currentRequest = &dup
+		rp := t.editor.SetValue(dup)
+		t.editor = &rp
+		config.DefaultConfig.Active = config.RequestEditor
+		return t, store.SaveTempFile(dup)
+
+	case store.LoadedFile:
+		t.currentRequest = &msg.Data
+		rp := t.editor.SetValue(msg.Data)
+		t.editor = &rp
+		config.DefaultConfig.Active = config.RequestEditor
+		return t, nil
 
 	case editor.CloseRequestPaneMsg:
 		if msg.SaveToFile {
@@ -112,18 +203,6 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		subModel, _ = t.editor.Update(msg)
 		ptr := subModel.(editor.RequestPane)
 		t.editor = &ptr
-
-		subModel, _ = t.prompt.Update(msg)
-		t.prompt, _ = subModel.(components.PromptModel)
-
-		t.prompt.SetPosition((msg.Width / 2), (msg.Height / 2))
-
-	case store.LoadedFile:
-		t.currentRequest = &msg.Data
-		rp := t.editor.SetValue(msg.Data)
-		t.editor = &rp
-		config.DefaultConfig.Active = config.RequestEditor
-		return t, nil
 
 	case tea.KeyMsg:
 		switch {
