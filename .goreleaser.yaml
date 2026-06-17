@@ -1,17 +1,15 @@
-
 version: 2
 
-project_name: my-project
+project_name: lazyapi
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-
   - id: binary
-    main: .
-    binary: my-project
+    main: ./cmd/lazyapi
+    binary: lazyapi
 
     goos:
       - linux

@@ -63,7 +63,7 @@ git clone https://github.com/<your-org>/lazyapi.git
 
 cd lazyapi
 
-go build -o lazyapi ./cmd/tui
+go build -o lazyapi ./cmd/lazyapi
 ```
 
 ---
@@ -73,14 +73,22 @@ go build -o lazyapi ./cmd/tui
 ```text
 .
 ├── cmd
-│   └── tui
+│   ├── lazyapi
 ├── examples
 └── internal
+    ├── app
+    ├── cli
+    ├── components
+    ├── config
+    ├── env
+    ├── inmath
+    ├── model
+    └── store
 ```
 
-### cmd/tui
+### cmd/lazyapi
 
-Contains the application entrypoint.
+Root entry point. Dispatches to TUI (default) or CLI (subcommands).
 
 ### examples
 
@@ -92,16 +100,66 @@ Internal application packages and business logic.
 
 ---
 
-## Running the TUI
+## Building
 
 ```bash
-go run ./cmd/tui/main.go
+go build -o lazyapi ./cmd/lazyapi
 ```
 
-Or after building:
+## Running
+
+### TUI (default)
 
 ```bash
 ./lazyapi
+```
+
+Or with a specific OpenAPI file:
+
+```bash
+./lazyapi examples/openapi.yml
+```
+
+### CLI commands
+
+#### Create a template
+
+```bash
+./lazyapi create file my-api.yml
+```
+
+Creates a minimal OpenAPI 3.0 template. Defaults to `openapi.yml` if no name is given. Server URLs can be appended after the filename:
+
+```bash
+./lazyapi create file my-api.yml https://api.example.com http://localhost:3000
+```
+
+#### Add a request
+
+```bash
+./lazyapi add request my-api.yml /users POST
+./lazyapi add request my-api.yml /users/{id} GET
+```
+
+#### Add a server
+
+```bash
+./lazyapi add server my-api.yml https://api.example.com
+./lazyapi add server my-api.yml http://localhost:3000
+```
+
+#### Remove a request
+
+```bash
+./lazyapi remove request my-api.yml GET /users
+./lazyapi remove request my-api.yml POST /sales
+```
+
+#### Smoke tests (not yet implemented)
+
+```bash
+./lazyapi smoke tests my-api.yml
+./lazyapi smoke tests my-api.yml --server http://localhost:3000 --env .env
 ```
 
 ---

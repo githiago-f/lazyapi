@@ -36,9 +36,22 @@ type DuplicateData struct {
 
 var newDraftCounter int
 
+func tempDirForFile(filePath string) string {
+	abs, err := filepath.Abs(filePath)
+	if err != nil {
+		abs = filePath
+	}
+	safe := sanitizePath(abs)
+	return filepath.Join(os.TempDir(), "lazyapi", safe)
+}
+
 func NewDraftPath(filePath string) string {
 	newDraftCounter++
-	return fmt.Sprintf("%s.lazyapi.draft.new.%d", filePath, newDraftCounter)
+	dir := tempDirForFile(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return ""
+	}
+	return filepath.Join(dir, fmt.Sprintf("draft.new.%d", newDraftCounter))
 }
 
 func FindRequestFiles() tea.Cmd {
@@ -153,12 +166,14 @@ func OpenDraftFile(draftPath, fileName string) tea.Cmd {
 }
 
 func tempPathForRef(ref model.OpenAPIRef) string {
+	dir := tempDirForFile(ref.FilePath)
 	safe := sanitizePath(ref.Path)
-	return ref.FilePath + ".lazyapi.tmp." + ref.Method + "." + safe
+	return filepath.Join(dir, fmt.Sprintf("tmp.%s.%s", ref.Method, safe))
 }
 
 func ListDrafts(filePath string) []requests.RequestItem {
-	pattern := filePath + ".lazyapi.draft.*"
+	dir := tempDirForFile(filePath)
+	pattern := filepath.Join(dir, "draft.*")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil
@@ -196,7 +211,7 @@ func sanitizePath(path string) string {
 }
 
 func TempPath(filePath string) string {
-	return filePath + ".lazyapi.tmp"
+	return filepath.Join(tempDirForFile(filePath), "tmp")
 }
 
 func SaveTempFile(data model.Request) tea.Cmd {
@@ -211,6 +226,10 @@ func SaveTempFile(data model.Request) tea.Cmd {
 			path = tempPathForRef(*data.OpenAPIRef)
 		} else {
 			path = TempPath(data.FileName)
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			msg := fmt.Sprintf("Error creating temp directory: %v", err)
+			return tea.Batch(tea.Println(msg), tea.Quit)
 		}
 		file, err := os.Create(path)
 		if err != nil {
