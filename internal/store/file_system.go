@@ -1,14 +1,12 @@
-// Package store implements functions for defining and
-// consuming storage files
 package store
 
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"gopkg.in/yaml.v3"
 )
@@ -31,13 +29,24 @@ type FileSaved struct {
 
 func FindRequestFiles() tea.Cmd {
 	return func() tea.Msg {
-		files, err := Glob("./**/*.req.yml")
+		yamlFiles, err := Glob("./**/*.yml")
+		if err != nil {
+			return err
+		}
+		yamlFiles2, err := Glob("./**/*.yaml")
 		if err != nil {
 			return err
 		}
 
+		var openAPIFiles []string
+		for _, f := range append(yamlFiles, yamlFiles2...) {
+			if IsOpenAPIFile(f) {
+				openAPIFiles = append(openAPIFiles, f)
+			}
+		}
+
 		return RequestFilesMsg{
-			Paths: files,
+			Paths: openAPIFiles,
 		}
 	}
 }
@@ -46,51 +55,65 @@ func LoadRequestsList(paths []string) tea.Cmd {
 	return func() tea.Msg {
 		listItems := []list.Item{}
 		for _, filePath := range paths {
-			file, err := os.Open(filePath)
+			spec, err := ParseSpec(filePath)
 			if err != nil {
-				msg := fmt.Sprintf("Error when trying to parse files %v", err)
+				msg := fmt.Sprintf("Error when trying to parse file %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-
-			decoder := yaml.NewDecoder(file)
-			var request requests.RequestItem
-			decoder.Decode(&request)
-			request.FileName = filePath
-
-			listItems = append(listItems, request)
+			ops := ListOperations(spec, filePath)
+			for _, op := range ops {
+				listItems = append(listItems, op)
+			}
 		}
-
 		return LoadedRequestListMsg{
 			Items: listItems,
 		}
 	}
 }
 
-func OpenRequestFile(filePath string) tea.Cmd {
+func OpenRequestFile(ref model.OpenAPIRef) tea.Cmd {
 	return func() tea.Msg {
-		sourcePath := filePath
-		tempPath := TempPath(filePath)
+		tempPath := tempPathForRef(ref)
 
-		// Check if a temp file exists (from a previous unsaved session)
 		if _, err := os.Stat(tempPath); err == nil {
-			sourcePath = tempPath
+			file, err := os.Open(tempPath)
+			if err != nil {
+				msg := fmt.Sprintf("Error when trying to open temp file, %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
+			defer file.Close()
+
+			var request model.Request
+			decoder := yaml.NewDecoder(file)
+			if err := decoder.Decode(&request); err == nil && request.OpenAPIRef != nil {
+				return LoadedFile{Data: request}
+			}
 		}
 
-		file, err := os.Open(sourcePath)
+		spec, err := ParseSpec(ref.FilePath)
 		if err != nil {
 			msg := fmt.Sprintf("Error when trying to open file, %v", err)
 			return tea.Batch(tea.Println(msg), tea.Quit)
 		}
-		defer file.Close()
 
-		decoder := yaml.NewDecoder(file)
-
-		var request model.Request
-		decoder.Decode(&request)
-		request.FileName = filePath
-
+		request := OperationToRequest(spec, ref)
 		return LoadedFile{Data: request}
 	}
+}
+
+func tempPathForRef(ref model.OpenAPIRef) string {
+	safe := sanitizePath(ref.Path)
+	return ref.FilePath + ".lazyapi.tmp." + ref.Method + "." + safe
+}
+
+func sanitizePath(path string) string {
+	r := strings.NewReplacer(
+		"/", "_",
+		"{", "_",
+		"}", "_",
+		" ", "_",
+	)
+	return r.Replace(path)
 }
 
 func TempPath(filePath string) string {
@@ -102,7 +125,12 @@ func SaveTempFile(data model.Request) tea.Cmd {
 		if data.FileName == "" {
 			return nil
 		}
-		path := TempPath(data.FileName)
+		var path string
+		if data.OpenAPIRef != nil {
+			path = tempPathForRef(*data.OpenAPIRef)
+		} else {
+			path = TempPath(data.FileName)
+		}
 		file, err := os.Create(path)
 		if err != nil {
 			msg := fmt.Sprintf("Error when trying to save temp file, %v", err)
@@ -121,29 +149,45 @@ func SaveTempFile(data model.Request) tea.Cmd {
 	}
 }
 
-func RemoveTempFile(filePath string) tea.Cmd {
-	return func() tea.Msg {
-		os.Remove(TempPath(filePath))
-		return nil
-	}
-}
-
 func SaveFile(data model.Request) tea.Cmd {
 	return func() tea.Msg {
-		file, err := os.Create(data.FileName)
-		if err != nil {
-			msg := fmt.Sprintf("Error when trying to save file, %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
-		}
-		defer file.Close()
+		var savedPath string
+		if data.OpenAPIRef != nil {
+			ref := *data.OpenAPIRef
+			spec, err := ParseSpec(ref.FilePath)
+			if err != nil {
+				msg := fmt.Sprintf("Error when trying to save file, %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
+			if err := ApplyRequestToOperation(spec, ref, data); err != nil {
+				msg := fmt.Sprintf("Error when applying changes to spec, %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
+			if err := SaveSpec(ref.FilePath, spec); err != nil {
+				msg := fmt.Sprintf("Error when writing file, %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
+			savedPath = ref.FilePath
+			os.Remove(tempPathForRef(ref))
+		} else {
+			file, err := os.Create(data.FileName)
+			if err != nil {
+				msg := fmt.Sprintf("Error when trying to save file, %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
+			defer file.Close()
 
-		encoder := yaml.NewEncoder(file)
-		err = encoder.Encode(data)
-		if err != nil {
-			msg := fmt.Sprintf("Error when encoding file, %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
+			encoder := yaml.NewEncoder(file)
+			err = encoder.Encode(data)
+			if err != nil {
+				msg := fmt.Sprintf("Error when encoding file, %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
+
+			savedPath = data.FileName
+			os.Remove(TempPath(data.FileName))
 		}
 
-		return FileSaved{Path: data.FileName}
+		return FileSaved{Path: savedPath}
 	}
 }

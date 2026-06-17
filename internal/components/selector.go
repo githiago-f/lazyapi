@@ -6,42 +6,49 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/inmath"
-	"github.com/githiago-f/lazyapi/internal/model"
 )
 
-type MethodSelector struct {
+type Selector struct {
 	Cursor int
+	Labels []string
 	Style  lipgloss.Style
+	Width  int
 }
 
-var methodSelectorStyle = lipgloss.NewStyle().
+var selectorStyle = lipgloss.NewStyle().
 	Border(lipgloss.NormalBorder()).
 	Padding(0, 2).
-	Width(9).
 	Align(lipgloss.Center)
 
-func (ms MethodSelector) Value() model.Method {
-	return model.Method(ms.Cursor)
+func (s Selector) Value() string {
+	if s.Cursor < 0 || s.Cursor >= len(s.Labels) {
+		return ""
+	}
+	return s.Labels[s.Cursor]
 }
 
-func (ms MethodSelector) Init() tea.Cmd {
+func (s Selector) Init() tea.Cmd {
 	return nil
 }
 
-func (ms MethodSelector) View() string {
-	method := model.Method(ms.Cursor).Label()
-	return ms.Style.Inherit(methodSelectorStyle).Render(method)
+func (s Selector) View() string {
+	label := s.Value()
+	style := s.Style.Inherit(selectorStyle)
+	if s.Width > 0 {
+		style = style.Width(s.Width)
+	}
+	return style.Render(label)
 }
 
-func (ms MethodSelector) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (s Selector) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Up):
-			ms.Cursor = inmath.Cicle(ms.Cursor-1, 0, int(model.LastMethod))
+			s.Cursor = inmath.Cicle(s.Cursor-1, 0, len(s.Labels)-1)
 		case key.Matches(msg, config.DefaultKeyMap.Down):
-			ms.Cursor = inmath.Cicle(ms.Cursor+1, 0, int(model.LastMethod))
+			s.Cursor = inmath.Cicle(s.Cursor+1, 0, len(s.Labels)-1)
 		}
 	}
-	return ms, nil
+	return s, nil
 }

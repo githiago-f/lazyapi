@@ -90,11 +90,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, cmd
 
 	case requests.OpenRequestViewMsg:
-		return t, store.OpenRequestFile(msg.FileName)
-
-	case store.FileSaved:
-		cmd = store.RemoveTempFile(msg.Path)
-		return t, cmd
+		return t, store.OpenRequestFile(*msg.OpenAPIRef)
 
 	case editor.CloseRequestPaneMsg:
 		if msg.SaveToFile {

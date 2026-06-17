@@ -6,16 +6,19 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/model"
 )
 
 type OpenRequestViewMsg struct {
-	FileName string
+	FileName   string
+	OpenAPIRef *model.OpenAPIRef
 }
 
-func OpenRequestView(fileName string) tea.Cmd {
+func OpenRequestView(fileName string, ref *model.OpenAPIRef) tea.Cmd {
 	return func() tea.Msg {
 		return OpenRequestViewMsg{
-			FileName: fileName,
+			FileName:   fileName,
+			OpenAPIRef: ref,
 		}
 	}
 }
@@ -41,7 +44,7 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Select):
 			item, _ := rl.List.SelectedItem().(RequestItem)
-			return rl, OpenRequestView(item.FileName)
+			return rl, OpenRequestView(item.FileName, item.OpenAPIRef)
 		}
 	}
 
