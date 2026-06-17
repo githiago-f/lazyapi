@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build, Vet, Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download Dependencies
+        run: go mod download
+
+      - name: Verify Modules
+        run: go mod verify
+
+      - name: Go Vet
+        run: go vet ./...
+
+      - name: GolangCI-Lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -race -count=1 ./...
+
