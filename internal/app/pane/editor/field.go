@@ -1,4 +1,4 @@
-package requesteditor
+package editor
 
 import (
 	"github.com/charmbracelet/bubbles/key"
@@ -32,8 +32,37 @@ func createParam() paramField {
 	}
 }
 
+func createParamWith(name, value string) paramField {
+	return paramField{
+		enabled: true,
+		active:  none,
+		name:    components.InitField("Name", name),
+		value:   components.InitField("Value", value),
+	}
+}
+
+func mapToParamFields(m map[string]string) []paramField {
+	result := make([]paramField, 0, len(m))
+	for k, v := range m {
+		result = append(result, createParamWith(k, v))
+	}
+	return result
+}
+
+func paramFieldsToMap(fields []paramField) map[string]string {
+	result := make(map[string]string, len(fields))
+	for _, pf := range fields {
+		name := pf.name.Value()
+		value := pf.value.Value()
+		if name != "" {
+			result[name] = value
+		}
+	}
+	return result
+}
+
 func (pf *paramField) SetWidth(w int) {
-	pf.name.Style = pf.name.Style.Width(w - 1)
+	pf.name.Style = pf.name.Style.Width(w - 2)
 	pf.value.Style = pf.value.Style.Width(w)
 }
 

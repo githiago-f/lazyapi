@@ -1,10 +1,11 @@
-package requesteditor
+package editor
 
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/githiago-f/lazyapi/internal/components"
+	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/inmath"
 	"github.com/githiago-f/lazyapi/internal/model"
@@ -51,6 +52,10 @@ func (d *documentation) SetActive(b bool) {
 	d.active = b
 }
 
+func (d *documentation) IsActive() bool {
+	return d.active
+}
+
 func (d documentation) View() string {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
@@ -86,6 +91,10 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		d.Summary.Style = d.Summary.Style.Width(msg.Width)
 		d.Description.Style = d.Description.Style.Width(msg.Width)
+
+	case tabs.SetActiveTabMsg:
+		d.active = msg.Active
+		return &d, nil
 	}
 
 	var (
@@ -101,5 +110,5 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		d.Description, _ = model.(components.Text)
 	}
 
-	return d, cmd
+	return &d, cmd
 }

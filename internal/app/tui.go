@@ -7,40 +7,47 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	requesteditor "github.com/githiago-f/lazyapi/internal/app/pane/requesteditor"
-	requestlist "github.com/githiago-f/lazyapi/internal/app/pane/requestlist"
+	"github.com/githiago-f/lazyapi/internal/app/pane/editor"
+	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/store"
 )
 
 type Tui struct {
 	tea.Model
-	titleBar    components.TitleBar
+	titleBar components.TitleBar
+
+	currentRequest *model.Request
+
 	help        help.Model
-	requestList requestlist.RequestList
-	request     requesteditor.RequestPane
+	requestList requests.RequestList
+	editor      *editor.RequestPane
 	prompt      components.PromptModel
 }
 
 func NewTui() Tui {
 	actualList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
-	actualList.SetShowTitle(false)
+	actualList.Title = "Requests"
 	actualList.SetShowHelp(false)
 	actualList.SetShowStatusBar(false)
 
-	return Tui{
+	tui := Tui{
 		titleBar: components.TitleBar{
 			Style: lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), false, false, true, false),
 		},
 		help: help.New(),
-		requestList: requestlist.RequestList{
+		requestList: requests.RequestList{
 			List: actualList,
 		},
-		request: *requesteditor.New(),
-		prompt:  components.Prompt(""),
+		prompt: components.Prompt(""),
 	}
+
+	tui.editor = editor.New(tui.currentRequest)
+
+	return tui
 }
 
 func (t Tui) View() string {
@@ -49,17 +56,16 @@ func (t Tui) View() string {
 	case config.RequestList:
 		currentView = t.requestList.View()
 	case config.RequestEditor:
-		currentView = t.request.View()
+		currentView = t.editor.View()
 	}
 
-	view := lipgloss.JoinVertical(
+	return lipgloss.JoinVertical(
 		lipgloss.Left,
+		t.prompt.View(),
 		t.titleBar.View(),
 		currentView,
 		t.help.View(config.DefaultKeyMap),
 	)
-
-	return view
 }
 
 func (t Tui) Init() tea.Cmd {
@@ -83,20 +89,23 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = t.requestList.List.SetItems(msg.Items)
 		return t, cmd
 
-	case requestlist.OpenRequestViewMsg:
+	case requests.OpenRequestViewMsg:
 		return t, store.OpenRequestFile(msg.FileName)
 
-	case store.LoadedFile:
-		t.request = t.request.SetValue(msg.Data)
-		config.DefaultConfig.Active = config.RequestEditor
-		return t, nil
+	case store.FileSaved:
+		cmd = store.RemoveTempFile(msg.Path)
+		return t, cmd
 
-	case requesteditor.CloseRequestPaneMsg:
+	case editor.CloseRequestPaneMsg:
 		if msg.SaveToFile {
-			cmd = store.SaveFile(t.request.GetAsRequestData())
+			cmd = tea.Batch(
+				store.SaveFile(t.editor.GetAsRequestData()),
+				store.FindRequestFiles(),
+			)
 		}
-		t.request.Reset()
+		t.editor.Reset()
 		config.DefaultConfig.Active = config.RequestList
+		return t, cmd
 
 	case tea.WindowSizeMsg:
 		_, titleBarHeight := lipgloss.Size(t.titleBar.View())
@@ -104,14 +113,21 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		t.requestList.List.SetSize(msg.Width, msg.Height-(titleBarHeight+1))
 
-		subModel, _ = t.request.Update(msg)
-		t.request, _ = subModel.(requesteditor.RequestPane)
+		subModel, _ = t.editor.Update(msg)
+		ptr := subModel.(editor.RequestPane)
+		t.editor = &ptr
 
 		subModel, _ = t.prompt.Update(msg)
 		t.prompt, _ = subModel.(components.PromptModel)
 
-		t.prompt.SetWidth(25)
 		t.prompt.SetPosition((msg.Width / 2), (msg.Height / 2))
+
+	case store.LoadedFile:
+		t.currentRequest = &msg.Data
+		rp := t.editor.SetValue(msg.Data)
+		t.editor = &rp
+		config.DefaultConfig.Active = config.RequestEditor
+		return t, nil
 
 	case tea.KeyMsg:
 		switch {
@@ -125,10 +141,11 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch config.DefaultConfig.Active {
 	case config.RequestList:
 		subModel, cmd = t.requestList.Update(msg)
-		t.requestList, _ = subModel.(requestlist.RequestList)
+		t.requestList, _ = subModel.(requests.RequestList)
 	case config.RequestEditor:
-		subModel, cmd = t.request.Update(msg)
-		t.request, _ = subModel.(requesteditor.RequestPane)
+		subModel, cmd = t.editor.Update(msg)
+		ptr, _ := subModel.(editor.RequestPane)
+		t.editor = &ptr
 	}
 
 	return t, cmd

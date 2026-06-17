@@ -1,9 +1,10 @@
-package requesteditor
+package editor
 
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
@@ -23,6 +24,10 @@ func (p *params) SetActive(b bool) {
 	p.active = b
 }
 
+func (p *params) IsActive() bool {
+	return p.active
+}
+
 func ParamsTab() *params {
 	return &params{
 		query:  []paramField{createParam()},
@@ -35,6 +40,25 @@ var titleStyle = lipgloss.NewStyle().
 	Align(lipgloss.Center).
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderBottom(true)
+
+func (p *params) SetValue(query map[string]string, pathParams map[string]string) {
+	p.query = mapToParamFields(query)
+	p.params = mapToParamFields(pathParams)
+	if len(p.query) == 0 {
+		p.query = []paramField{createParam()}
+	}
+	if len(p.params) == 0 {
+		p.params = []paramField{createParam()}
+	}
+}
+
+func (p *params) QueryValue() map[string]string {
+	return paramFieldsToMap(p.query)
+}
+
+func (p *params) ParamsValue() map[string]string {
+	return paramFieldsToMap(p.params)
+}
 
 func (p *params) Reset() {
 	p.query = []paramField{createParam()}
@@ -70,9 +94,12 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		p.width = msg.Width
+	case tabs.SetActiveTabMsg:
+		p.active = msg.Active
+		return &p, nil
 	case tea.KeyMsg:
 		if !p.active {
-			return p, nil
+			return &p, nil
 		}
 
 		isNewCmd := p.prevKey == 'n'
@@ -93,5 +120,5 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	return p, nil
+	return &p, nil
 }

@@ -1,5 +1,5 @@
-// Package requestlist implements a list component for requests
-package requestlist
+// Package requests implements a list component for requests
+package requests
 
 import (
 	"github.com/charmbracelet/bubbles/key"

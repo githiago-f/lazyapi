@@ -1,5 +1,5 @@
-// Package requesteditor implements editor page for request data
-package requesteditor
+// Package editor implements editor page for request data
+package editor
 
 import (
 	"fmt"
@@ -12,6 +12,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/inmath"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/store"
 )
 
 type CloseRequestPaneMsg struct {
@@ -19,10 +20,10 @@ type CloseRequestPaneMsg struct {
 	File       string
 }
 
-func close() tea.Cmd {
+func closePane(save bool) tea.Cmd {
 	return func() tea.Msg {
 		return CloseRequestPaneMsg{
-			SaveToFile: false,
+			SaveToFile: save,
 		}
 	}
 }
@@ -74,7 +75,7 @@ var defaultBtnStyle = lipgloss.NewStyle().
 	Border(lipgloss.InnerHalfBlockBorder()).
 	Foreground(lipgloss.Color(config.Crust))
 
-func New() *RequestPane {
+func New(request *model.Request) *RequestPane {
 	docs := DocumentationTab()
 	params := ParamsTab()
 	authorize := AuthorizeTab()
@@ -150,7 +151,17 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	rp.Method.Cursor = int(formData.Method)
 	rp.URI.TextInput.SetValue(formData.URI)
 
-	rp.RequestTabs.Tabs[Documentation].Content = rp.RequestTabs.Tabs[Documentation].Content.(documentation).SetValue(formData.About)
+	docs := rp.RequestTabs.Tabs[Documentation].Content.(*documentation)
+	*docs = docs.SetValue(formData.About)
+
+	bd := rp.RequestTabs.Tabs[Body].Content.(*body)
+	bd.SetValue(formData.Body.Raw)
+
+	hd := rp.RequestTabs.Tabs[Header].Content.(*header)
+	hd.SetValue(formData.Headers)
+
+	pr := rp.RequestTabs.Tabs[Params].Content.(*params)
+	pr.SetValue(formData.Query, formData.Params)
 
 	return rp
 }
@@ -161,28 +172,38 @@ func (rp *RequestPane) Reset() {
 	rp.URI.TextInput.SetValue("")
 
 	rp.RequestTabs.Cursor = 0
-
-	// rp.documentation.SetValue(model.About{})
-	// rp.params.Reset()
 }
 
 func (rp RequestPane) GetAsRequestData() model.Request {
+	docs := rp.RequestTabs.Tabs[Documentation].Content.(*documentation)
+	bd := rp.RequestTabs.Tabs[Body].Content.(*body)
+	hd := rp.RequestTabs.Tabs[Header].Content.(*header)
+	pr := rp.RequestTabs.Tabs[Params].Content.(*params)
+
 	return model.Request{
-		URI:    rp.URI.TextInput.Value(),
-		Method: rp.Method.Value(),
-		// About:  rp.documentation.Value(),
+		FileName: rp.fileName,
+		About:    docs.Value(),
+		URI:      rp.URI.TextInput.Value(),
+		Method:   rp.Method.Value(),
 		Body: model.Body{
 			Type: model.ApplicationJSON,
-			// Raw:  rp.body.Value(),
+			Raw:  bd.Value(),
 		},
-		FileName: "",
+		Headers: hd.Value(),
+		Params:  pr.ParamsValue(),
+		Query:   pr.QueryValue(),
 	}
+}
+
+func (rp RequestPane) shouldBlockTabCommands() bool {
+	return field(rp.fieldsCursor) == reqTabs && rp.BlockTab
 }
 
 func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
-		cmd   tea.Cmd
-		model tea.Model
+		cmd      tea.Cmd
+		model    tea.Model
+		consumed bool
 	)
 	switch field(rp.fieldsCursor) {
 	case method:
@@ -195,11 +216,27 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = rp.Send.Update(msg)
 		rp.Send, _ = model.(components.Button)
 	case reqTabs:
+		// Two-stage Esc: check if content is active before the tabs update
+		wasActive := false
+		if rp.BlockTab {
+			if keyMsg, ok := msg.(tea.KeyMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
+				content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor].Content
+				if a, ok := content.(interface{ IsActive() bool }); ok {
+					wasActive = a.IsActive()
+				}
+			}
+		}
+
 		model, cmd = rp.RequestTabs.Update(msg)
 		rp.RequestTabs, _ = model.(tabs.Model)
-		// case response:
-		// 	model, cmd = rp.ResponsePreview.Update(msg)
-		// 	rp.ResponsePreview, _ = model.(responses.ResponseView)
+
+		// Only exit tab if content was NOT active (Esc already blurred it)
+		if rp.BlockTab && !wasActive {
+			if keyMsg, ok := msg.(tea.KeyMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
+				rp.BlockTab = false
+				consumed = true
+			}
+		}
 	}
 
 	switch msg := msg.(type) {
@@ -221,18 +258,25 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rp.RequestTabs, _ = model.(tabs.Model)
 
 	case tea.KeyMsg:
+		if consumed || rp.shouldBlockTabCommands() {
+			break
+		}
 		switch {
-		case key.Matches(msg, config.DefaultKeyMap.Select):
+		case key.Matches(msg, config.DefaultKeyMap.Select) && field(rp.fieldsCursor) == reqTabs:
 			rp.BlockTab = true
-		case key.Matches(msg, config.DefaultKeyMap.Back) && rp.BlockTab:
-			rp.BlockTab = false
 		case key.Matches(msg, config.DefaultKeyMap.Next) && !rp.BlockTab:
 			rp.fieldsCursor = inmath.Cicle(rp.fieldsCursor+1, 0, int(lastField))
 		case key.Matches(msg, config.DefaultKeyMap.Prev) && !rp.BlockTab:
 			rp.fieldsCursor = inmath.Cicle(rp.fieldsCursor-1, 0, int(lastField))
+		case key.Matches(msg, config.DefaultKeyMap.Save) && !rp.BlockTab:
+			return rp, closePane(true)
 		case key.Matches(msg, config.DefaultKeyMap.Back) && !rp.BlockTab:
-			return rp, close()
+			return rp, closePane(false)
 		}
+	}
+
+	if rp.fileName != "" {
+		cmd = tea.Batch(cmd, store.SaveTempFile(rp.GetAsRequestData()))
 	}
 
 	return rp, cmd

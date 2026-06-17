@@ -1,9 +1,10 @@
-package requesteditor
+package editor
 
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
@@ -14,9 +15,12 @@ type header struct {
 	headers   []paramField
 }
 
-// SetActive implements [tabs.StatefulInputBase].
 func (h *header) SetActive(b bool) {
 	h.active = b
+}
+
+func (h *header) IsActive() bool {
+	return h.active
 }
 
 func HeaderTab() *header {
@@ -40,13 +44,39 @@ func (h header) View() string {
 	return customParams
 }
 
+func (h *header) SetValue(headers map[string]string) {
+	h.headers = make([]paramField, 0, len(headers))
+	for name, value := range headers {
+		pf := createParamWith(name, value)
+		h.headers = append(h.headers, pf)
+	}
+	if len(h.headers) == 0 {
+		h.headers = []paramField{createParam()}
+	}
+}
+
+func (h *header) Value() map[string]string {
+	result := make(map[string]string, len(h.headers))
+	for _, pf := range h.headers {
+		name := pf.name.Value()
+		value := pf.value.Value()
+		if name != "" {
+			result[name] = value
+		}
+	}
+	return result
+}
+
 func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		h.width = msg.Width
+	case tabs.SetActiveTabMsg:
+		h.active = msg.Active
+		return &h, nil
 	case tea.KeyMsg:
 		if !h.active {
-			return h, nil
+			return &h, nil
 		}
 
 		isNewCmd := h.cmdBuffer == 'n'
@@ -63,5 +93,5 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			h.cmdBuffer = '0'
 		}
 	}
-	return h, nil
+	return &h, nil
 }

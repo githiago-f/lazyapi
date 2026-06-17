@@ -1,4 +1,4 @@
-package requestlist
+package requests
 
 import (
 	"fmt"
