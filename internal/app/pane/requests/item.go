@@ -37,11 +37,13 @@ var (
 )
 
 type RequestItem struct {
-	Method      model.Method `yaml:"method"`
-	URI         string       `yaml:"uri"`
-	About       model.About  `yaml:"about"`
+	Method      model.Method
+	URI         string
+	About       model.About
 	FileName    string
-	RequestTime float64 `yaml:"request_time"`
+	RequestTime float64
+
+	OpenAPIRef *model.OpenAPIRef
 }
 
 func (ri RequestItem) Title() string {

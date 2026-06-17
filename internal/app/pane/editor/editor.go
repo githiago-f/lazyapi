@@ -35,6 +35,7 @@ type (
 
 const (
 	method field = iota
+	serverField
 	uri
 	send
 	reqTabs
@@ -58,15 +59,26 @@ type RequestPane struct {
 
 	fileName string
 
+	openAPIRef *model.OpenAPIRef
+
 	BlockTab bool
 
-	Method components.MethodSelector
+	Method components.Selector
+	Server components.Selector
 	URI    components.Field
 	Send   components.Button
 
 	RequestTabs tabs.Model
 
 	ResponsePreview components.View
+}
+
+func methodLabels() []string {
+	labels := make([]string, model.LastMethod+1)
+	for i := 0; i <= int(model.LastMethod); i++ {
+		labels[i] = model.Method(i).Label()
+	}
+	return labels
 }
 
 var defaultBtnStyle = lipgloss.NewStyle().
@@ -84,8 +96,15 @@ func New(request *model.Request) *RequestPane {
 	tests := TestsTab()
 
 	return &RequestPane{
-		URI:    components.InitField("https://example.com/hello_world", ""),
-		Method: components.MethodSelector{Cursor: 0},
+		URI:    components.InitField("", ""),
+		Method: components.Selector{
+			Cursor: 0,
+			Labels: methodLabels(),
+			Width:  9,
+		},
+		Server: components.Selector{
+			Width: 45,
+		},
 		Send: components.Button{
 			Label:  "Send",
 			Active: true,
@@ -113,6 +132,8 @@ func (rp RequestPane) View() string {
 	switch field(rp.fieldsCursor) {
 	case method:
 		rp.Method.Style = rp.Method.Style.BorderForeground(activeColor)
+	case serverField:
+		rp.Server.Style = rp.Server.Style.BorderForeground(activeColor)
 	case uri:
 		rp.URI.Style = rp.URI.Style.BorderForeground(activeColor)
 	case send:
@@ -131,6 +152,7 @@ func (rp RequestPane) View() string {
 	requestURL := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		rp.Method.View(),
+		rp.Server.View(),
 		rp.URI.View(),
 		rp.Send.View(),
 	)
@@ -148,8 +170,18 @@ func (rp RequestPane) View() string {
 
 func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	rp.fileName = formData.FileName
+	rp.openAPIRef = formData.OpenAPIRef
 	rp.Method.Cursor = int(formData.Method)
 	rp.URI.TextInput.SetValue(formData.URI)
+
+	rp.Server.Labels = formData.Servers
+	rp.Server.Cursor = 0
+	for i, s := range formData.Servers {
+		if s == formData.ServerURL {
+			rp.Server.Cursor = i
+			break
+		}
+	}
 
 	docs := rp.RequestTabs.Tabs[Documentation].Content.(*documentation)
 	*docs = docs.SetValue(formData.About)
@@ -168,8 +200,10 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 
 func (rp *RequestPane) Reset() {
 	rp.Method.Cursor = 0
+	rp.Server = components.Selector{Width: 45}
 	rp.fieldsCursor = 0
 	rp.URI.TextInput.SetValue("")
+	rp.openAPIRef = nil
 
 	rp.RequestTabs.Cursor = 0
 }
@@ -181,10 +215,13 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 	pr := rp.RequestTabs.Tabs[Params].Content.(*params)
 
 	return model.Request{
-		FileName: rp.fileName,
-		About:    docs.Value(),
-		URI:      rp.URI.TextInput.Value(),
-		Method:   rp.Method.Value(),
+		FileName:   rp.fileName,
+		OpenAPIRef: rp.openAPIRef,
+		About:      docs.Value(),
+		URI:        rp.URI.TextInput.Value(),
+		Method:     model.Method(rp.Method.Cursor),
+		ServerURL:  rp.Server.Value(),
+		Servers:    rp.Server.Labels,
 		Body: model.Body{
 			Type: model.ApplicationJSON,
 			Raw:  bd.Value(),
@@ -208,7 +245,10 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch field(rp.fieldsCursor) {
 	case method:
 		model, cmd = rp.Method.Update(msg)
-		rp.Method, _ = model.(components.MethodSelector)
+		rp.Method, _ = model.(components.Selector)
+	case serverField:
+		model, cmd = rp.Server.Update(msg)
+		rp.Server, _ = model.(components.Selector)
 	case uri:
 		model, cmd = rp.URI.Update(msg)
 		rp.URI, _ = model.(components.Field)
@@ -243,9 +283,10 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		rp.RequestTabs.Width = (msg.Width / 2) - 15
 		methodWidth, methodHeight := lipgloss.Size(rp.Method.View())
+		serverWidth, _ := lipgloss.Size(rp.Server.View())
 		sendWidth, _ := lipgloss.Size(rp.Send.View())
 
-		rp.URI.Style = rp.URI.Style.Width(msg.Width - (methodWidth + sendWidth + 2))
+		rp.URI.Style = rp.URI.Style.Width(msg.Width - (methodWidth + serverWidth + sendWidth + 3))
 		tabsHeight := msg.Height - (methodHeight + 5)
 		rp.RequestTabs.Style = rp.RequestTabs.Style.Height(tabsHeight)
 		rp.ResponsePreview.Style = rp.ResponsePreview.Style.

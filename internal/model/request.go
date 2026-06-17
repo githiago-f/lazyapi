@@ -9,6 +9,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type OpenAPIRef struct {
+	FilePath string
+	Path     string
+	Method   string
+}
+
 type Request struct {
 	FileName string
 
@@ -21,6 +27,11 @@ type Request struct {
 	Headers map[string]string `yaml:"headers"`
 	Params  map[string]string `yaml:"pathParams"`
 	Query   map[string]string `yaml:"query"`
+
+	ServerURL string   `yaml:"-"`
+	Servers   []string `yaml:"-"`
+
+	OpenAPIRef *OpenAPIRef `yaml:"-"`
 }
 
 type FailureMsg struct {
@@ -39,7 +50,8 @@ func Failure(msg string) tea.Msg {
 
 func (r *Request) RunRequest() tea.Cmd {
 	return func() tea.Msg {
-		url, err := url.Parse(r.URI)
+		fullURL := r.ServerURL + r.URI
+		url, err := url.Parse(fullURL)
 		if err != nil {
 			return Failure("Failed parsing url: " + err.Error())
 		}
