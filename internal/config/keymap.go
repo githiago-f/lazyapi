@@ -11,10 +11,13 @@ type KeyMap struct {
 	Left  key.Binding
 	Right key.Binding
 
-	Select key.Binding
-	Filter key.Binding
-	New    key.Binding
-	Ok     key.Binding
+	Select    key.Binding
+	Filter    key.Binding
+	Delete    key.Binding
+	New       key.Binding
+	CreateNew key.Binding
+	Duplicate key.Binding
+	Ok        key.Binding
 
 	Back key.Binding
 	Save key.Binding
@@ -33,7 +36,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 		return []key.Binding{k.Back, k.Save, k.Next, k.Prev, k.Help}
 	}
 
-	return []key.Binding{k.Select, k.Up, k.Down, k.Filter, k.Help}
+	return []key.Binding{k.Select, k.Up, k.Down, k.Filter, k.CreateNew, k.Help}
 }
 
 func (k KeyMap) FullHelp() [][]key.Binding {
@@ -45,8 +48,8 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	}
 
 	return [][]key.Binding{
-		{k.Select, k.Up, k.Down, k.Filter},
-		{k.Quit, k.Kill},
+		{k.Select, k.Up, k.Down, k.Filter, k.CreateNew},
+		{k.Duplicate, k.Delete, k.Quit, k.Kill},
 	}
 }
 
@@ -106,6 +109,18 @@ var DefaultKeyMap = KeyMap{
 	New: key.NewBinding(
 		key.WithKeys("n", "+"),
 		key.WithHelp("+/n", "add"),
+	),
+	CreateNew: key.NewBinding(
+		key.WithKeys(tea.KeyCtrlN.String()),
+		key.WithHelp("ctrl+n", "new request"),
+	),
+	Duplicate: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "duplicate request"),
+	),
+	Delete: key.NewBinding(
+		key.WithKeys("x"),
+		key.WithHelp("x", "eXclude request"),
 	),
 	Help: key.NewBinding(
 		key.WithKeys("h"),

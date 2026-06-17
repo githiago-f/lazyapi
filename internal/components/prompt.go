@@ -38,6 +38,18 @@ func (m *PromptModel) SetPosition(x, y int) {
 	m.pos = pos{x: x - m.width, y: y}
 }
 
+func (m *PromptModel) SetQuestion(q string) {
+	m.question = q
+}
+
+func (m *PromptModel) SetValue(v string) {
+	m.answer.SetValue(v)
+}
+
+func (m PromptModel) IsOpen() bool {
+	return m.open
+}
+
 func (m *PromptModel) SetWidth(w int) {
 	m.width = w
 }
@@ -69,6 +81,9 @@ func (m PromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, config.DefaultKeyMap.Back):
 			m.open = false
 			m.answer.SetValue("")
+		default:
+			model, _ := m.answer.Update(msg)
+			m.answer, _ = model.(Field)
 		}
 	}
 	return m, nil
@@ -79,6 +94,10 @@ var box = lipgloss.NewStyle().
 	BorderForeground(config.DefaultConfig.PrimaryColor())
 
 func (m PromptModel) View() string {
+	if !m.open {
+		return ""
+	}
+
 	modal := box.Render(fmt.Sprintf("%s\n%s", m.question, m.answer.View()))
 
 	xView := lipgloss.PlaceHorizontal(m.pos.x, lipgloss.Center, modal)

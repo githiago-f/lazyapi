@@ -3,6 +3,8 @@ package store
 import (
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
@@ -59,6 +61,13 @@ func ListOperations(spec *openapi3.T, filePath string) []requests.RequestItem {
 			})
 		}
 	}
+
+	slices.SortStableFunc(items, func(a, b requests.RequestItem) int {
+		if c := strings.Compare(strings.ToLower(a.URI), strings.ToLower(b.URI)); c != 0 {
+			return c
+		}
+		return strings.Compare(strings.ToLower(a.Method.Label()), strings.ToLower(b.Method.Label()))
+	})
 
 	return items
 }
@@ -171,6 +180,121 @@ func ApplyRequestToOperation(spec *openapi3.T, ref model.OpenAPIRef, data model.
 	}
 
 	return nil
+}
+
+func RemoveOperationFromSpec(spec *openapi3.T, ref model.OpenAPIRef) error {
+	pathItem := spec.Paths.Find(ref.Path)
+	if pathItem == nil {
+		return fmt.Errorf("path %q not found", ref.Path)
+	}
+
+	switch ref.Method {
+	case "GET":
+		pathItem.Get = nil
+	case "POST":
+		pathItem.Post = nil
+	case "PUT":
+		pathItem.Put = nil
+	case "PATCH":
+		pathItem.Patch = nil
+	case "DELETE":
+		pathItem.Delete = nil
+	case "OPTIONS":
+		pathItem.Options = nil
+	case "HEAD":
+		pathItem.Head = nil
+	default:
+		return fmt.Errorf("unknown method %q", ref.Method)
+	}
+
+	if pathItem.Get == nil && pathItem.Post == nil && pathItem.Put == nil &&
+		pathItem.Patch == nil && pathItem.Delete == nil && pathItem.Options == nil &&
+		pathItem.Head == nil {
+		spec.Paths.Delete(ref.Path)
+	}
+
+	return nil
+}
+
+func AddOperationToSpec(spec *openapi3.T, path, method string, data model.Request) error {
+	pathItem := spec.Paths.Find(path)
+	if pathItem == nil {
+		pathItem = &openapi3.PathItem{}
+		spec.Paths.Set(path, pathItem)
+	}
+
+	op := &openapi3.Operation{}
+	op.Summary = data.About.Summary
+	op.Description = data.About.Description
+
+	for name := range data.Params {
+		op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
+			Value: &openapi3.Parameter{
+				Name:     name,
+				In:       "path",
+				Required: true,
+				Schema:   &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+			},
+		})
+	}
+	for name := range data.Query {
+		op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
+			Value: &openapi3.Parameter{
+				Name:   name,
+				In:     "query",
+				Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+			},
+		})
+	}
+	for name := range data.Headers {
+		op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
+			Value: &openapi3.Parameter{
+				Name: name,
+				In:   "header",
+				Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+			},
+		})
+	}
+
+	if data.Body.Raw != "" {
+		op.RequestBody = &openapi3.RequestBodyRef{
+			Value: &openapi3.RequestBody{
+				Content: openapi3.Content{
+					string(data.Body.Type): &openapi3.MediaType{
+						Schema: &openapi3.SchemaRef{
+							Value: &openapi3.Schema{Type: &openapi3.Types{"object"}},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	op.Responses = openapi3.NewResponses()
+	desc := "OK"
+	op.Responses.Set("200", &openapi3.ResponseRef{
+		Value: &openapi3.Response{
+			Description: &desc,
+		},
+	})
+
+	pathItem.SetOperation(method, op)
+	return nil
+}
+
+func LoadServers(filePath string) ([]string, string) {
+	spec, err := ParseSpec(filePath)
+	if err != nil {
+		return nil, ""
+	}
+	var servers []string
+	for _, s := range spec.Servers {
+		servers = append(servers, s.URL)
+	}
+	if len(servers) > 0 {
+		return servers, servers[0]
+	}
+	return servers, ""
 }
 
 func SaveSpec(path string, spec *openapi3.T) error {

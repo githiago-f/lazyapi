@@ -42,6 +42,7 @@ type RequestItem struct {
 	About       model.About
 	FileName    string
 	RequestTime float64
+	DraftPath   string
 
 	OpenAPIRef *model.OpenAPIRef
 }
