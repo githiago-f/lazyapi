@@ -33,7 +33,7 @@ type Tui struct {
 }
 
 func NewTui(defaultFile string) Tui {
-	actualList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
+	actualList := list.New([]list.Item{}, requests.TreeDelegate{}, 0, 0)
 	actualList.Title = "Requests"
 	actualList.SetShowHelp(false)
 	actualList.SetShowStatusBar(false)
@@ -108,7 +108,8 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.Items) == 0 {
 			return t, cmd
 		}
-		cmd = t.requestList.List.SetItems(msg.Items)
+		grouped := requests.GroupByResource(msg.Items)
+		cmd = t.requestList.List.SetItems(grouped)
 		return t, cmd
 
 	case requests.OpenRequestViewMsg:

@@ -21,6 +21,11 @@ paths:
                 "200":
                     description: OK
             summary: View a sale
+        patch:
+            responses:
+                "200":
+                    description: OK
+            summary: Patch sale
     /users:
         get:
             operationId: listUsers
