@@ -73,7 +73,7 @@ go build -o lazyapi ./cmd/lazyapi
 ```text
 .
 ├── cmd
-│   ├── lazyapi
+│   └── lazyapi
 ├── examples
 └── internal
     ├── app
@@ -187,9 +187,8 @@ Use future test commands to execute repeatable validation suites from OpenAPI de
 ## Roadmap
 
 * [x] OpenAPI 3.x support
-* [ ] Request execution
+* [x] Request execution
 * [ ] Authentication support
-
   * [ ] API Key
   * [ ] Bearer Token
   * [ ] OAuth2
