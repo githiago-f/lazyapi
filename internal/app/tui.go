@@ -13,6 +13,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/store"
 )
@@ -27,12 +28,13 @@ type Tui struct {
 	requestList requests.RequestList
 	editor      *editor.RequestPane
 	prompt      components.PromptModel
+	envStore    *env.Store
 
 	defaultFile  string
 	openAPIFiles []string
 }
 
-func NewTui(defaultFile string) Tui {
+func NewTui(defaultFile string, envFile string) Tui {
 	actualList := list.New([]list.Item{}, requests.TreeDelegate{}, 0, 0)
 	actualList.Title = "Requests"
 	actualList.SetShowHelp(false)
@@ -48,10 +50,12 @@ func NewTui(defaultFile string) Tui {
 		requestList: requests.RequestList{
 			List: actualList,
 		},
-		prompt: components.Prompt(""),
+		prompt:   components.Prompt(""),
+		envStore: env.NewStore(envFile),
 	}
 
 	tui.editor = editor.New(tui.currentRequest)
+	tui.editor.SetEnvStore(tui.envStore)
 
 	return tui
 }
@@ -127,6 +131,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t, nil
 		}
 		servers, serverURL := store.LoadServers(target)
+		envMap, _ := t.envStore.Load()
 		req := model.Request{
 			FileName:  target,
 			URI:       "",
@@ -139,6 +144,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Servers:   servers,
 			ServerURL: serverURL,
 			DraftPath: store.NewDraftPath(target),
+			Env:       envMap,
 		}
 		t.currentRequest = &req
 		rp := t.editor.SetValue(req)
@@ -166,11 +172,13 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if target == "" {
 			return t, nil
 		}
+		envMap, _ := t.envStore.Load()
 		dup := msg.Data
 		dup.URI = dup.URI + "-copy"
 		dup.FileName = target
 		dup.OpenAPIRef = nil
 		dup.DraftPath = store.NewDraftPath(target)
+		dup.Env = envMap
 		t.currentRequest = &dup
 		rp := t.editor.SetValue(dup)
 		t.editor = &rp
@@ -178,6 +186,8 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, store.SaveTempFile(dup)
 
 	case store.LoadedFile:
+		envMap, _ := t.envStore.Load()
+		msg.Data.Env = envMap
 		t.currentRequest = &msg.Data
 		rp := t.editor.SetValue(msg.Data)
 		t.editor = &rp

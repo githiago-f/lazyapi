@@ -13,6 +13,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/inmath"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/store"
@@ -64,6 +65,8 @@ type RequestPane struct {
 	draftPath string
 
 	openAPIRef *model.OpenAPIRef
+
+	envStore *env.Store
 
 	BlockTab bool
 
@@ -174,6 +177,10 @@ func (rp RequestPane) View() string {
 	)
 }
 
+func (rp *RequestPane) SetEnvStore(s *env.Store) {
+	rp.envStore = s
+}
+
 func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	rp.fileName = formData.FileName
 	rp.draftPath = formData.DraftPath
@@ -225,6 +232,8 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 	hd := rp.RequestTabs.Tabs[Header].Content.(*header)
 	pr := rp.RequestTabs.Tabs[Params].Content.(*params)
 
+	envMap, _ := rp.envStore.Load()
+
 	return model.Request{
 		FileName:   rp.fileName,
 		DraftPath:  rp.draftPath,
@@ -241,6 +250,7 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 		Headers: hd.Value(),
 		Params:  pr.ParamsValue(),
 		Query:   pr.QueryValue(),
+		Env:     envMap,
 	}
 }
 

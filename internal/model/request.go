@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/githiago-f/lazyapi/internal/env"
 )
 
 type OpenAPIRef struct {
@@ -32,6 +33,9 @@ type Request struct {
 
 	OpenAPIRef *OpenAPIRef `yaml:"-"`
 	DraftPath  string      `yaml:"-"`
+
+	Env  map[string]string `yaml:"-"`
+	Vars map[string]string `yaml:"-"`
 }
 
 type FailureMsg struct {
@@ -52,15 +56,25 @@ func Failure(msg string) tea.Msg {
 }
 
 func (r *Request) Send() (*http.Response, string, error) {
-	fullURL := r.ServerURL + r.URI
+	ctx := env.Context{
+		Env:  r.Env,
+		Vars: r.Vars,
+	}
 
+	fullURL := env.Resolve(r.ServerURL, ctx) + env.Resolve(r.URI, ctx)
+
+	resolvedParams := make(map[string]string, len(r.Params))
 	for name, value := range r.Params {
+		resolvedParams[name] = env.Resolve(value, ctx)
+	}
+	for name, value := range resolvedParams {
 		fullURL = strings.ReplaceAll(fullURL, "{"+name+"}", value)
 	}
 
+	resolvedBody := env.Resolve(r.Body.Raw, ctx)
 	var bodyReader io.Reader
-	if r.Body.Raw != "" {
-		bodyReader = strings.NewReader(r.Body.Raw)
+	if resolvedBody != "" {
+		bodyReader = strings.NewReader(resolvedBody)
 	}
 
 	req, err := http.NewRequest(r.Method.Label(), fullURL, bodyReader)
@@ -70,12 +84,12 @@ func (r *Request) Send() (*http.Response, string, error) {
 
 	q := req.URL.Query()
 	for name, value := range r.Query {
-		q.Set(name, value)
+		q.Set(name, env.Resolve(value, ctx))
 	}
 	req.URL.RawQuery = q.Encode()
 
 	for name, value := range r.Headers {
-		req.Header.Set(name, value)
+		req.Header.Set(name, env.Resolve(value, ctx))
 	}
 
 	response, err := http.DefaultClient.Do(req)
