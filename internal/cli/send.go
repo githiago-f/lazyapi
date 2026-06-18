@@ -6,12 +6,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/store"
 )
 
 func SendRequest(args []string) {
-	var file, path, method, serverURL string
+	var file, path, method, serverURL, envFile string
 	var saveExample bool
 
 	for i := 0; i < len(args); i++ {
@@ -20,6 +21,11 @@ func SendRequest(args []string) {
 			i++
 			if i < len(args) {
 				serverURL = args[i]
+			}
+		case "--env":
+			i++
+			if i < len(args) {
+				envFile = args[i]
 			}
 		case "--save-example":
 			saveExample = true
@@ -35,7 +41,7 @@ func SendRequest(args []string) {
 	}
 
 	if file == "" || path == "" || method == "" {
-		fmt.Fprintln(os.Stderr, "Usage: lazyapi send request <file> <path> <method> [--server url] [--save-example]")
+		fmt.Fprintln(os.Stderr, "Usage: lazyapi send request <file> <path> <method> [--server url] [--env file] [--save-example]")
 		os.Exit(1)
 	}
 
@@ -91,6 +97,14 @@ func SendRequest(args []string) {
 	}
 
 	fmt.Printf("Server: %s\n", req.ServerURL)
+
+	envStore := env.NewStore(envFile)
+	envMap, err := envStore.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading env file: %v\n", err)
+		os.Exit(1)
+	}
+	req.Env = envMap
 
 	response, body, err := req.Send()
 	if err != nil {

@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"os"
+
+	"github.com/githiago-f/lazyapi/internal/env"
 )
 
 func SmokeTests(args []string) {
@@ -38,6 +40,14 @@ func SmokeTests(args []string) {
 		os.Exit(1)
 	}
 
+	envStore := env.NewStore(envFile)
+
+	envMap, err := envStore.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading env file: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Println("Smoke tests are not implemented yet")
 	fmt.Printf("  File:     %s\n", file)
 	if server != "" {
@@ -45,5 +55,8 @@ func SmokeTests(args []string) {
 	}
 	if envFile != "" {
 		fmt.Printf("  Env file: %s\n", envFile)
+	}
+	if envMap != nil {
+		fmt.Println("  Env vars loaded with hash-based auto-reload")
 	}
 }

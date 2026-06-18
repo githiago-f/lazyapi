@@ -17,12 +17,22 @@ func main() {
 		}
 	}
 
-	defaultFile := ""
-	if len(os.Args) > 1 {
-		defaultFile = os.Args[1]
+	var defaultFile, envFile string
+	for i := 1; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--env":
+			i++
+			if i < len(os.Args) {
+				envFile = os.Args[i]
+			}
+		default:
+			if defaultFile == "" {
+				defaultFile = os.Args[i]
+			}
+		}
 	}
 
-	p := tea.NewProgram(app.NewTui(defaultFile))
+	p := tea.NewProgram(app.NewTui(defaultFile, envFile))
 	if _, err := p.Run(); err != nil {
 		panic(err)
 	}
