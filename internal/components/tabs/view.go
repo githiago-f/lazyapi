@@ -99,9 +99,9 @@ func (t Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t, cmd
 
 		case key.Matches(msg, config.DefaultKeyMap.Left) && !t.selected:
-			t.Cursor = inmath.Cicle(t.Cursor-1, 0, len(t.Tabs)-1)
+			t.Cursor = inmath.Circle(t.Cursor-1, 0, len(t.Tabs)-1)
 		case key.Matches(msg, config.DefaultKeyMap.Right) && !t.selected:
-			t.Cursor = inmath.Cicle(t.Cursor+1, 0, len(t.Tabs)-1)
+			t.Cursor = inmath.Circle(t.Cursor+1, 0, len(t.Tabs)-1)
 		}
 	}
 

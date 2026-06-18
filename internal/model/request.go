@@ -3,7 +3,6 @@ package model
 import (
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -40,7 +39,10 @@ type FailureMsg struct {
 }
 
 type SuccessMsg struct {
-	Response *http.Response
+	StatusCode int
+	Status     string
+	Header     http.Header
+	Body       string
 }
 
 func Failure(msg string) tea.Msg {
@@ -49,30 +51,59 @@ func Failure(msg string) tea.Msg {
 	}
 }
 
+func (r *Request) Send() (*http.Response, string, error) {
+	fullURL := r.ServerURL + r.URI
+
+	for name, value := range r.Params {
+		fullURL = strings.ReplaceAll(fullURL, "{"+name+"}", value)
+	}
+
+	var bodyReader io.Reader
+	if r.Body.Raw != "" {
+		bodyReader = strings.NewReader(r.Body.Raw)
+	}
+
+	req, err := http.NewRequest(r.Method.Label(), fullURL, bodyReader)
+	if err != nil {
+		return nil, "", err
+	}
+
+	q := req.URL.Query()
+	for name, value := range r.Query {
+		q.Set(name, value)
+	}
+	req.URL.RawQuery = q.Encode()
+
+	for name, value := range r.Headers {
+		req.Header.Set(name, value)
+	}
+
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer response.Body.Close()
+
+	bodyBytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return response, string(bodyBytes), nil
+}
+
 func (r *Request) RunRequest() tea.Cmd {
 	return func() tea.Msg {
-		fullURL := r.ServerURL + r.URI
-		url, err := url.Parse(fullURL)
-		if err != nil {
-			return Failure("Failed parsing url: " + err.Error())
-		}
-
-		body := io.NopCloser(strings.NewReader(r.Body.Raw))
-
-		err = body.Close()
-		if err != nil {
-			return Failure("Failed closing request body: " + err.Error())
-		}
-
-		response, err := http.DefaultClient.Do(&http.Request{
-			Method: r.Method.Label(),
-			URL:    url,
-			Body:   body,
-		})
+		response, body, err := r.Send()
 		if err != nil {
 			return Failure("Failed executing request: " + err.Error())
 		}
 
-		return SuccessMsg{Response: response}
+		return SuccessMsg{
+			StatusCode: response.StatusCode,
+			Status:     response.Status,
+			Header:     response.Header.Clone(),
+			Body:       body,
+		}
 	}
 }

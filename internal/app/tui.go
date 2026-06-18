@@ -195,6 +195,22 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		config.DefaultConfig.Active = config.RequestList
 		return t, cmd
 
+	case model.SuccessMsg:
+		if config.DefaultConfig.Active == config.RequestEditor {
+			rp := t.editor.SetResponse(msg.StatusCode, msg.Status, msg.Header, msg.Body)
+			rp = rp.FocusResponse()
+			t.editor = &rp
+			return t, nil
+		}
+
+	case model.FailureMsg:
+		if config.DefaultConfig.Active == config.RequestEditor {
+			rp := t.editor.SetResponseError(msg.Message)
+			rp = rp.FocusResponse()
+			t.editor = &rp
+			return t, nil
+		}
+
 	case tea.WindowSizeMsg:
 		_, titleBarHeight := lipgloss.Size(t.titleBar.View())
 		t.titleBar.Width = msg.Width
@@ -205,12 +221,31 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ptr := subModel.(editor.RequestPane)
 		t.editor = &ptr
 
+	case store.ExampleSavedMsg:
+		if config.DefaultConfig.Active == config.RequestEditor {
+			if msg.Success {
+				rp := t.editor.SetResponseFeedback("✓ Saved as example")
+				t.editor = &rp
+			} else {
+				rp := t.editor.SetResponseError(msg.Error)
+				t.editor = &rp
+			}
+			return t, nil
+		}
+
 	case tea.KeyMsg:
 		switch {
 		case config.DefaultConfig.Active == config.PageIndex(0) && key.Matches(msg, config.DefaultKeyMap.Quit):
 			return t, tea.Quit
 		case key.Matches(msg, config.DefaultKeyMap.Kill):
 			return t, tea.Quit
+		case config.DefaultConfig.Active == config.RequestEditor &&
+			key.Matches(msg, config.DefaultKeyMap.SaveExample):
+			statusCode, header, body := t.editor.LastResponse()
+			ref := t.editor.CurrentRef()
+			if ref != nil && statusCode > 0 {
+				return t, store.SaveResponseExampleCmd(*ref, statusCode, header, body)
+			}
 		}
 	}
 

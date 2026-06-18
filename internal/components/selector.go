@@ -45,9 +45,9 @@ func (s Selector) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Up):
-			s.Cursor = inmath.Cicle(s.Cursor-1, 0, len(s.Labels)-1)
+			s.Cursor = inmath.Circle(s.Cursor-1, 0, len(s.Labels)-1)
 		case key.Matches(msg, config.DefaultKeyMap.Down):
-			s.Cursor = inmath.Cicle(s.Cursor+1, 0, len(s.Labels)-1)
+			s.Cursor = inmath.Circle(s.Cursor+1, 0, len(s.Labels)-1)
 		}
 	}
 	return s, nil

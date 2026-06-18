@@ -11,7 +11,7 @@ import (
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "create", "remove", "add", "smoke":
+		case "create", "remove", "add", "send", "smoke":
 			cli.Run(os.Args[1:])
 			return
 		}

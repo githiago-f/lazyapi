@@ -56,6 +56,13 @@ func Run(args []string) {
 			os.Exit(1)
 		}
 
+	case "send":
+		if len(args) < 2 || args[1] != "request" {
+			fmt.Println("Usage: lazyapi send request <file> <path> <method> [--server url]")
+			os.Exit(1)
+		}
+		SendRequest(args[2:])
+
 	case "smoke":
 		if len(args) < 3 || args[1] != "tests" {
 			fmt.Println("Usage: lazyapi smoke tests <file> [--server url] [--env file]")
@@ -78,9 +85,11 @@ Usage:
   lazyapi remove request <file> <method> <path>  Remove a request from a spec file
   lazyapi add request <file> <path> <method>     Add a new request to a spec file
   lazyapi add server <file> <url>        Add a server URL to a spec file
+  lazyapi send request <file> <path> <method> [--server url]  Send an HTTP request
   lazyapi smoke tests <file> [flags]     Run smoke tests (not yet implemented)
 
 Flags:
-  --server url   Base server URL for smoke tests
+  --server url   Base server URL for smoke tests and send request
+  --save-example Persist the response as an example in the OpenAPI spec
   --env file     Environment file for smoke tests`)
 }

@@ -4,7 +4,7 @@ type MimeType string
 
 const (
 	ApplicationJSON MimeType = "application/json"
-	PlainText       MimeType = "plain/txt"
+	PlainText       MimeType = "text/plain"
 )
 
 type Body struct {

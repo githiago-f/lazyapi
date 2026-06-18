@@ -3,6 +3,9 @@ package editor
 
 import (
 	"fmt"
+	"net/http"
+	"sort"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -72,6 +75,10 @@ type RequestPane struct {
 	RequestTabs tabs.Model
 
 	ResponsePreview components.View
+
+	lastStatusCode int
+	lastHeader     http.Header
+	lastBody       string
 }
 
 func methodLabels() []string {
@@ -148,8 +155,6 @@ func (rp RequestPane) View() string {
 		rp.ResponsePreview.Style = rp.ResponsePreview.Style.BorderForeground(activeColor)
 	}
 
-	rp.ResponsePreview.Content = fmt.Sprintf("%s %p", rp.ResponsePreview.Content, &rp.RequestTabs.Tabs[Documentation].Content)
-
 	requestURL := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		rp.Method.View(),
@@ -207,6 +212,9 @@ func (rp *RequestPane) Reset() {
 	rp.URI.TextInput.SetValue("")
 	rp.openAPIRef = nil
 	rp.draftPath = ""
+	rp.lastStatusCode = 0
+	rp.lastHeader = nil
+	rp.lastBody = ""
 
 	rp.RequestTabs.Cursor = 0
 }
@@ -236,6 +244,59 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 	}
 }
 
+func (rp RequestPane) SetResponse(statusCode int, status string, header http.Header, body string) RequestPane {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Status: %d %s\n\n", statusCode, status))
+
+	if len(header) > 0 {
+		b.WriteString("--- Headers ---\n")
+		var names []string
+		for name := range header {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			b.WriteString(fmt.Sprintf("  %s: %s\n", name, header.Get(name)))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("--- Body ---\n")
+	b.WriteString(body)
+
+	rp.ResponsePreview.Content = b.String()
+	rp.lastStatusCode = statusCode
+	rp.lastHeader = header
+	rp.lastBody = body
+	return rp
+}
+
+func (rp RequestPane) SetResponseFeedback(feedback string) RequestPane {
+	rp.ResponsePreview.Content = feedback + "\n" + rp.ResponsePreview.Content
+	return rp
+}
+
+func (rp RequestPane) SetResponseError(err string) RequestPane {
+	rp.ResponsePreview.Content = fmt.Sprintf("Error: %s", err)
+	rp.lastStatusCode = 0
+	rp.lastHeader = nil
+	rp.lastBody = ""
+	return rp
+}
+
+func (rp RequestPane) FocusResponse() RequestPane {
+	rp.fieldsCursor = int(response)
+	return rp
+}
+
+func (rp RequestPane) LastResponse() (statusCode int, header http.Header, body string) {
+	return rp.lastStatusCode, rp.lastHeader, rp.lastBody
+}
+
+func (rp RequestPane) CurrentRef() *model.OpenAPIRef {
+	return rp.openAPIRef
+}
+
 func (rp RequestPane) shouldBlockTabCommands() bool {
 	return field(rp.fieldsCursor) == reqTabs && rp.BlockTab
 }
@@ -259,6 +320,10 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case send:
 		model, cmd = rp.Send.Update(msg)
 		rp.Send, _ = model.(components.Button)
+		if rp.Send.Clicked {
+			req := rp.GetAsRequestData()
+			cmd = tea.Batch(cmd, req.RunRequest())
+		}
 	case reqTabs:
 		// Two-stage Esc: check if content is active before the tabs update
 		wasActive := false
@@ -310,9 +375,9 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, config.DefaultKeyMap.Select) && field(rp.fieldsCursor) == reqTabs:
 			rp.BlockTab = true
 		case key.Matches(msg, config.DefaultKeyMap.Next) && !rp.BlockTab:
-			rp.fieldsCursor = inmath.Cicle(rp.fieldsCursor+1, 0, int(lastField))
+			rp.fieldsCursor = inmath.Circle(rp.fieldsCursor+1, 0, int(lastField))
 		case key.Matches(msg, config.DefaultKeyMap.Prev) && !rp.BlockTab:
-			rp.fieldsCursor = inmath.Cicle(rp.fieldsCursor-1, 0, int(lastField))
+			rp.fieldsCursor = inmath.Circle(rp.fieldsCursor-1, 0, int(lastField))
 		case key.Matches(msg, config.DefaultKeyMap.Save) && !rp.BlockTab:
 			return rp, closePane(true)
 		case key.Matches(msg, config.DefaultKeyMap.Back) && !rp.BlockTab:

@@ -1,9 +1,12 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -303,4 +306,63 @@ func SaveSpec(path string, spec *openapi3.T) error {
 		return fmt.Errorf("failed to marshal OpenAPI spec: %w", err)
 	}
 	return os.WriteFile(path, data, 0644)
+}
+
+func SaveResponseExample(spec *openapi3.T, ref model.OpenAPIRef, statusCode int, header http.Header, body string) error {
+	pathItem := spec.Paths.Find(ref.Path)
+	if pathItem == nil {
+		return fmt.Errorf("path %q not found", ref.Path)
+	}
+
+	op := pathItem.GetOperation(ref.Method)
+	if op == nil {
+		return fmt.Errorf("operation %s %s not found", ref.Method, ref.Path)
+	}
+
+	if op.Responses == nil {
+		op.Responses = openapi3.NewResponses()
+	}
+
+	statusStr := strconv.Itoa(statusCode)
+	responseRef := op.Responses.Value(statusStr)
+	if responseRef == nil {
+		desc := http.StatusText(statusCode)
+		responseRef = &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: &desc,
+			},
+		}
+		op.Responses.Set(statusStr, responseRef)
+	}
+
+	resp := responseRef.Value
+	if resp.Content == nil {
+		resp.Content = openapi3.Content{}
+	}
+
+	contentType := header.Get("Content-Type")
+	if idx := strings.IndexByte(contentType, ';'); idx > 0 {
+		contentType = strings.TrimSpace(contentType[:idx])
+	}
+	if contentType == "" {
+		contentType = "application/json"
+	}
+
+	mt, exists := resp.Content[contentType]
+	if !exists {
+		mt = &openapi3.MediaType{}
+		resp.Content[contentType] = mt
+	}
+
+	var exampleValue any
+	if strings.Contains(contentType, "json") {
+		if err := json.Unmarshal([]byte(body), &exampleValue); err != nil {
+			exampleValue = body
+		}
+	} else {
+		exampleValue = body
+	}
+
+	mt.Example = exampleValue
+	return nil
 }

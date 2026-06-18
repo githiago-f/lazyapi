@@ -8,6 +8,10 @@ paths:
         post:
             responses:
                 "200":
+                    content:
+                        text/plain:
+                            example: |
+                                OK
                     description: OK
             summary: Create a sale
     /sales/{id}:

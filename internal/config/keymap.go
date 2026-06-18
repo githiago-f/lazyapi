@@ -22,6 +22,8 @@ type KeyMap struct {
 	Back key.Binding
 	Save key.Binding
 
+	SaveExample key.Binding
+
 	Next key.Binding
 	Prev key.Binding
 
@@ -33,7 +35,7 @@ type KeyMap struct {
 
 func (k KeyMap) ShortHelp() []key.Binding {
 	if DefaultConfig.Active == RequestEditor {
-		return []key.Binding{k.Back, k.Save, k.Next, k.Prev, k.Help}
+		return []key.Binding{k.Back, k.Save, k.SaveExample, k.Next, k.Prev, k.Help}
 	}
 
 	return []key.Binding{k.Select, k.Up, k.Down, k.Filter, k.CreateNew, k.Help}
@@ -43,7 +45,8 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	if DefaultConfig.Active == RequestEditor {
 		return [][]key.Binding{
 			{k.Next, k.Prev},
-			{k.Back, k.Save, k.Kill},
+			{k.Back, k.Save, k.SaveExample},
+			{k.Kill},
 		}
 	}
 
@@ -105,6 +108,10 @@ var DefaultKeyMap = KeyMap{
 	Save: key.NewBinding(
 		key.WithKeys(tea.KeyCtrlS.String()),
 		key.WithHelp("ctrl+s", "save"),
+	),
+	SaveExample: key.NewBinding(
+		key.WithKeys(tea.KeyCtrlE.String()),
+		key.WithHelp("ctrl+e", "save example"),
 	),
 	New: key.NewBinding(
 		key.WithKeys("n", "+"),

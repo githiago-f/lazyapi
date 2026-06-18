@@ -83,9 +83,9 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Next) && d.active:
-			d.fieldCursor = inmath.Cicle(d.fieldCursor+1, 0, int(description))
+			d.fieldCursor = inmath.Circle(d.fieldCursor+1, 0, int(description))
 		case key.Matches(msg, config.DefaultKeyMap.Prev) && d.active:
-			d.fieldCursor = inmath.Cicle(d.fieldCursor-1, 0, int(description))
+			d.fieldCursor = inmath.Circle(d.fieldCursor-1, 0, int(description))
 		}
 
 	case tea.WindowSizeMsg:

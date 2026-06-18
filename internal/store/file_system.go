@@ -3,6 +3,7 @@ package store
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,6 +33,27 @@ type FileSaved struct {
 
 type DuplicateData struct {
 	Data model.Request
+}
+
+type ExampleSavedMsg struct {
+	Success bool
+	Error   string
+}
+
+func SaveResponseExampleCmd(ref model.OpenAPIRef, statusCode int, header http.Header, body string) tea.Cmd {
+	return func() tea.Msg {
+		spec, err := ParseSpec(ref.FilePath)
+		if err != nil {
+			return ExampleSavedMsg{Error: "Error parsing spec: " + err.Error()}
+		}
+		if err := SaveResponseExample(spec, ref, statusCode, header, body); err != nil {
+			return ExampleSavedMsg{Error: "Error saving example: " + err.Error()}
+		}
+		if err := SaveSpec(ref.FilePath, spec); err != nil {
+			return ExampleSavedMsg{Error: "Error writing spec: " + err.Error()}
+		}
+		return ExampleSavedMsg{Success: true}
+	}
 }
 
 var newDraftCounter int
