@@ -101,13 +101,15 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model tea.Model
 		cmd   tea.Cmd
 	)
-	switch docField(d.fieldCursor) {
-	case summary:
-		model, cmd = d.Summary.Update(msg)
-		d.Summary, _ = model.(components.Field)
-	case description:
-		model, cmd = d.Description.Update(msg)
-		d.Description, _ = model.(components.Text)
+	if d.active {
+		switch docField(d.fieldCursor) {
+		case summary:
+			model, cmd = d.Summary.Update(msg)
+			d.Summary, _ = model.(components.Field)
+		case description:
+			model, cmd = d.Description.Update(msg)
+			d.Description, _ = model.(components.Text)
+		}
 	}
 
 	return &d, cmd

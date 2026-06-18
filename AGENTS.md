@@ -65,12 +65,12 @@ go build -o lazyapi ./cmd/lazyapi   # Single binary (also goreleaser entry)
 - No external CLI framework — ad-hoc `os.Args` parsing
 - No database — everything is file-based
 - Release: goreleaser v2, builds for linux/windows/darwin (amd64 + arm64)
+- **Tab/Shift+Tab within tab content always wraps** — cycling through sub-fields goes from last back to first (and vice versa). There is no exit state via Tab; the user blurs the tab with Esc.
 
 ## Known Quirks
 
-- **`ApplyRequestToOperation`** only saves Summary and Description. Body, params, and query values are NOT persisted back to the spec.
-- **`RunRequest`** closes the body reader before the request is sent (`body.Close()` called before `http.DefaultClient.Do`).
-- **`PlainText`** mime type is `"plain/txt"` (non-standard — should be `text/plain`).
+- **`ApplyRequestToOperation`** persists Summary, Description, Body content type, and parameter definitions (names + `in` type). Runtime values (Body.Raw, param/query/header values) are session-only and stored in temp files, not in the OpenAPI spec.
+- **`RunRequest`** sends the request via `http.DefaultClient.Do`.
 - **`env/`** package has empty stubs (`Load()` and `Resolve()` do nothing).
 - **`smoke tests`** subcommand prints "not implemented yet".
 - **No tests exist** in the repo — `go test ./...` produces nothing.

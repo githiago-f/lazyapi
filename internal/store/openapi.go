@@ -129,18 +129,32 @@ func OperationToRequest(spec *openapi3.T, ref model.OpenAPIRef) model.Request {
 		},
 	}
 
-	for _, paramRef := range op.Parameters {
-		if paramRef.Value == nil || paramRef.Ref != "" {
-			continue
+	extractParams := func(params []*openapi3.ParameterRef) {
+		for _, paramRef := range params {
+			if paramRef.Value == nil || paramRef.Ref != "" {
+				continue
+			}
+			p := paramRef.Value
+			switch p.In {
+			case "path":
+				req.Params[p.Name] = ""
+			case "query":
+				req.Query[p.Name] = ""
+			case "header":
+				req.Headers[p.Name] = ""
+			}
 		}
-		p := paramRef.Value
-		switch p.In {
-		case "path":
-			req.Params[p.Name] = ""
-		case "query":
-			req.Query[p.Name] = ""
-		case "header":
-			req.Headers[p.Name] = ""
+	}
+
+	extractParams(op.Parameters)
+	extractParams(pathItem.Parameters)
+
+	for _, segment := range strings.Split(req.URI, "/") {
+		if strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}") {
+			name := segment[1 : len(segment)-1]
+			if _, ok := req.Params[name]; !ok {
+				req.Params[name] = ""
+			}
 		}
 	}
 
@@ -175,7 +189,78 @@ func ApplyRequestToOperation(spec *openapi3.T, ref model.OpenAPIRef, data model.
 	op.Summary = data.About.Summary
 	op.Description = data.About.Description
 
-	if data.Body.Type != "" && op.RequestBody != nil && op.RequestBody.Value != nil {
+	existing := make(map[string]*openapi3.Parameter)
+	for _, pref := range op.Parameters {
+		if pref.Value != nil {
+			key := pref.Value.In + ":" + pref.Value.Name
+			existing[key] = pref.Value
+		}
+	}
+
+	keep := make(map[string]bool)
+
+	for name := range data.Params {
+		key := "path:" + name
+		keep[key] = true
+		if _, ok := existing[key]; !ok {
+			op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
+				Value: &openapi3.Parameter{
+					Name:     name,
+					In:       "path",
+					Required: true,
+					Schema:   &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				},
+			})
+		}
+	}
+
+	for name := range data.Query {
+		key := "query:" + name
+		keep[key] = true
+		if _, ok := existing[key]; !ok {
+			op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
+				Value: &openapi3.Parameter{
+					Name:   name,
+					In:     "query",
+					Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				},
+			})
+		}
+	}
+
+	for name := range data.Headers {
+		key := "header:" + name
+		keep[key] = true
+		if _, ok := existing[key]; !ok {
+			op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
+				Value: &openapi3.Parameter{
+					Name: name,
+					In:   "header",
+					Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+				},
+			})
+		}
+	}
+
+	filtered := make([]*openapi3.ParameterRef, 0, len(op.Parameters))
+	for _, pref := range op.Parameters {
+		if pref.Value != nil {
+			key := pref.Value.In + ":" + pref.Value.Name
+			if keep[key] {
+				filtered = append(filtered, pref)
+			}
+		}
+	}
+	op.Parameters = filtered
+
+	if data.Body.Type != "" {
+		if op.RequestBody == nil || op.RequestBody.Value == nil {
+			op.RequestBody = &openapi3.RequestBodyRef{
+				Value: &openapi3.RequestBody{
+					Content: openapi3.Content{},
+				},
+			}
+		}
 		contentType := string(data.Body.Type)
 		if _, exists := op.RequestBody.Value.Content[contentType]; !exists {
 			op.RequestBody.Value.Content[contentType] = &openapi3.MediaType{}
