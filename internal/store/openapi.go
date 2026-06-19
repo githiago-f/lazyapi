@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -172,6 +173,12 @@ func OperationToRequest(spec *openapi3.T, ref model.OpenAPIRef) model.Request {
 		req.ServerURL = spec.Servers[0].URL
 	}
 
+	if opSec := ExtractOperationSecurity(op, spec); len(opSec) > 0 {
+		req.Auth = opSec
+	} else {
+		req.Auth = ExtractGlobalSecurity(spec)
+	}
+
 	return req
 }
 
@@ -267,7 +274,7 @@ func ApplyRequestToOperation(spec *openapi3.T, ref model.OpenAPIRef, data model.
 		}
 	}
 
-	return nil
+	return applyAuthSchemes(spec, ref, data.Auth)
 }
 
 func RemoveOperationFromSpec(spec *openapi3.T, ref model.OpenAPIRef) error {
@@ -367,7 +374,9 @@ func AddOperationToSpec(spec *openapi3.T, path, method string, data model.Reques
 	})
 
 	pathItem.SetOperation(method, op)
-	return nil
+
+	ref := model.OpenAPIRef{Path: path, Method: method}
+	return applyAuthSchemes(spec, ref, data.Auth)
 }
 
 func LoadServers(filePath string) ([]string, string) {
@@ -450,4 +459,232 @@ func SaveResponseExample(spec *openapi3.T, ref model.OpenAPIRef, statusCode int,
 
 	mt.Example = exampleValue
 	return nil
+}
+
+func applyAuthSchemes(spec *openapi3.T, ref model.OpenAPIRef, schemes []model.AuthScheme) error {
+	if spec.Components == nil {
+		spec.Components = &openapi3.Components{}
+	}
+	if spec.Components.SecuritySchemes == nil {
+		spec.Components.SecuritySchemes = make(openapi3.SecuritySchemes)
+	}
+
+	secReqs := openapi3.NewSecurityRequirements()
+
+	for i := range schemes {
+		s := &schemes[i]
+		name := s.SchemeName
+		if name == "" {
+			name = generateSchemeName(spec)
+		}
+
+		switch s.Type {
+		case model.AuthBasic:
+			spec.Components.SecuritySchemes[name] = &openapi3.SecuritySchemeRef{
+				Value: &openapi3.SecurityScheme{
+					Type:   "http",
+					Scheme: "basic",
+				},
+			}
+		case model.AuthBearer:
+			spec.Components.SecuritySchemes[name] = &openapi3.SecuritySchemeRef{
+				Value: &openapi3.SecurityScheme{
+					Type:   "http",
+					Scheme: "bearer",
+				},
+			}
+		case model.AuthAPIKey:
+			in := s.KeyIn
+			if in == "" {
+				in = "header"
+			}
+			spec.Components.SecuritySchemes[name] = &openapi3.SecuritySchemeRef{
+				Value: &openapi3.SecurityScheme{
+					Type: "apiKey",
+					In:   in,
+					Name: s.KeyName,
+				},
+			}
+		case model.AuthOAuth2:
+			flows := &openapi3.OAuthFlows{}
+			scopeMap := openapi3.StringMap[string]{}
+			for _, sc := range strings.Fields(s.Scopes) {
+				scopeMap[sc] = ""
+			}
+
+			switch s.GrantType {
+			case "clientCredentials":
+				flows.ClientCredentials = &openapi3.OAuthFlow{
+					TokenURL: s.TokenURL,
+					Scopes:   scopeMap,
+				}
+			case "implicit":
+				flows.Implicit = &openapi3.OAuthFlow{
+					AuthorizationURL: s.AuthURL,
+					Scopes:           scopeMap,
+				}
+			case "password":
+				flows.Password = &openapi3.OAuthFlow{
+					TokenURL: s.TokenURL,
+					Scopes:   scopeMap,
+				}
+			default: // authorizationCode
+				flows.AuthorizationCode = &openapi3.OAuthFlow{
+					AuthorizationURL: s.AuthURL,
+					TokenURL:         s.TokenURL,
+					Scopes:           scopeMap,
+				}
+			}
+
+			spec.Components.SecuritySchemes[name] = &openapi3.SecuritySchemeRef{
+				Value: &openapi3.SecurityScheme{
+					Type:  "oauth2",
+					Flows: flows,
+				},
+			}
+		}
+
+		req := openapi3.NewSecurityRequirement()
+		var reqScopes []string
+		if s.Type == model.AuthOAuth2 {
+			reqScopes = strings.Fields(s.Scopes)
+		}
+		req.Authenticate(name, reqScopes...)
+		secReqs.With(req)
+	}
+
+	if len(schemes) == 0 {
+		if ref.Path == "" {
+			spec.Security = openapi3.SecurityRequirements{}
+		} else {
+			pathItem := spec.Paths.Find(ref.Path)
+			if pathItem != nil {
+				op := pathItem.GetOperation(ref.Method)
+				if op != nil {
+					op.Security = &openapi3.SecurityRequirements{}
+				}
+			}
+		}
+	} else if ref.Path == "" {
+		spec.Security = *secReqs
+	} else {
+		pathItem := spec.Paths.Find(ref.Path)
+		if pathItem != nil {
+			op := pathItem.GetOperation(ref.Method)
+			if op != nil {
+				op.Security = secReqs
+			}
+		}
+	}
+
+	return nil
+}
+
+func generateSchemeName(spec *openapi3.T) string {
+	for i := 0; ; i++ {
+		name := fmt.Sprintf("lazyapi_auth_%d", i)
+		if spec.Components.SecuritySchemes[name] == nil {
+			return name
+		}
+	}
+}
+
+func ExtractGlobalSecurity(spec *openapi3.T) []model.AuthScheme {
+	var schemes []model.AuthScheme
+	for _, secReq := range spec.Security {
+		extracted := extractSecurityFromSpec(spec.Components.SecuritySchemes, secReq)
+		schemes = append(schemes, extracted...)
+	}
+	return schemes
+}
+
+func ExtractOperationSecurity(op *openapi3.Operation, spec *openapi3.T) []model.AuthScheme {
+	if op.Security == nil {
+		return nil
+	}
+	var schemes []model.AuthScheme
+	for _, secReq := range *op.Security {
+		extracted := extractSecurityFromSpec(spec.Components.SecuritySchemes, secReq)
+		schemes = append(schemes, extracted...)
+	}
+	return schemes
+}
+
+func extractSecurityFromSpec(schemeMap openapi3.SecuritySchemes, secReq openapi3.SecurityRequirement) []model.AuthScheme {
+	var schemes []model.AuthScheme
+	for schemeName, reqScopes := range secReq {
+		schemeRef, ok := schemeMap[schemeName]
+		if !ok || schemeRef.Value == nil {
+			continue
+		}
+		ss := schemeRef.Value
+
+		as := model.AuthScheme{
+			SchemeName: schemeName,
+		}
+
+		switch ss.Type {
+		case "http":
+			switch ss.Scheme {
+			case "basic":
+				as.Type = model.AuthBasic
+			case "bearer":
+				as.Type = model.AuthBearer
+			}
+		case "apiKey":
+			as.Type = model.AuthAPIKey
+			as.KeyName = ss.Name
+			as.KeyIn = ss.In
+		case "oauth2":
+			as.Type = model.AuthOAuth2
+			if ss.Flows != nil {
+				switch {
+				case ss.Flows.AuthorizationCode != nil:
+					as.GrantType = "authorizationCode"
+					as.AuthURL = ss.Flows.AuthorizationCode.AuthorizationURL
+					as.TokenURL = ss.Flows.AuthorizationCode.TokenURL
+					as.Scopes = scopeKeysJoin(ss.Flows.AuthorizationCode.Scopes, " ")
+				case ss.Flows.ClientCredentials != nil:
+					as.GrantType = "clientCredentials"
+					as.TokenURL = ss.Flows.ClientCredentials.TokenURL
+					as.Scopes = scopeKeysJoin(ss.Flows.ClientCredentials.Scopes, " ")
+				case ss.Flows.Implicit != nil:
+					as.GrantType = "implicit"
+					as.AuthURL = ss.Flows.Implicit.AuthorizationURL
+					as.Scopes = scopeKeysJoin(ss.Flows.Implicit.Scopes, " ")
+				case ss.Flows.Password != nil:
+					as.GrantType = "password"
+					as.TokenURL = ss.Flows.Password.TokenURL
+					as.Scopes = scopeKeysJoin(ss.Flows.Password.Scopes, " ")
+				}
+			}
+		}
+
+		if len(reqScopes) > 0 {
+			as.Scopes = strings.Join(reqScopes, " ")
+		}
+
+		schemes = append(schemes, as)
+	}
+	return schemes
+}
+
+func scopeKeysJoin(m openapi3.StringMap[string], sep string) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, sep)
+}
+
+func HasGlobalSecurity(spec *openapi3.T) bool {
+	return len(spec.Security) > 0
+}
+
+func HasOperationSecurity(op *openapi3.Operation) bool {
+	return op.Security != nil
 }

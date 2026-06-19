@@ -32,7 +32,7 @@ func main() {
 		}
 	}
 
-	p := tea.NewProgram(app.NewTui(defaultFile, envFile))
+	p := tea.NewProgram(app.NewTui(defaultFile, envFile), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		panic(err)
 	}

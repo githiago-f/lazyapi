@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/githiago-f/lazyapi/internal/components"
+	"github.com/githiago-f/lazyapi/internal/components/scrollable"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
@@ -77,7 +79,7 @@ type RequestPane struct {
 
 	RequestTabs tabs.Model
 
-	ResponsePreview components.View
+	ResponsePreview viewport.Model
 
 	lastStatusCode int
 	lastHeader     http.Header
@@ -107,7 +109,7 @@ func New(request *model.Request) *RequestPane {
 	tests := TestsTab()
 
 	return &RequestPane{
-		URI:    components.InitField("", ""),
+		URI: components.InitField("", ""),
 		Method: components.Selector{
 			Cursor: 0,
 			Labels: methodLabels(),
@@ -126,14 +128,14 @@ func New(request *model.Request) *RequestPane {
 
 		RequestTabs: tabs.New(
 			tabs.NewTab("Documentation", docs),
-			tabs.NewTab("Params", params),
-			tabs.NewTab("Authorize", authorize),
-			tabs.NewTab("Header", header),
+			tabs.NewTab("Params", scrollable.New(params)),
+			tabs.NewTab("Authorize", scrollable.New(authorize)),
+			tabs.NewTab("Header", scrollable.New(header)),
 			tabs.NewTab("Body", body),
-			tabs.NewTab("Tests", tests),
+			tabs.NewTab("Tests", scrollable.New(tests)),
 		),
 
-		ResponsePreview: components.View{},
+		ResponsePreview: viewport.New(0, 0),
 	}
 }
 
@@ -156,6 +158,8 @@ func (rp RequestPane) View() string {
 		rp.RequestTabs.Style = rp.RequestTabs.Style.BorderForeground(activeColor)
 	case response:
 		rp.ResponsePreview.Style = rp.ResponsePreview.Style.BorderForeground(activeColor)
+		rp.ResponsePreview.Width = max(0, rp.ResponsePreview.Width)
+		rp.ResponsePreview.Height = max(0, rp.ResponsePreview.Height)
 	}
 
 	requestURL := lipgloss.JoinHorizontal(
@@ -203,11 +207,14 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	bd := rp.RequestTabs.Tabs[Body].Content.(*body)
 	bd.SetValue(formData.Body.Raw)
 
-	hd := rp.RequestTabs.Tabs[Header].Content.(*header)
+	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
 	hd.SetValue(formData.Headers)
 
-	pr := rp.RequestTabs.Tabs[Params].Content.(*params)
+	pr := rp.RequestTabs.Tabs[Params].Content.(scrollable.Model).Content.(*params)
 	pr.SetValue(formData.Query, formData.Params)
+
+	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
+	au.SetValue(formData.Auth)
 
 	return rp
 }
@@ -229,8 +236,9 @@ func (rp *RequestPane) Reset() {
 func (rp RequestPane) GetAsRequestData() model.Request {
 	docs := rp.RequestTabs.Tabs[Documentation].Content.(*documentation)
 	bd := rp.RequestTabs.Tabs[Body].Content.(*body)
-	hd := rp.RequestTabs.Tabs[Header].Content.(*header)
-	pr := rp.RequestTabs.Tabs[Params].Content.(*params)
+	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
+	pr := rp.RequestTabs.Tabs[Params].Content.(scrollable.Model).Content.(*params)
+	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
 
 	envMap, _ := rp.envStore.Load()
 
@@ -247,6 +255,7 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 			Type: model.ApplicationJSON,
 			Raw:  bd.Value(),
 		},
+		Auth:    au.Value(),
 		Headers: hd.Value(),
 		Params:  pr.ParamsValue(),
 		Query:   pr.QueryValue(),
@@ -256,7 +265,7 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 
 func (rp RequestPane) SetResponse(statusCode int, status string, header http.Header, body string) RequestPane {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Status: %d %s\n\n", statusCode, status))
+	_, _ = fmt.Fprintf(&b, "Status: %d %s\n\n", statusCode, status)
 
 	if len(header) > 0 {
 		b.WriteString("--- Headers ---\n")
@@ -266,7 +275,7 @@ func (rp RequestPane) SetResponse(statusCode int, status string, header http.Hea
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			b.WriteString(fmt.Sprintf("  %s: %s\n", name, header.Get(name)))
+			_, _ = fmt.Fprintf(&b, "  %s: %s\n", name, header.Get(name))
 		}
 		b.WriteString("\n")
 	}
@@ -274,7 +283,7 @@ func (rp RequestPane) SetResponse(statusCode int, status string, header http.Hea
 	b.WriteString("--- Body ---\n")
 	b.WriteString(body)
 
-	rp.ResponsePreview.Content = b.String()
+	rp.ResponsePreview.SetContent(b.String())
 	rp.lastStatusCode = statusCode
 	rp.lastHeader = header
 	rp.lastBody = body
@@ -282,12 +291,12 @@ func (rp RequestPane) SetResponse(statusCode int, status string, header http.Hea
 }
 
 func (rp RequestPane) SetResponseFeedback(feedback string) RequestPane {
-	rp.ResponsePreview.Content = feedback + "\n" + rp.ResponsePreview.Content
+	rp.ResponsePreview.SetContent(feedback + "\n" + rp.ResponsePreview.View())
 	return rp
 }
 
 func (rp RequestPane) SetResponseError(err string) RequestPane {
-	rp.ResponsePreview.Content = fmt.Sprintf("Error: %s", err)
+	rp.ResponsePreview.SetContent(fmt.Sprintf("Error: %s", err))
 	rp.lastStatusCode = 0
 	rp.lastHeader = nil
 	rp.lastBody = ""
@@ -356,6 +365,9 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				consumed = true
 			}
 		}
+
+	case response:
+		rp.ResponsePreview, cmd = rp.ResponsePreview.Update(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -368,9 +380,14 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rp.URI.Style = rp.URI.Style.Width(msg.Width - (methodWidth + serverWidth + sendWidth + 3))
 		tabsHeight := msg.Height - (methodHeight + 5)
 		rp.RequestTabs.Style = rp.RequestTabs.Style.Height(tabsHeight)
-		rp.ResponsePreview.Style = rp.ResponsePreview.Style.
-			Height(tabsHeight).
-			Width(msg.Width - (rp.RequestTabs.Width + 5))
+
+		respWidth := msg.Width - (rp.RequestTabs.Width + 5)
+		rp.ResponsePreview.Width = max(0, respWidth-2)
+		rp.ResponsePreview.Height = max(0, tabsHeight-2)
+		rp.ResponsePreview.Style = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			Width(respWidth).
+			Height(tabsHeight)
 
 		childrenMsg := tea.WindowSizeMsg{Width: rp.RequestTabs.Width - 2, Height: tabsHeight}
 
@@ -389,7 +406,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, config.DefaultKeyMap.Prev) && !rp.BlockTab:
 			rp.fieldsCursor = inmath.Circle(rp.fieldsCursor-1, 0, int(lastField))
 		case key.Matches(msg, config.DefaultKeyMap.Save) && !rp.BlockTab:
-			return rp, closePane(true)
+			cmd = tea.Batch(cmd, store.SaveFile(rp.GetAsRequestData()))
 		case key.Matches(msg, config.DefaultKeyMap.Back) && !rp.BlockTab:
 			return rp, closePane(false)
 		}

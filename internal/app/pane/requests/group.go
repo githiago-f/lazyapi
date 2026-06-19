@@ -41,7 +41,7 @@ func (d TreeDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 			Bold(true).
 			Foreground(lipgloss.Color(config.Peach)).
 			Padding(0, 1)
-		fmt.Fprintf(w, "%s", headerStyle.Render(item.Resource))
+		_, _ = fmt.Fprintf(w, "%s", headerStyle.Render(item.Resource))
 
 	case RequestItem:
 		isSelected := index == m.Index()
@@ -74,17 +74,17 @@ func (d TreeDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 			selStyle := lipgloss.NewStyle().
 				Background(lipgloss.Color(config.Surface0)).
 				Padding(0, 1)
-			fmt.Fprintf(w, "%s", selStyle.Render(indent.Render(title)))
+			_, _ = fmt.Fprintf(w, "%s", selStyle.Render(indent.Render(title)))
 		} else {
-			fmt.Fprintf(w, "%s", indent.Render(title))
+			_, _ = fmt.Fprintf(w, "%s", indent.Render(title))
 		}
 
 		if item.About.Summary != "" {
-			fmt.Fprintf(w, "\n")
+			_, _ = fmt.Fprintf(w, "\n")
 			descStyle := lipgloss.NewStyle().
 				Foreground(lipgloss.Color(config.Overlay0)).
 				PaddingLeft(2)
-			fmt.Fprintf(w, "%s", descStyle.Render(item.About.Summary))
+			_, _ = fmt.Fprintf(w, "%s", descStyle.Render(item.About.Summary))
 		}
 	}
 }

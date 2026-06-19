@@ -1,0 +1,41 @@
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      summary: List items
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create item
+      responses:
+        "201":
+          description: Created
+  /items/{id}:
+    get:
+      summary: Get item
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    delete:
+      summary: Delete item
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+servers:
+  - url: https://api.example.com/v1

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/base64"
 	"io"
 	"net/http"
 	"strings"
@@ -27,6 +28,8 @@ type Request struct {
 	Headers map[string]string `yaml:"headers"`
 	Params  map[string]string `yaml:"pathParams"`
 	Query   map[string]string `yaml:"query"`
+
+	Auth []AuthScheme `yaml:"auth,omitempty"`
 
 	ServerURL string   `yaml:"-"`
 	Servers   []string `yaml:"-"`
@@ -92,11 +95,34 @@ func (r *Request) Send() (*http.Response, string, error) {
 		req.Header.Set(name, env.Resolve(value, ctx))
 	}
 
+	for _, scheme := range r.Auth {
+		switch scheme.Type {
+		case AuthBasic:
+			auth := scheme.Username + ":" + scheme.Password
+			encoded := base64.StdEncoding.EncodeToString([]byte(auth))
+			req.Header.Set("Authorization", "Basic "+encoded)
+		case AuthBearer:
+			req.Header.Set("Authorization", "Bearer "+env.Resolve(scheme.Token, ctx))
+		case AuthAPIKey:
+			keyValue := env.Resolve(scheme.KeyValue, ctx)
+			switch scheme.KeyIn {
+			case "header":
+				req.Header.Set(scheme.KeyName, keyValue)
+			case "query":
+				q.Set(scheme.KeyName, keyValue)
+			}
+		case AuthOAuth2:
+			if scheme.AccessToken != "" {
+				req.Header.Set("Authorization", "Bearer "+env.Resolve(scheme.AccessToken, ctx))
+			}
+		}
+	}
+
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, "", err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	bodyBytes, err := io.ReadAll(response.Body)
 	if err != nil {
