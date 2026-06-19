@@ -188,10 +188,10 @@ Use future test commands to execute repeatable validation suites from OpenAPI de
 
 * [x] OpenAPI 3.x support
 * [x] Request execution
-* [ ] Authentication support
-  * [ ] API Key
-  * [ ] Bearer Token
-  * [ ] OAuth2
+* [x] Authentication support
+  * [x] API Key
+  * [x] Bearer Token
+  * [x] OAuth2
 * [ ] Automated testing command
 * [ ] Response assertions
 * [ ] Test reports
