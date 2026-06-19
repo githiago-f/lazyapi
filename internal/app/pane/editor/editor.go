@@ -109,7 +109,7 @@ func New(request *model.Request) *RequestPane {
 	tests := TestsTab()
 
 	return &RequestPane{
-		URI:    components.InitField("", ""),
+		URI: components.InitField("", ""),
 		Method: components.Selector{
 			Cursor: 0,
 			Labels: methodLabels(),
@@ -239,8 +239,6 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
 	pr := rp.RequestTabs.Tabs[Params].Content.(scrollable.Model).Content.(*params)
 	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
-
-	envMap, _ := rp.envStore.Load()
 
 	envMap, _ := rp.envStore.Load()
 
