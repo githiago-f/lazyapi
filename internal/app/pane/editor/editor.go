@@ -242,6 +242,8 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 
 	envMap, _ := rp.envStore.Load()
 
+	envMap, _ := rp.envStore.Load()
+
 	return model.Request{
 		FileName:   rp.fileName,
 		DraftPath:  rp.draftPath,
