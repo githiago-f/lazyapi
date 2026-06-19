@@ -55,6 +55,8 @@ go build -o lazyapi ./cmd/lazyapi   # Single binary (also goreleaser entry)
 ./lazyapi                            # TUI (default)
 ./lazyapi examples/openapi.yml       # TUI with a spec preloaded
 ./lazyapi create file my-api.yml     # CLI
+go test ./...                        # All tests
+golangci-lint run                    # Lint (config: .golangci.yml)
 ```
 
 ## Conventions
@@ -67,13 +69,20 @@ go build -o lazyapi ./cmd/lazyapi   # Single binary (also goreleaser entry)
 - Release: goreleaser v2, builds for linux/windows/darwin (amd64 + arm64)
 - **Tab/Shift+Tab within tab content always wraps** — cycling through sub-fields goes from last back to first (and vice versa). There is no exit state via Tab; the user blurs the tab with Esc.
 
+## Testing
+
+- **Test files** live next to the code they test (`internal/store/openapi_test.go`).
+- **Fixtures** live in `internal/store/testdata/` as static `.yml` files. Use `fixturePath(name)` to reference them. Prefer programmatic spec construction for small isolated tests; use fixtures for realistic multi-operation specs and pre-configured auth scenarios.
+- **Avoid `/tmp`** — use `t.TempDir()` for ephemeral file roundtrip tests.
+- **Test patterns** — focus on roundtrip (marshal → write → read → unmarshal → verify), not on UI interactions.
+- Run: `go test ./...`
+
 ## Known Quirks
 
 - **`ApplyRequestToOperation`** persists Summary, Description, Body content type, and parameter definitions (names + `in` type). Runtime values (Body.Raw, param/query/header values) are session-only and stored in temp files, not in the OpenAPI spec.
 - **`RunRequest`** sends the request via `http.DefaultClient.Do`.
 - **`env/`** package has empty stubs (`Load()` and `Resolve()` do nothing).
 - **`smoke tests`** subcommand prints "not implemented yet".
-- **No tests exist** in the repo — `go test ./...` produces nothing.
 - **No CI workflows** configured yet.
 - **`inmath.Cicle`** has a typo (should be `Circle`).
 - **Editor `BlockTab`** uses a two-stage Esc pattern: first Esc blurs the tab's inner content, second Esc exits the tab field.

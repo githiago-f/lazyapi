@@ -6,14 +6,6 @@ import (
 	"github.com/githiago-f/lazyapi/internal/components"
 )
 
-type activeField int
-
-const (
-	none activeField = iota
-	name
-	value
-)
-
 type paramField struct {
 	enabled bool
 	name    components.Field

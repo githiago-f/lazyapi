@@ -111,7 +111,7 @@ func SendRequest(args []string) {
 		fmt.Fprintf(os.Stderr, "Request failed: %v\n", err)
 		os.Exit(1)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	fmt.Printf("Status: %s\n\n", response.Status)
 
