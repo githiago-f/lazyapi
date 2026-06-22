@@ -208,13 +208,13 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	bd.SetValue(formData.Body.Raw)
 
 	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
-	hd.SetValue(formData.Headers)
+	hd.SetValueWithEnabled(formData.Headers, formData.HeadersEnabled)
 
 	pr := rp.RequestTabs.Tabs[Params].Content.(scrollable.Model).Content.(*params)
-	pr.SetValue(formData.Query, formData.Params)
+	pr.SetValueWithEnabled(formData.Query, formData.Params, formData.QueryEnabled, formData.ParamsEnabled)
 
 	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
-	au.SetValue(formData.Auth)
+	au.SetValueWithEnabled(formData.Auth, formData.AuthEnabled)
 
 	return rp
 }
@@ -233,6 +233,19 @@ func (rp *RequestPane) Reset() {
 	rp.RequestTabs.Cursor = 0
 }
 
+func extractURIParams(uri string) map[string]string {
+	params := make(map[string]string)
+	for _, segment := range strings.Split(uri, "/") {
+		if strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}") {
+			name := segment[1 : len(segment)-1]
+			if name != "" {
+				params[name] = ""
+			}
+		}
+	}
+	return params
+}
+
 func (rp RequestPane) GetAsRequestData() model.Request {
 	docs := rp.RequestTabs.Tabs[Documentation].Content.(*documentation)
 	bd := rp.RequestTabs.Tabs[Body].Content.(*body)
@@ -241,6 +254,17 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
 
 	envMap, _ := rp.envStore.Load()
+
+	params := pr.ParamsValue()
+	uriParams := extractURIParams(rp.URI.TextInput.Value())
+	for name := range uriParams {
+		if _, exists := params[name]; !exists {
+			params[name] = ""
+		}
+	}
+
+	headers := hd.Value()
+	query := pr.QueryValue()
 
 	return model.Request{
 		FileName:   rp.fileName,
@@ -256,10 +280,15 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 			Raw:  bd.Value(),
 		},
 		Auth:    au.Value(),
-		Headers: hd.Value(),
-		Params:  pr.ParamsValue(),
-		Query:   pr.QueryValue(),
+		Headers: headers,
+		Params:  params,
+		Query:   query,
 		Env:     envMap,
+
+		ParamsEnabled:  pr.EnabledParams(),
+		QueryEnabled:   pr.EnabledQuery(),
+		HeadersEnabled: hd.EnabledHeaders(),
+		AuthEnabled:    au.EnabledAuth(),
 	}
 }
 
@@ -316,6 +345,10 @@ func (rp RequestPane) CurrentRef() *model.OpenAPIRef {
 	return rp.openAPIRef
 }
 
+func (rp RequestPane) BlockTabContext() (tabIndex int, isBlocked bool) {
+	return rp.RequestTabs.Cursor, rp.BlockTab
+}
+
 func (rp RequestPane) shouldBlockTabCommands() bool {
 	return field(rp.fieldsCursor) == reqTabs && rp.BlockTab
 }
@@ -331,8 +364,12 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = rp.Method.Update(msg)
 		rp.Method, _ = model.(components.Selector)
 	case serverField:
+		oldValue := rp.Server.Value()
 		model, cmd = rp.Server.Update(msg)
 		rp.Server, _ = model.(components.Selector)
+		if newValue := rp.Server.Value(); rp.fileName != "" && oldValue != newValue && newValue != "" {
+			cmd = tea.Batch(cmd, store.SaveServerURLCmd(rp.fileName, newValue))
+		}
 	case uri:
 		model, cmd = rp.URI.Update(msg)
 		rp.URI, _ = model.(components.Field)
@@ -358,8 +395,10 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = rp.RequestTabs.Update(msg)
 		rp.RequestTabs, _ = model.(tabs.Model)
 
-		// Only exit tab if content was NOT active (Esc already blurred it)
-		if rp.BlockTab && !wasActive {
+		// Exit tab when Esc blurs the content (single-stage Esc)
+		// Avoids desync where BlockTab stays true but selected is already false,
+		// causing h/l to move the tab cursor instead of reaching tab content.
+		if rp.BlockTab && wasActive {
 			if keyMsg, ok := msg.(tea.KeyMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
 				rp.BlockTab = false
 				consumed = true
@@ -381,9 +420,9 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tabsHeight := msg.Height - (methodHeight + 5)
 		rp.RequestTabs.Style = rp.RequestTabs.Style.Height(tabsHeight)
 
-		respWidth := msg.Width - (rp.RequestTabs.Width + 5)
-		rp.ResponsePreview.Width = max(0, respWidth-2)
-		rp.ResponsePreview.Height = max(0, tabsHeight-2)
+		respWidth := msg.Width - (rp.RequestTabs.Width + 2)
+		rp.ResponsePreview.Width = max(0, respWidth)
+		rp.ResponsePreview.Height = max(0, tabsHeight)
 		rp.ResponsePreview.Style = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
 			Width(respWidth).
@@ -408,7 +447,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, config.DefaultKeyMap.Save) && !rp.BlockTab:
 			cmd = tea.Batch(cmd, store.SaveFile(rp.GetAsRequestData()))
 		case key.Matches(msg, config.DefaultKeyMap.Back) && !rp.BlockTab:
-			return rp, closePane(false)
+			return rp, closePane(true)
 		}
 	}
 

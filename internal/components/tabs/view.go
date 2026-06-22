@@ -12,6 +12,13 @@ type SetActiveTabMsg struct {
 	Active bool
 }
 
+// Chorder is implemented by tab content types that support two-key chords
+// (e.g. n+h for add header). When a chord is pending, Left/Right navigation
+// must not intercept the second key.
+type Chorder interface {
+	HasChord() bool
+}
+
 type Model struct {
 	selected bool
 	Tabs     []Tab
@@ -98,13 +105,20 @@ func (t Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return t, cmd
 
-		case key.Matches(msg, config.DefaultKeyMap.Left) && !t.selected:
+		case key.Matches(msg, config.DefaultKeyMap.Left) && !t.selected && !chordPending(t.Tabs[t.Cursor].Content):
 			t.Cursor = inmath.Circle(t.Cursor-1, 0, len(t.Tabs)-1)
-		case key.Matches(msg, config.DefaultKeyMap.Right) && !t.selected:
+		case key.Matches(msg, config.DefaultKeyMap.Right) && !t.selected && !chordPending(t.Tabs[t.Cursor].Content):
 			t.Cursor = inmath.Circle(t.Cursor+1, 0, len(t.Tabs)-1)
 		}
 	}
 
 	t.Tabs[t.Cursor].Content, cmd = t.Tabs[t.Cursor].Content.Update(msg)
 	return t, cmd
+}
+
+func chordPending(content tea.Model) bool {
+	if c, ok := content.(Chorder); ok {
+		return c.HasChord()
+	}
+	return false
 }

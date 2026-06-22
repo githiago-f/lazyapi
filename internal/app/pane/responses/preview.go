@@ -4,14 +4,13 @@ package responses
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/model"
 )
 
 type ResponseView struct {
 	Type model.MimeType
 	Raw  string
-	Tabs tabs.Model
+	// Tabs tabs.Model
 
 	Style lipgloss.Style
 }
@@ -21,7 +20,7 @@ var defaultStyle = lipgloss.NewStyle().
 
 func New() ResponseView {
 	return ResponseView{
-		Tabs: tabs.New(),
+		// Tabs: tabs.New(),
 	}
 }
 

@@ -125,6 +125,63 @@ func LoadRequestsList(paths []string) tea.Cmd {
 	}
 }
 
+func mergeRuntimeEntry(req *model.Request, entry *RuntimeEntry) {
+	if entry == nil {
+		return
+	}
+	if entry.URI != "" {
+		req.URI = entry.URI
+	}
+	if entry.Body != "" {
+		req.Body.Raw = entry.Body
+	}
+	for name, val := range entry.Params {
+		req.Params[name] = val
+	}
+	for name, val := range entry.Query {
+		req.Query[name] = val
+	}
+	for name, val := range entry.Headers {
+		req.Headers[name] = val
+	}
+	if len(entry.Auth) > 0 {
+		for i := range entry.Auth {
+			if i < len(req.Auth) {
+				if entry.Auth[i].Username != "" {
+					req.Auth[i].Username = entry.Auth[i].Username
+				}
+				if entry.Auth[i].Password != "" {
+					req.Auth[i].Password = entry.Auth[i].Password
+				}
+				if entry.Auth[i].Token != "" {
+					req.Auth[i].Token = entry.Auth[i].Token
+				}
+				if entry.Auth[i].KeyValue != "" {
+					req.Auth[i].KeyValue = entry.Auth[i].KeyValue
+				}
+				if entry.Auth[i].ClientSecret != "" {
+					req.Auth[i].ClientSecret = entry.Auth[i].ClientSecret
+				}
+				if entry.Auth[i].AccessToken != "" {
+					req.Auth[i].AccessToken = entry.Auth[i].AccessToken
+				}
+			}
+		}
+	}
+	if entry.ParamsEnabled != nil {
+		req.ParamsEnabled = entry.ParamsEnabled
+	}
+	if entry.QueryEnabled != nil {
+		req.QueryEnabled = entry.QueryEnabled
+	}
+	if entry.HeadersEnabled != nil {
+		req.HeadersEnabled = entry.HeadersEnabled
+	}
+	if entry.AuthEnabled != nil {
+		req.AuthEnabled = entry.AuthEnabled
+	}
+}
+
 func OpenRequestFile(ref model.OpenAPIRef) tea.Cmd {
 	return func() tea.Msg {
 		tempPath := tempPathForRef(ref)
@@ -155,6 +212,11 @@ func OpenRequestFile(ref model.OpenAPIRef) tea.Cmd {
 		}
 
 		request := OperationToRequest(spec, ref)
+
+		if entry, _ := LoadRuntimeMap(ref.FilePath, ref.Method, ref.Path); entry != nil {
+			mergeRuntimeEntry(&request, entry)
+		}
+
 		return LoadedFile{Data: request}
 	}
 }
@@ -316,74 +378,69 @@ func LoadForDuplicate(item requests.RequestItem) tea.Cmd {
 	}
 }
 
+func saveFileImpl(data model.Request) (string, error) {
+	if data.DraftPath != "" {
+		spec, err := ParseSpec(data.FileName)
+		if err != nil {
+			return "", fmt.Errorf("error when trying to save file: %w", err)
+		}
+		if err = AddOperationToSpec(spec, data.URI, data.Method.Label(), data); err != nil {
+			return "", fmt.Errorf("error when adding operation to spec: %w", err)
+		}
+		if err = SaveSpec(data.FileName, spec); err != nil {
+			return "", fmt.Errorf("error when writing file: %w", err)
+		}
+		if err = os.Remove(data.DraftPath); err != nil {
+			return "", fmt.Errorf("error removing tmp file: %w", err)
+		}
+		return data.FileName, nil
+	}
+
+	if data.OpenAPIRef != nil {
+		ref := *data.OpenAPIRef
+		spec, err := ParseSpec(ref.FilePath)
+		if err != nil {
+			return "", fmt.Errorf("error when trying to save file: %w", err)
+		}
+		if err = ApplyRequestToOperation(spec, ref, data); err != nil {
+			return "", fmt.Errorf("error when applying changes to spec: %w", err)
+		}
+		if err = SaveSpec(ref.FilePath, spec); err != nil {
+			return "", fmt.Errorf("error when writing file: %w", err)
+		}
+		if err = os.Remove(tempPathForRef(ref)); err != nil {
+			return "", fmt.Errorf("error removing tmp file: %w", err)
+		}
+		return ref.FilePath, nil
+	}
+
+	file, err := os.Create(data.FileName)
+	if err != nil {
+		return "", fmt.Errorf("error when trying to save file: %w", err)
+	}
+
+	encoder := yaml.NewEncoder(file)
+	err = encoder.Encode(data)
+	_ = file.Close()
+	if err != nil {
+		return "", fmt.Errorf("error when encoding file: %w", err)
+	}
+
+	if err = os.Remove(TempPath(data.FileName)); err != nil {
+		return "", fmt.Errorf("error removing tmp file: %w", err)
+	}
+	return data.FileName, nil
+}
+
 func SaveFile(data model.Request) tea.Cmd {
 	return func() tea.Msg {
-		var savedPath string
-		if data.DraftPath != "" {
-			spec, err := ParseSpec(data.FileName)
-			if err != nil {
-				msg := fmt.Sprintf("Error when trying to save file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-			if err = AddOperationToSpec(spec, data.URI, data.Method.Label(), data); err != nil {
-				msg := fmt.Sprintf("Error when adding operation to spec, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-			if err = SaveSpec(data.FileName, spec); err != nil {
-				msg := fmt.Sprintf("Error when writing file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-			savedPath = data.FileName
-			if err = os.Remove(data.DraftPath); err != nil {
-				msg := fmt.Sprintf("Error removing tmp file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-		} else if data.OpenAPIRef != nil {
-			ref := *data.OpenAPIRef
-			spec, err := ParseSpec(ref.FilePath)
-			if err != nil {
-				msg := fmt.Sprintf("Error when trying to save file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-			if err = ApplyRequestToOperation(spec, ref, data); err != nil {
-				msg := fmt.Sprintf("Error when applying changes to spec, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-			if err = SaveSpec(ref.FilePath, spec); err != nil {
-				msg := fmt.Sprintf("Error when writing file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-			savedPath = ref.FilePath
+		savedPath, err := saveFileImpl(data)
+		if err != nil {
+			return tea.Batch(tea.Println(err.Error()), tea.Quit)
+		}
 
-			if err = os.Remove(tempPathForRef(ref)); err != nil {
-				msg := fmt.Sprintf("Error removing tmp file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-		} else {
-			file, err := os.Create(data.FileName)
-			if err != nil {
-				msg := fmt.Sprintf("Error when trying to save file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-
-			err = file.Close()
-			if err != nil {
-				msg := fmt.Sprintf("Error closing file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-
-			encoder := yaml.NewEncoder(file)
-			err = encoder.Encode(data)
-			if err != nil {
-				msg := fmt.Sprintf("Error when encoding file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
-
-			savedPath = data.FileName
-			if err = os.Remove(TempPath(data.FileName)); err != nil {
-				msg := fmt.Sprintf("Error removing tmp file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
+		if err := SaveRuntimeMap(savedPath, data); err != nil {
+			return tea.Batch(tea.Println("Error saving runtime map: "+err.Error()), tea.Quit)
 		}
 
 		return FileSaved{Path: savedPath}
@@ -417,6 +474,10 @@ func DeleteRequestFile(item requests.RequestItem) tea.Cmd {
 			}
 			if err = os.Remove(tempPathForRef(ref)); err != nil {
 				msg := fmt.Sprintf("Error removing tmp file: %v", err)
+				return tea.Batch(tea.Println(msg), tea.Quit)
+			}
+			if err := RemoveRuntimeEntry(ref.FilePath, ref.Method, ref.Path); err != nil {
+				msg := fmt.Sprintf("Error removing runtime entry: %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
 			return FileSaved{Path: ref.FilePath}

@@ -1,37 +1,43 @@
-openapi: 3.0.0
-info:
-  title: Secured API
-  version: 1.0.0
 components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-    BearerAuth:
-      type: http
-      scheme: bearer
-security:
-  - ApiKeyAuth: []
-  - BearerAuth: []
+    securitySchemes:
+        ApiKeyAuth:
+            in: header
+            name: X-API-Key
+            type: apiKey
+        BearerAuth:
+            scheme: bearer
+            type: http
+info:
+    title: Secured API
+    version: 1.0.0
+openapi: 3.0.0
 paths:
-  /secure:
-    get:
-      summary: Secured endpoint
-      responses:
-        "200":
-          description: OK
-  /public:
-    get:
-      summary: Public endpoint
-      security: []
-      responses:
-        "200":
-          description: OK
-    post:
-      summary: Override security
-      security:
-        - BearerAuth: []
-      responses:
-        "201":
-          description: Created
+    /public:
+        get:
+            responses:
+                "200":
+                    description: OK
+            security: []
+            summary: Public endpoint
+        post:
+            responses:
+                "201":
+                    description: Created
+            security:
+                - BearerAuth: []
+            summary: Override security
+    /secure:
+        get:
+            requestBody:
+                content:
+                    application/json: {}
+            responses:
+                "200":
+                    description: OK
+            security:
+                - ApiKeyAuth: []
+                - BearerAuth: []
+            summary: Secured endpoint
+security:
+    - ApiKeyAuth: []
+    - BearerAuth: []

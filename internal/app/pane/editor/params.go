@@ -32,6 +32,10 @@ func (p *params) IsActive() bool {
 	return p.active
 }
 
+func (p *params) HasChord() bool {
+	return p.prevKey == 'n'
+}
+
 func (p *params) totalFields() int {
 	return len(p.query)*2 + len(p.params)*2
 }
@@ -51,8 +55,30 @@ var titleStyle = lipgloss.NewStyle().
 	BorderBottom(true)
 
 func (p *params) SetValue(query map[string]string, pathParams map[string]string) {
+	p.SetValueWithEnabled(query, pathParams, nil, nil)
+}
+
+func (p *params) SetValueWithEnabled(query map[string]string, pathParams map[string]string, queryEnabled, paramsEnabled map[string]bool) {
 	p.query = mapToParamFields(query)
 	p.params = mapToParamFields(pathParams)
+
+	if queryEnabled != nil {
+		for i := range p.query {
+			name := p.query[i].name.Value()
+			if enabled, ok := queryEnabled[name]; ok {
+				p.query[i].enabled = enabled
+			}
+		}
+	}
+	if paramsEnabled != nil {
+		for i := range p.params {
+			name := p.params[i].name.Value()
+			if enabled, ok := paramsEnabled[name]; ok {
+				p.params[i].enabled = enabled
+			}
+		}
+	}
+
 	if len(p.query) == 0 {
 		p.query = []paramField{createParam()}
 	}
@@ -69,6 +95,14 @@ func (p *params) ParamsValue() map[string]string {
 	return paramFieldsToMap(p.params)
 }
 
+func (p *params) EnabledQuery() map[string]bool {
+	return paramFieldsEnabled(p.query)
+}
+
+func (p *params) EnabledParams() map[string]bool {
+	return paramFieldsEnabled(p.params)
+}
+
 func (p *params) Reset() {
 	p.query = []paramField{createParam()}
 	p.params = []paramField{createParam()}
@@ -82,8 +116,8 @@ func (p params) View() string {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
 	for i := range p.query {
-		p.query[i].name.Style = lipgloss.NewStyle().Width(width - 2)
-		p.query[i].value.Style = lipgloss.NewStyle().Width(width)
+		p.query[i].name.Style = lipgloss.NewStyle().Width(width - 6)
+		p.query[i].value.Style = lipgloss.NewStyle().Width(width - 2)
 
 		if p.active && p.focusPos >= 0 && p.focusPos < len(p.query)*2 {
 			row := p.focusPos / 2
@@ -102,8 +136,8 @@ func (p params) View() string {
 	customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, titleStyle.Render("Path params"))
 
 	for i := range p.params {
-		p.params[i].name.Style = lipgloss.NewStyle().Width(width - 2)
-		p.params[i].value.Style = lipgloss.NewStyle().Width(width)
+		p.params[i].name.Style = lipgloss.NewStyle().Width(width - 6)
+		p.params[i].value.Style = lipgloss.NewStyle().Width(width - 2)
 
 		if p.active && p.focusPos >= len(p.query)*2 {
 			offset := p.focusPos - len(p.query)*2
@@ -158,6 +192,39 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		total := p.totalFields()
+
+		if p.focusPos >= 0 && total > 0 {
+			qc := len(p.query) * 2
+			switch {
+			case key.Matches(msg, config.DefaultKeyMap.Delete):
+				if p.focusPos < qc {
+					row := p.focusPos / 2
+					p.query = append(p.query[:row], p.query[row+1:]...)
+				} else {
+					offset := p.focusPos - qc
+					row := offset / 2
+					p.params = append(p.params[:row], p.params[row+1:]...)
+				}
+				newTotal := p.totalFields()
+				if newTotal == 0 {
+					p.focusPos = -1
+				} else if p.focusPos >= newTotal {
+					p.focusPos = newTotal - 1
+				}
+				return &p, nil
+
+			case msg.Type == tea.KeyCtrlT:
+				if p.focusPos < qc {
+					row := p.focusPos / 2
+					p.query[row].enabled = !p.query[row].enabled
+				} else {
+					offset := p.focusPos - qc
+					row := offset / 2
+					p.params[row].enabled = !p.params[row].enabled
+				}
+				return &p, nil
+			}
+		}
 
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Next):

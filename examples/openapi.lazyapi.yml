@@ -1,0 +1,42 @@
+server_url: http://localhost:3000
+requests:
+    DELETE /sales/{id}:
+        uri: /sales/{id}
+        params:
+            id: ""
+        paramsEnabled:
+            id: true
+    GET /sales/{id}:
+        uri: /sales/{id}
+        params:
+            id: ""
+        paramsEnabled:
+            id: true
+    GET /users:
+        uri: /users
+        query:
+            limit: ""
+            offset: ""
+        auth:
+            - type: 0
+              keyIn: header
+              grantType: authorizationCode
+        queryEnabled:
+            limit: true
+            offset: true
+        authEnabled:
+            - true
+    POST /sales:
+        uri: /sales
+        query:
+            field: '{{env.CAMPO}}'
+        auth:
+            - type: 1
+              schemeName: lazyapi_auth_0
+              token: '{{env.TOKEN}}'
+              keyIn: header
+              grantType: authorizationCode
+        queryEnabled:
+            field: true
+        authEnabled:
+            - true

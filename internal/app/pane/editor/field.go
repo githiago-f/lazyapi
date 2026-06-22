@@ -6,6 +6,8 @@ import (
 	"github.com/githiago-f/lazyapi/internal/components"
 )
 
+var checkStyle = lipgloss.NewStyle().Width(4).Align(lipgloss.Center)
+
 type paramField struct {
 	enabled bool
 	name    components.Field
@@ -36,9 +38,23 @@ func mapToParamFields(m map[string]string) []paramField {
 	return result
 }
 
+func paramFieldsEnabled(fields []paramField) map[string]bool {
+	r := make(map[string]bool, len(fields))
+	for _, pf := range fields {
+		name := pf.name.Value()
+		if name != "" {
+			r[name] = pf.enabled
+		}
+	}
+	return r
+}
+
 func paramFieldsToMap(fields []paramField) map[string]string {
 	result := make(map[string]string, len(fields))
 	for _, pf := range fields {
+		if !pf.enabled {
+			continue
+		}
 		name := pf.name.Value()
 		value := pf.value.Value()
 		if name != "" {
@@ -53,7 +69,15 @@ func (pf paramField) Init() tea.Cmd {
 }
 
 func (pf paramField) View() string {
-	return lipgloss.JoinHorizontal(lipgloss.Top, pf.name.View(), pf.value.View())
+	indicator := "[ ]"
+	if pf.enabled {
+		indicator = "[x]"
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		checkStyle.Render(indicator),
+		pf.name.View(),
+		pf.value.View(),
+	)
 }
 
 func (pf paramField) Update(_ tea.Msg) (tea.Model, tea.Cmd) {

@@ -1,3 +1,8 @@
+components:
+    securitySchemes:
+        lazyapi_auth_0:
+            scheme: bearer
+            type: http
 info:
     description: A sample OpenAPI spec for testing lazyapi
     title: Example API
@@ -6,6 +11,7 @@ openapi: 3.0.0
 paths:
     /sales:
         post:
+            description: Persistence of new sales
             parameters:
                 - in: query
                   name: field
@@ -21,17 +27,39 @@ paths:
                             example: |
                                 OK
                     description: OK
+            security:
+                - lazyapi_auth_0: []
             summary: Create a sale
     /sales/{id}:
         delete:
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json: {}
             responses:
                 "200":
                     description: OK
+            security: []
             summary: Delete specified sale
         get:
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json: {}
             responses:
                 "200":
                     description: OK
+            security: []
             summary: View a sale
         patch:
             responses:
@@ -52,6 +80,9 @@ paths:
                   name: offset
                   schema:
                     type: integer
+            requestBody:
+                content:
+                    application/json: {}
             responses:
                 "200":
                     description: A list of users

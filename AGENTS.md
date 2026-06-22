@@ -85,4 +85,6 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - **`smoke tests`** subcommand prints "not implemented yet".
 - **No CI workflows** configured yet.
 - **`inmath.Cicle`** has a typo (should be `Circle`).
-- **Editor `BlockTab`** uses a two-stage Esc pattern: first Esc blurs the tab's inner content, second Esc exits the tab field.
+- **Help** toggles with `ctrl+h` (not `h`), so `h` is free for tab navigation and the `n+h` add-header chord.
+- **Two-key chords** (`n+h`/`n+q`/`n+p`/`n+a`) work without entering (Select) the tab first. `tabs.Model` checks `Chorder.HasChord()` on the current content before handling `Left`/`Right` navigation, so the second chord key reaches the content instead of moving the tab cursor.
+- **Editor `BlockTab`** uses a single-stage Esc pattern: one Esc blurs the tab's inner content and exits the tab field. (Previously two-stage, but the intermediate state where `selected=false` but `BlockTab=true` caused `h`/`l` to desync — they moved the tab cursor instead of reaching tab content.)

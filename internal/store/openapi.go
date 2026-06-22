@@ -172,6 +172,14 @@ func OperationToRequest(spec *openapi3.T, ref model.OpenAPIRef) model.Request {
 	if len(spec.Servers) > 0 {
 		req.ServerURL = spec.Servers[0].URL
 	}
+	if savedURL := LoadServerURL(ref.FilePath); savedURL != "" {
+		for _, s := range spec.Servers {
+			if s.URL == savedURL {
+				req.ServerURL = savedURL
+				break
+			}
+		}
+	}
 
 	if opSec := ExtractOperationSecurity(op, spec); len(opSec) > 0 {
 		req.Auth = opSec
@@ -389,7 +397,16 @@ func LoadServers(filePath string) ([]string, string) {
 		servers = append(servers, s.URL)
 	}
 	if len(servers) > 0 {
-		return servers, servers[0]
+		defaultURL := servers[0]
+		if savedURL := LoadServerURL(filePath); savedURL != "" {
+			for _, s := range servers {
+				if s == savedURL {
+					defaultURL = savedURL
+					break
+				}
+			}
+		}
+		return servers, defaultURL
 	}
 	return servers, ""
 }
@@ -461,6 +478,37 @@ func SaveResponseExample(spec *openapi3.T, ref model.OpenAPIRef, statusCode int,
 	return nil
 }
 
+func existingSchemeNames(spec *openapi3.T, ref model.OpenAPIRef) []string {
+	var names []string
+	seen := make(map[string]bool)
+	if ref.Path == "" {
+		for _, secReq := range spec.Security {
+			for name := range secReq {
+				if !seen[name] {
+					names = append(names, name)
+					seen[name] = true
+				}
+			}
+		}
+	} else {
+		pathItem := spec.Paths.Find(ref.Path)
+		if pathItem != nil {
+			op := pathItem.GetOperation(ref.Method)
+			if op != nil && op.Security != nil {
+				for _, secReq := range *op.Security {
+					for name := range secReq {
+						if !seen[name] {
+							names = append(names, name)
+							seen[name] = true
+						}
+					}
+				}
+			}
+		}
+	}
+	return names
+}
+
 func applyAuthSchemes(spec *openapi3.T, ref model.OpenAPIRef, schemes []model.AuthScheme) error {
 	if spec.Components == nil {
 		spec.Components = &openapi3.Components{}
@@ -469,14 +517,22 @@ func applyAuthSchemes(spec *openapi3.T, ref model.OpenAPIRef, schemes []model.Au
 		spec.Components.SecuritySchemes = make(openapi3.SecuritySchemes)
 	}
 
+	existingNames := existingSchemeNames(spec, ref)
+
 	secReqs := openapi3.NewSecurityRequirements()
+	usedNames := make(map[string]bool)
 
 	for i := range schemes {
 		s := &schemes[i]
 		name := s.SchemeName
 		if name == "" {
-			name = generateSchemeName(spec)
+			if i < len(existingNames) {
+				name = existingNames[i]
+			} else {
+				name = generateSchemeName(spec)
+			}
 		}
+		usedNames[name] = true
 
 		switch s.Type {
 		case model.AuthBasic:
@@ -574,6 +630,13 @@ func applyAuthSchemes(spec *openapi3.T, ref model.OpenAPIRef, schemes []model.Au
 			if op != nil {
 				op.Security = secReqs
 			}
+		}
+	}
+
+	// Remove orphaned scheme definitions previously used by this operation
+	for _, name := range existingNames {
+		if !usedNames[name] {
+			delete(spec.Components.SecuritySchemes, name)
 		}
 	}
 

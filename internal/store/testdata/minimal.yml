@@ -1,41 +1,46 @@
-openapi: 3.0.0
+components: {}
 info:
-  title: Test API
-  version: 1.0.0
+    title: Test API
+    version: 1.0.0
+openapi: 3.0.0
 paths:
-  /items:
-    get:
-      summary: List items
-      responses:
-        "200":
-          description: OK
-    post:
-      summary: Create item
-      responses:
-        "201":
-          description: Created
-  /items/{id}:
-    get:
-      summary: Get item
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: OK
-    delete:
-      summary: Delete item
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: No Content
+    /items:
+        get:
+            responses:
+                "200":
+                    description: OK
+            summary: List items
+        post:
+            requestBody:
+                content:
+                    application/json: {}
+            responses:
+                "201":
+                    description: Created
+            security: []
+            summary: Create item
+    /items/{id}:
+        delete:
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+            summary: Delete item
+        get:
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+            summary: Get item
 servers:
-  - url: https://api.example.com/v1
+    - url: https://api.example.com/v1

@@ -13,6 +13,7 @@ import (
 )
 
 type authScheme struct {
+	enabled      bool
 	typeSelector components.Selector
 
 	usernameField     components.Field
@@ -33,6 +34,7 @@ type authScheme struct {
 
 func newAuthScheme() authScheme {
 	return authScheme{
+		enabled: true,
 		typeSelector: components.Selector{
 			Cursor: 0,
 			Labels: authTypeLabels(),
@@ -210,11 +212,10 @@ func renderSelector(label string, s *components.Selector, width int, focused boo
 }
 
 type auth struct {
-	active    bool
-	width     int
-	cmdBuffer rune
-	focusPos  int
-	schemes   []authScheme
+	active   bool
+	width    int
+	focusPos int
+	schemes  []authScheme
 }
 
 func AuthorizeTab() *auth {
@@ -265,12 +266,12 @@ func (a *auth) resolveField(pos int) (int, int) {
 
 func (a auth) View() string {
 	if len(a.schemes) == 0 {
-		return "No auth schemes defined. Press n+a to add one."
+		return "No auth schemes defined. Press A to add one."
 	}
 
 	activeColor := config.DefaultConfig.PrimaryColor()
 	schemeStyle := lipgloss.NewStyle().
-		Width(a.width - 2).
+		Width(a.width-2).
 		Border(lipgloss.NormalBorder()).
 		Padding(0, 1)
 
@@ -286,12 +287,16 @@ func (a auth) View() string {
 		}
 		fieldBaseOffset += fc
 
+		indicator := "( )"
+		if a.schemes[si].enabled {
+			indicator = "(o)"
+		}
 		label := fmt.Sprintf("Scheme %d", si+1)
 		if a.schemes[si].schemeName != "" {
 			label = a.schemes[si].schemeName
 		}
 
-		schemeContent := " " + label + "\n" + a.schemes[si].viewFields(a.width-2, isFocused, relFocus)
+		schemeContent := checkStyle.Render(indicator) + " " + label + "\n" + a.schemes[si].viewFields(a.width-2, isFocused, relFocus)
 
 		s := schemeStyle
 		if isFocused {
@@ -304,6 +309,10 @@ func (a auth) View() string {
 }
 
 func (a *auth) SetValue(schemes []model.AuthScheme) {
+	a.SetValueWithEnabled(schemes, nil)
+}
+
+func (a *auth) SetValueWithEnabled(schemes []model.AuthScheme, enabled []bool) {
 	a.schemes = make([]authScheme, len(schemes))
 	for i, s := range schemes {
 		as := newAuthScheme()
@@ -319,6 +328,10 @@ func (a *auth) SetValue(schemes []model.AuthScheme) {
 		as.authURLField.SetValue(s.AuthURL)
 		as.tokenURLField.SetValue(s.TokenURL)
 		as.scopesField.SetValue(s.Scopes)
+
+		if enabled != nil && i < len(enabled) {
+			as.enabled = enabled[i]
+		}
 
 		for gi, gl := range []string{"header", "query", "cookie"} {
 			if gl == s.KeyIn {
@@ -341,9 +354,20 @@ func (a *auth) SetValue(schemes []model.AuthScheme) {
 	}
 }
 
+func (a *auth) EnabledAuth() []bool {
+	r := make([]bool, len(a.schemes))
+	for i, s := range a.schemes {
+		r[i] = s.enabled
+	}
+	return r
+}
+
 func (a *auth) Value() []model.AuthScheme {
 	var schemes []model.AuthScheme
 	for _, as := range a.schemes {
+		if !as.enabled {
+			continue
+		}
 		kt := authTypeLabels()[as.typeSelector.Cursor]
 		var at model.AuthType
 		for _, t := range []model.AuthType{model.AuthBasic, model.AuthBearer, model.AuthAPIKey, model.AuthOAuth2} {
@@ -392,48 +416,46 @@ func (a auth) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return &a, nil
 
 	case tea.KeyMsg:
-		if !a.active {
-			return &a, nil
-		}
-
-		total := a.totalFields()
-
-		// Two-key chords: n+a = add, x+a = delete focused scheme
-		if a.cmdBuffer != 0 {
-			suffix := msg.String()
-			prev := a.cmdBuffer
-			a.cmdBuffer = 0
-			if prev == 'n' && suffix == "a" {
+		// A chord works even when tab is not active
+		if a.focusPos < 0 {
+			switch {
+			case msg.String() == "A":
 				a.schemes = append(a.schemes, newAuthScheme())
 				if a.focusPos < 0 {
 					a.focusPos = 0
 				}
 				return &a, nil
 			}
-			if prev == 'x' && suffix == "a" {
-				if len(a.schemes) > 0 && a.focusPos >= 0 {
-					si, _ := a.resolveField(a.focusPos)
+		}
+
+		if !a.active {
+			return &a, nil
+		}
+
+		total := a.totalFields()
+
+		if a.focusPos >= 0 && total > 0 {
+			switch {
+			case key.Matches(msg, config.DefaultKeyMap.Delete):
+				si, fi := a.resolveField(a.focusPos)
+				if fi == 0 {
 					a.schemes = append(a.schemes[:si], a.schemes[si+1:]...)
 					if len(a.schemes) == 0 {
 						a.focusPos = -1
 					} else {
 						a.focusPos = max(0, min(a.focusPos, a.totalFields()-1))
 					}
+					return &a, nil
+				}
+
+			case msg.Type == tea.KeyCtrlT:
+				si, _ := a.resolveField(a.focusPos)
+				newEnabled := !a.schemes[si].enabled
+				for j := range a.schemes {
+					a.schemes[j].enabled = j == si && newEnabled
 				}
 				return &a, nil
 			}
-		}
-
-		// Chord prefix keys
-		if a.focusPos < 0 {
-			if key.Matches(msg, config.DefaultKeyMap.New) {
-				a.cmdBuffer = 'n'
-				return &a, nil
-			}
-		}
-		if key.Matches(msg, config.DefaultKeyMap.Delete) {
-			a.cmdBuffer = 'x'
-			return &a, nil
 		}
 
 		// Navigation

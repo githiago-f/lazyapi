@@ -1,0 +1,16 @@
+requests:
+    GET /secure:
+        uri: /secure
+        auth:
+            - type: 2
+              schemeName: ApiKeyAuth
+              keyName: X-API-Key
+              keyIn: header
+              grantType: authorizationCode
+            - type: 1
+              schemeName: BearerAuth
+              keyIn: header
+              grantType: authorizationCode
+        authEnabled:
+            - true
+            - true

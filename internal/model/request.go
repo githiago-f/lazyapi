@@ -39,6 +39,11 @@ type Request struct {
 
 	Env  map[string]string `yaml:"-"`
 	Vars map[string]string `yaml:"-"`
+
+	ParamsEnabled  map[string]bool `yaml:"paramsEnabled,omitempty"`
+	QueryEnabled   map[string]bool `yaml:"queryEnabled,omitempty"`
+	HeadersEnabled map[string]bool `yaml:"headersEnabled,omitempty"`
+	AuthEnabled    []bool          `yaml:"authEnabled,omitempty"`
 }
 
 type FailureMsg struct {

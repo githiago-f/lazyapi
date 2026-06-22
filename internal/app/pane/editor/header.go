@@ -45,10 +45,11 @@ func (h header) Init() tea.Cmd {
 func (h header) View() string {
 	customParams := titleStyle.Render("Headers")
 	activeColor := config.DefaultConfig.PrimaryColor()
+	width := h.width / 2
 
 	for i := range h.headers {
-		h.headers[i].name.Style = lipgloss.NewStyle().Width(h.width/2 - 2)
-		h.headers[i].value.Style = lipgloss.NewStyle().Width(h.width / 2)
+		h.headers[i].name.Style = lipgloss.NewStyle().Width(width - 6)
+		h.headers[i].value.Style = lipgloss.NewStyle().Width(width - 2)
 
 		if h.active && h.focusPos >= 0 {
 			row := h.focusPos / 2
@@ -67,10 +68,23 @@ func (h header) View() string {
 	return customParams
 }
 
+func (h *header) HasChord() bool {
+	return h.cmdBuffer == 'n'
+}
+
 func (h *header) SetValue(headers map[string]string) {
+	h.SetValueWithEnabled(headers, nil)
+}
+
+func (h *header) SetValueWithEnabled(headers map[string]string, enabled map[string]bool) {
 	h.headers = make([]paramField, 0, len(headers))
 	for name, value := range headers {
 		pf := createParamWith(name, value)
+		if enabled != nil {
+			if e, ok := enabled[name]; ok {
+				pf.enabled = e
+			}
+		}
 		h.headers = append(h.headers, pf)
 	}
 	if len(h.headers) == 0 {
@@ -79,15 +93,11 @@ func (h *header) SetValue(headers map[string]string) {
 }
 
 func (h *header) Value() map[string]string {
-	result := make(map[string]string, len(h.headers))
-	for _, pf := range h.headers {
-		name := pf.name.Value()
-		value := pf.value.Value()
-		if name != "" {
-			result[name] = value
-		}
-	}
-	return result
+	return paramFieldsToMap(h.headers)
+}
+
+func (h *header) EnabledHeaders() map[string]bool {
+	return paramFieldsEnabled(h.headers)
 }
 
 func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -101,11 +111,8 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if h.focusPos < 0 {
-			isNewCmd := h.cmdBuffer == 'n'
 			switch {
-			case key.Matches(msg, config.DefaultKeyMap.New):
-				h.cmdBuffer = 'n'
-			case msg.String() == "h" && isNewCmd:
+			case msg.String() == "H":
 				h.headers = append(h.headers, createParam())
 				h.cmdBuffer = '0'
 			default:
@@ -118,6 +125,26 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		total := len(h.headers) * 2
+
+		if h.focusPos >= 0 && total > 0 {
+			switch {
+			case key.Matches(msg, config.DefaultKeyMap.Delete):
+				row := h.focusPos / 2
+				h.headers = append(h.headers[:row], h.headers[row+1:]...)
+				newTotal := len(h.headers) * 2
+				if newTotal == 0 {
+					h.focusPos = -1
+				} else if h.focusPos >= newTotal {
+					h.focusPos = newTotal - 1
+				}
+				return &h, nil
+
+			case msg.Type == tea.KeyCtrlT:
+				row := h.focusPos / 2
+				h.headers[row].enabled = !h.headers[row].enabled
+				return &h, nil
+			}
+		}
 
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Next):

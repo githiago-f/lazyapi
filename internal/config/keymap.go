@@ -130,7 +130,7 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("x", "eXclude request"),
 	),
 	Help: key.NewBinding(
-		key.WithKeys("h"),
-		key.WithHelp("h", "help"),
+		key.WithKeys(tea.KeyCtrlH.String()),
+		key.WithHelp("ctrl+h", "help"),
 	),
 }

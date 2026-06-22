@@ -18,6 +18,112 @@ import (
 	"github.com/githiago-f/lazyapi/internal/store"
 )
 
+type contextHelp struct {
+	short []key.Binding
+	full  [][]key.Binding
+}
+
+func (h contextHelp) ShortHelp() []key.Binding   { return h.short }
+func (h contextHelp) FullHelp() [][]key.Binding   { return h.full }
+
+func listBindings() contextHelp {
+	return contextHelp{
+		short: []key.Binding{
+			config.DefaultKeyMap.Select,
+			config.DefaultKeyMap.Filter,
+			config.DefaultKeyMap.CreateNew,
+			config.DefaultKeyMap.Help,
+		},
+		full: [][]key.Binding{
+			{config.DefaultKeyMap.Select, config.DefaultKeyMap.Up, config.DefaultKeyMap.Down, config.DefaultKeyMap.Filter},
+			{config.DefaultKeyMap.CreateNew, config.DefaultKeyMap.Duplicate, config.DefaultKeyMap.Delete},
+			{config.DefaultKeyMap.Quit, config.DefaultKeyMap.Kill},
+		},
+	}
+}
+
+func editorBindings() contextHelp {
+	return contextHelp{
+		short: []key.Binding{
+			config.DefaultKeyMap.Back,
+			config.DefaultKeyMap.Save,
+			config.DefaultKeyMap.Next,
+			config.DefaultKeyMap.Prev,
+			config.DefaultKeyMap.Help,
+		},
+		full: [][]key.Binding{
+			{config.DefaultKeyMap.Next, config.DefaultKeyMap.Prev},
+			{config.DefaultKeyMap.Back, config.DefaultKeyMap.Save, config.DefaultKeyMap.SaveExample},
+			{config.DefaultKeyMap.Kill},
+		},
+	}
+}
+
+func tabBindings(tabIndex int) contextHelp {
+	switch tabIndex {
+	case 1: // editor.Params
+		return contextHelp{
+			short: []key.Binding{
+				config.DefaultKeyMap.Back,
+				key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete row")),
+				key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "toggle")),
+				key.NewBinding(key.WithKeys("n"), key.WithHelp("n+q/p", "add query/path")),
+			},
+			full: [][]key.Binding{
+				{config.DefaultKeyMap.Next, config.DefaultKeyMap.Prev},
+				{key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete focused row"))},
+				{key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "enable/disable field"))},
+				{key.NewBinding(key.WithKeys("n"), key.WithHelp("n then q/p", "add query/path param"))},
+				{config.DefaultKeyMap.Back},
+			},
+		}
+	case 3: // editor.Header
+		return contextHelp{
+			short: []key.Binding{
+				config.DefaultKeyMap.Back,
+				key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete row")),
+				key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "toggle")),
+				key.NewBinding(key.WithKeys("n"), key.WithHelp("n+h", "add header")),
+			},
+			full: [][]key.Binding{
+				{config.DefaultKeyMap.Next, config.DefaultKeyMap.Prev},
+				{key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete focused row"))},
+				{key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "enable/disable field"))},
+				{key.NewBinding(key.WithKeys("n"), key.WithHelp("n then h", "add header"))},
+				{config.DefaultKeyMap.Back},
+			},
+		}
+	case 2: // editor.Authorize
+		return contextHelp{
+			short: []key.Binding{
+				config.DefaultKeyMap.Back,
+				key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete scheme")),
+				key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "select")),
+				key.NewBinding(key.WithKeys("n"), key.WithHelp("n+a", "add scheme")),
+			},
+			full: [][]key.Binding{
+				{config.DefaultKeyMap.Next, config.DefaultKeyMap.Prev},
+				{key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete focused scheme"))},
+				{key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "select this scheme"))},
+				{key.NewBinding(key.WithKeys("n"), key.WithHelp("n then a", "add auth scheme"))},
+				{config.DefaultKeyMap.Back},
+			},
+		}
+	default:
+		return contextHelp{
+			short: []key.Binding{
+				config.DefaultKeyMap.Back,
+				config.DefaultKeyMap.Next,
+				config.DefaultKeyMap.Prev,
+			},
+			full: [][]key.Binding{
+				{config.DefaultKeyMap.Next, config.DefaultKeyMap.Prev},
+				{config.DefaultKeyMap.Back},
+			},
+		}
+	}
+}
+
 type Tui struct {
 	tea.Model
 	titleBar components.TitleBar
@@ -62,11 +168,20 @@ func NewTui(defaultFile string, envFile string) Tui {
 
 func (t Tui) View() string {
 	var currentView string
+	var km help.KeyMap
+
 	switch config.DefaultConfig.Active {
 	case config.RequestList:
 		currentView = t.requestList.View()
+		km = listBindings()
 	case config.RequestEditor:
 		currentView = t.editor.View()
+		tabIdx, isBlocked := t.editor.BlockTabContext()
+		if isBlocked {
+			km = tabBindings(tabIdx)
+		} else {
+			km = editorBindings()
+		}
 	}
 
 	return lipgloss.JoinVertical(
@@ -74,7 +189,7 @@ func (t Tui) View() string {
 		t.prompt.View(),
 		t.titleBar.View(),
 		currentView,
-		t.help.View(config.DefaultKeyMap),
+		t.help.View(km),
 	)
 }
 
@@ -245,6 +360,8 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch {
+		case key.Matches(msg, config.DefaultKeyMap.Help):
+			t.help.ShowAll = !t.help.ShowAll
 		case config.DefaultConfig.Active == config.PageIndex(0) && key.Matches(msg, config.DefaultKeyMap.Quit):
 			return t, tea.Quit
 		case key.Matches(msg, config.DefaultKeyMap.Kill):
