@@ -5,47 +5,38 @@ import (
 	"os"
 
 	"github.com/githiago-f/lazyapi/internal/env"
+	"github.com/spf13/cobra"
 )
 
-func SmokeTests(args []string) {
-	var server, envFile string
-	var file string
+func newSmokeCmd() *cobra.Command {
+	var serverURL, envFile string
 
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--server":
-			i++
-			if i < len(args) {
-				server = args[i]
-			}
-		case "--env":
-			i++
-			if i < len(args) {
-				envFile = args[i]
-			}
-		default:
-			if file == "" {
-				file = args[i]
-			}
-		}
+	cmd := &cobra.Command{
+		Use:   "smoke <file>",
+		Short: "Run smoke tests against an API",
+		Long:  "Run smoke tests against an API (not yet implemented)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return smokeTests(args[0], serverURL, envFile)
+		},
 	}
 
-	if file == "" {
-		fmt.Fprintln(os.Stderr, "Usage: lazyapi smoke tests <file> [--server url] [--env file]")
-		os.Exit(1)
-	}
+	cmd.Flags().StringVar(&serverURL, "server", "", "Base server URL for smoke tests")
+	cmd.Flags().StringVar(&envFile, "env", "", "Environment file for smoke tests")
 
+	return cmd
+}
+
+func smokeTests(file, server, envFile string) error {
 	if _, err := os.Stat(file); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "File %q not found\n", file)
-		os.Exit(1)
+		return fmt.Errorf("file %q not found", file)
 	}
 
 	envStore := env.NewStore(envFile)
 
 	envMap, err := envStore.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading env file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error loading env file: %w", err)
 	}
 
 	fmt.Println("Smoke tests are not implemented yet")
@@ -59,4 +50,5 @@ func SmokeTests(args []string) {
 	if envMap != nil {
 		fmt.Println("  Env vars loaded with hash-based auto-reload")
 	}
+	return nil
 }

@@ -1,3 +1,4 @@
+// Package scrollable implements scrolling views
 package scrollable
 
 import (

@@ -7,23 +7,32 @@ import (
 
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/store"
+	"github.com/spf13/cobra"
 )
 
-func RemoveRequest(filePath, method, path string) {
+func newRemoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rm <file> <method> <path>",
+		Short: "Remove a request from a spec file",
+		Args:  cobra.ExactArgs(3),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return removeRequest(args[0], args[1], args[2])
+		},
+	}
+}
+
+func removeRequest(filePath, method, path string) error {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "File %q not found\n", filePath)
-		os.Exit(1)
+		return fmt.Errorf("file %q not found", filePath)
 	}
 
 	if !store.IsOpenAPIFile(filePath) {
-		fmt.Fprintf(os.Stderr, "%q is not a valid OpenAPI file\n", filePath)
-		os.Exit(1)
+		return fmt.Errorf("%q is not a valid OpenAPI file", filePath)
 	}
 
 	spec, err := store.ParseSpec(filePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing spec: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error parsing spec: %w", err)
 	}
 
 	ref := model.OpenAPIRef{
@@ -33,14 +42,13 @@ func RemoveRequest(filePath, method, path string) {
 	}
 
 	if err := store.RemoveOperationFromSpec(spec, ref); err != nil {
-		fmt.Fprintf(os.Stderr, "Error removing operation: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error removing operation: %w", err)
 	}
 
 	if err := store.SaveSpec(filePath, spec); err != nil {
-		fmt.Fprintf(os.Stderr, "Error saving file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error saving file: %w", err)
 	}
 
 	fmt.Printf("Removed %s %s from %s\n", method, path, filePath)
+	return nil
 }

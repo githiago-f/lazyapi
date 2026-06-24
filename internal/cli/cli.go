@@ -1,95 +1,67 @@
-// Package cli defines cli commands
 package cli
 
 import (
-	"fmt"
 	"os"
+
+	"github.com/spf13/cobra"
 )
 
-func Run(args []string) {
-	if len(args) < 1 {
-		printUsage()
-		os.Exit(1)
-	}
+var startTUI func(file, env string)
 
-	switch args[0] {
-	case "create":
-		if len(args) < 2 || args[1] != "file" {
-			fmt.Println("Usage: lazyapi create file [filename] [servers...]")
-			os.Exit(1)
-		}
-		filename := "openapi.yml"
-		servers := []string{}
-		if len(args) > 2 {
-			filename = args[2]
-			servers = args[3:]
-		}
-		CreateFile(filename, servers)
+func SetTUIStarter(fn func(file, env string)) {
+	startTUI = fn
+}
 
-	case "remove":
-		if len(args) < 5 || args[1] != "request" {
-			fmt.Println("Usage: lazyapi remove request <file> <method> <path>")
-			os.Exit(1)
-		}
-		RemoveRequest(args[2], args[3], args[4])
-
-	case "add":
-		if len(args) < 2 {
-			fmt.Println("Usage: lazyapi add request|server ...")
-			os.Exit(1)
-		}
-		switch args[1] {
-		case "request":
-			if len(args) < 5 {
-				fmt.Println("Usage: lazyapi add request <file> <path> <method>")
-				os.Exit(1)
-			}
-			AddRequest(args[2], args[3], args[4])
-		case "server":
-			if len(args) < 4 {
-				fmt.Println("Usage: lazyapi add server <file> <url>")
-				os.Exit(1)
-			}
-			AddServer(args[2], args[3])
-		default:
-			fmt.Println("Usage: lazyapi add request|server ...")
-			os.Exit(1)
-		}
-
-	case "send":
-		if len(args) < 2 || args[1] != "request" {
-			fmt.Println("Usage: lazyapi send request <file> <path> <method> [--server url]")
-			os.Exit(1)
-		}
-		SendRequest(args[2:])
-
-	case "smoke":
-		if len(args) < 3 || args[1] != "tests" {
-			fmt.Println("Usage: lazyapi smoke tests <file> [--server url] [--env file]")
-			os.Exit(1)
-		}
-		SmokeTests(args[2:])
-
-	default:
-		printUsage()
+func Execute() {
+	if err := newRootCmd().Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func printUsage() {
-	fmt.Println(`LazyAPI - OpenAPI-driven API exploration and testing
+func newRootCmd() *cobra.Command {
+	var envFile string
 
-Usage:
-  lazyapi                                Start the TUI (interactive mode)
-  lazyapi create file [name] [urls...]   Create a new OpenAPI template file
-  lazyapi remove request <file> <method> <path>  Remove a request from a spec file
-  lazyapi add request <file> <path> <method>     Add a new request to a spec file
-  lazyapi add server <file> <url>        Add a server URL to a spec file
-  lazyapi send request <file> <path> <method> [--server url] [--env file]  Send an HTTP request
-  lazyapi smoke tests <file> [flags]     Run smoke tests (not yet implemented)
+	cmd := &cobra.Command{
+		Use:   "lazyapi [file]",
+		Short: "OpenAPI-driven API exploration, testing, and automation from the terminal",
+		Long: `OpenAPI-driven API exploration, testing, and automation from the terminal.
 
-Flags:
-  --server url   Base server URL for smoke tests and send request
-  --save-example Persist the response as an example in the OpenAPI spec
-  --env file     Environment file for smoke tests`)
+TUI (interactive):
+  lazyapi                   Start the terminal UI with no spec
+  lazyapi <file.yml>        Start the TUI with an OpenAPI spec preloaded
+  lazyapi <file.yml> --env <file>  Start the TUI with an env file
+
+CLI (headless commands):
+  create [name] [servers...]          Create an OpenAPI template
+  rm <file> <method> <path>           Remove a request from a spec
+  add request <file> <path> <method>  Add a request to a spec
+  add server <file> <url>             Add a server URL to a spec
+  send <file> <path> <method>         Send a request from the spec
+    --server <url|index>              Server URL (or index into spec servers)
+    --env <file>                      Environment file for variable substitution
+    --save-example                    Save response as example in the spec
+  smoke <file>                        Run smoke tests against the API
+    --server <url>                    Base server URL
+    --env <file>                      Environment file`,
+		Args: cobra.ArbitraryArgs,
+		RunE: func(_ *cobra.Command, args []string) error {
+			if startTUI == nil {
+				return nil
+			}
+			file := ""
+			if len(args) > 0 {
+				file = args[0]
+			}
+			startTUI(file, envFile)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&envFile, "env", "", "Environment file for variable substitution")
+	cmd.AddCommand(newCreateCmd())
+	cmd.AddCommand(newRemoveCmd())
+	cmd.AddCommand(newAddCmd())
+	cmd.AddCommand(newSendCmd())
+	cmd.AddCommand(newSmokeCmd())
+	return cmd
 }

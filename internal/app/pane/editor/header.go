@@ -10,9 +10,8 @@ import (
 )
 
 type header struct {
-	active    bool
-	width     int
-	cmdBuffer rune
+	active bool
+	width  int
 
 	focusPos int
 	headers  []paramField
@@ -68,10 +67,6 @@ func (h header) View() string {
 	return customParams
 }
 
-func (h *header) HasChord() bool {
-	return h.cmdBuffer == 'n'
-}
-
 func (h *header) SetValue(headers map[string]string) {
 	h.SetValueWithEnabled(headers, nil)
 }
@@ -110,14 +105,8 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return &h, nil
 
 	case tea.KeyMsg:
-		if h.focusPos < 0 {
-			switch {
-			case msg.String() == "H":
-				h.headers = append(h.headers, createParam())
-				h.cmdBuffer = '0'
-			default:
-				h.cmdBuffer = '0'
-			}
+		if h.focusPos < 0 && msg.String() == "H" {
+			h.headers = append(h.headers, createParam())
 		}
 
 		if !h.active {

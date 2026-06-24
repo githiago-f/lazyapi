@@ -7,14 +7,14 @@ OpenAPI-driven API exploration, testing, and automation from the terminal.
 ```
 cmd/
   lazyapi/main.go          # Entry — TUI (default) or CLI (subcommands)
-internal/
-  app/                     # bubbletea model + views
-    tui.go                 #   Main Tui struct, Init/Update/View
-    pane/
-      editor/              #   Request editor (method, URL, headers, body, params, tests, auth)
-      requests/            #   Request list (tree with GroupByResource, CRUD messages)
-      responses/           #   Response preview
-  cli/                     # CLI commands (create, remove, add, smoke)
+  internal/
+    app/                     # bubbletea model + views
+      tui.go                 #   Main Tui struct, Init/Update/View
+      pane/
+        editor/              #   Request editor (method, URL, headers, body, params, tests, auth)
+        requests/            #   Request list (tree with GroupByResource, CRUD messages)
+        responses/           #   Response preview
+    cli/                     # CLI commands (cobra: create, rm, add, send, smoke)
   components/              # Reusable UI components (button, field, modal, tabs, selector, etc.)
   config/                  # Catppuccin Mocha color palette + keybindings + page constants
   env/                     # Environment variable loading/resolution (STUB — both functions empty)
@@ -44,9 +44,8 @@ internal/
 ## TUI vs CLI
 
 - **TUI** (`lazyapi` with no subcommand or non-CLI arg) — interactive bubbletea UI. Default mode.
-- **CLI** (`lazyapi create|remove|add|smoke ...`) — headless commands. Subcommands: `create file [name] [servers...]`, `add request <file> <path> <method>`, `add server <file> <url>`, `remove request <file> <method> <path>`, `smoke tests <file> [--server url] [--env file]` (not yet implemented).
-- **Dispatch** — `cmd/lazyapi/main.go` checks `os.Args[1]`; CLI verbs → `cli.Run()`, else → `tea.NewProgram(app.NewTui(...))`.
-- **The `--server` and `--env` flag parsing in `smoke.go` is ad-hoc** (manual loop, no `flag` package).
+- **CLI** (`lazyapi create|rm|add|send|smoke`) — headless commands built with `spf13/cobra`.
+- **Dispatch** — `cmd/lazyapi/main.go` checks `os.Args[1]`; CLI verbs → `cli.Execute()` (cobra), else → `tea.NewProgram(app.NewTui(...))`.
 
 ## Building & Running
 
@@ -54,7 +53,7 @@ internal/
 go build -o lazyapi ./cmd/lazyapi   # Single binary (also goreleaser entry)
 ./lazyapi                            # TUI (default)
 ./lazyapi examples/openapi.yml       # TUI with a spec preloaded
-./lazyapi create file my-api.yml     # CLI
+./lazyapi create my-api.yml          # CLI
 go test ./...                        # All tests
 golangci-lint run                    # Lint (config: .golangci.yml)
 ```
@@ -64,7 +63,7 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - Method strings are uppercase (GET, POST, etc.)
 - OpenAPI refs use `{FilePath, Path, Method}` structure
 - YAML files use `openapi: 3.0.0` at the root
-- No external CLI framework — ad-hoc `os.Args` parsing
+- CLI built with `spf13/cobra`
 - No database — everything is file-based
 - Release: goreleaser v2, builds for linux/windows/darwin (amd64 + arm64)
 - **Tab/Shift+Tab within tab content always wraps** — cycling through sub-fields goes from last back to first (and vice versa). There is no exit state via Tab; the user blurs the tab with Esc.
@@ -88,3 +87,14 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - **Help** toggles with `ctrl+h` (not `h`), so `h` is free for tab navigation and the `n+h` add-header chord.
 - **Two-key chords** (`n+h`/`n+q`/`n+p`/`n+a`) work without entering (Select) the tab first. `tabs.Model` checks `Chorder.HasChord()` on the current content before handling `Left`/`Right` navigation, so the second chord key reaches the content instead of moving the tab cursor.
 - **Editor `BlockTab`** uses a single-stage Esc pattern: one Esc blurs the tab's inner content and exits the tab field. (Previously two-stage, but the intermediate state where `selected=false` but `BlockTab=true` caused `h`/`l` to desync — they moved the tab cursor instead of reaching tab content.)
+- **`ParseSpec` uses `LoadFromData` not `LoadFromFile`** — `openapi3.Loader.LoadFromFile` has a bug where spec files written by `SaveSpec` (via `gopkg.in/yaml.v3`) have empty `Paths.Keys()` when re-loaded. The same bytes loaded via `LoadFromData` work correctly. `ParseSpec` reads the file and passes bytes to `LoadFromData` as a workaround.
+
+## Recent Work (cobra CLI refactor)
+
+- **CLI rewritten** from ad-hoc arg dispatch to `spf13/cobra`. Five subcommands in a flat hierarchy:
+  `create [name] [servers...]`, `rm <file> <method> <path>`,
+  `add request|server`, `send <file> <path> <method> [--server] [--env] [--save-example]`,
+  `smoke <file> [--server] [--env]`
+- **All handlers** return `error` (no `os.Exit` in handlers)
+- **~23 tests** covering create, add, remove, send, smoke, help, missing args, with HTTP test servers
+- **Lint clean** (pre-existing issues only in `runtime.go` and `scrollable.go`)

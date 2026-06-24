@@ -31,9 +31,13 @@ func IsOpenAPIFile(path string) bool {
 }
 
 func ParseSpec(path string) (*openapi3.T, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read OpenAPI spec %s: %w", path, err)
+	}
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = false
-	doc, err := loader.LoadFromFile(path)
+	doc, err := loader.LoadFromData(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OpenAPI spec %s: %w", path, err)
 	}

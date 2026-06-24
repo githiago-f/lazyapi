@@ -126,8 +126,8 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("d", "duplicate request"),
 	),
 	Delete: key.NewBinding(
-		key.WithKeys("x"),
-		key.WithHelp("x", "eXclude request"),
+		key.WithKeys(tea.KeyCtrlX.String()),
+		key.WithHelp("ctrl+x", "eXclude request"),
 	),
 	Help: key.NewBinding(
 		key.WithKeys(tea.KeyCtrlH.String()),
