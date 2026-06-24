@@ -28,6 +28,11 @@ requests:
             - true
     POST /sales:
         uri: /sales
+        body: |-
+            {
+              "campo": "{{env.CAMPO}}",
+              "id": 1
+            }
         query:
             field: '{{env.CAMPO}}'
         auth:

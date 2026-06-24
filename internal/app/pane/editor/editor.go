@@ -2,6 +2,8 @@
 package editor
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -310,13 +312,27 @@ func (rp RequestPane) SetResponse(statusCode int, status string, header http.Hea
 	}
 
 	b.WriteString("--- Body ---\n")
-	b.WriteString(body)
+	b.WriteString(formatBody(header, body))
 
 	rp.ResponsePreview.SetContent(b.String())
 	rp.lastStatusCode = statusCode
 	rp.lastHeader = header
 	rp.lastBody = body
 	return rp
+}
+
+func formatBody(header http.Header, body string) string {
+	ct := header.Get("Content-Type")
+	if idx := strings.IndexByte(ct, ';'); idx > 0 {
+		ct = strings.TrimSpace(ct[:idx])
+	}
+	if ct == "application/json" {
+		var buf bytes.Buffer
+		if err := json.Indent(&buf, []byte(body), "", "  "); err == nil {
+			return buf.String()
+		}
+	}
+	return body
 }
 
 func (rp RequestPane) SetResponseFeedback(feedback string) RequestPane {
