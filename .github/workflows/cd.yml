@@ -50,19 +50,22 @@ jobs:
           go-version-file: go.mod
 
       - name: Extract major version
+        id: version
         run: |
           TAG="${{ github.ref_name }}"
           MAJOR="${TAG#v}"
           MAJOR="${MAJOR%%.*}"
-          echo "DOCS_VERSION=$MAJOR" >> $GITHUB_ENV
+          echo "version=$MAJOR" >> $GITHUB_OUTPUT
           echo "docs version: v$MAJOR"
 
       - name: Build docs
+        env:
+          DOCS_VERSION: ${{ steps.version.outputs.version }}
         run: |
           cd docs
           npm ci
           bash scripts/extract-docs.sh
-          DOCS_VERSION=$DOCS_VERSION npx vitepress build
+          npm run build
           mkdir -p "../dist/v$DOCS_VERSION"
           cp -r .vitepress/dist/* "../dist/v$DOCS_VERSION/"
           # Create latest symlink
