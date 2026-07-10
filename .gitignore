@@ -34,3 +34,8 @@ go.work.sum
 # lazyapi temp files
 *.lazyapi.tmp
 *.lazyapi.tmp.*
+
+# Documentation
+docs/node_modules/
+docs/data/extracted.json
+docs/.vitepress/dist/

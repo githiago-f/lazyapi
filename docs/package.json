@@ -1,0 +1,16 @@
+{
+  "name": "lazyapi-docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "extract": "bash scripts/extract-docs.sh"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4",
+    "@catppuccin/vitepress": "^0.1.2"
+  }
+}
