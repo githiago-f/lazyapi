@@ -8,6 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/docs/data/extracted.json"
 
 cd "$ROOT"
+mkdir -p "$(dirname "$OUT")"
 
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
