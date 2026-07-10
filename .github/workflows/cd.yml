@@ -72,7 +72,7 @@ jobs:
           rm -rf "../dist/latest"
           cp -r "../dist/v$DOCS_VERSION" "../dist/latest"
           # Root redirect to latest version
-          cp docs/root-index.html "../dist/index.html"
+          cp root-index.html "../dist/index.html"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
