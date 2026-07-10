@@ -1,0 +1,1 @@
+import{_ as a,o as i,c as n,a0 as t}from"./chunks/framework.F8L2D_2n.js";const d=JSON.parse('{"title":"LazyAPI","description":"","frontmatter":{},"headers":[],"relativePath":"index.md","filePath":"index.md"}'),e={name:"index.md"};function l(p,s,r,h,o,c){return i(),n("div",null,[...s[0]||(s[0]=[t("",10)])])}const A=a(e,[["render",l]]);export{d as __pageData,A as default};
