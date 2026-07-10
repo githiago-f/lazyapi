@@ -200,16 +200,13 @@ Use future test commands to execute repeatable validation suites from OpenAPI de
 
 ## Contributing
 
-Contributions are welcome.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
-Please open an issue before starting large changes so implementation details can be discussed.
-
-For pull requests:
-
-* Ensure the project builds successfully.
-* Ensure all CI checks pass.
-* Add tests when applicable.
-* Document user-facing changes.
+- Development setup and build instructions
+- Coding conventions and architecture
+- Testing and linting guidelines
+- Pull request checklist
+- Documentation workflow
 
 ---
 
