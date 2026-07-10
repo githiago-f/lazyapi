@@ -6,7 +6,7 @@ export default defineConfig({
   title: "LazyAPI",
   description: "OpenAPI-driven API exploration, testing, and automation from the terminal",
 
-  base: `/v${majorVersion}/`,
+  base: `/lazyapi/v${majorVersion}/`,
 
   cleanUrls: true,
 

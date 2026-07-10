@@ -68,10 +68,11 @@ jobs:
           npm run build
           mkdir -p "../dist/v$DOCS_VERSION"
           cp -r .vitepress/dist/* "../dist/v$DOCS_VERSION/"
-          # Create latest symlink
-          cd ../dist
-          rm -f latest
-          ln -s "v$DOCS_VERSION" latest
+          # Copy to latest/ (GitHub Pages does not follow symlinks)
+          rm -rf "../dist/latest"
+          cp -r "../dist/v$DOCS_VERSION" "../dist/latest"
+          # Root redirect to latest version
+          cp docs/root-index.html "../dist/index.html"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
