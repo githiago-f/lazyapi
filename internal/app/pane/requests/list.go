@@ -47,6 +47,19 @@ type RequestList struct {
 	List list.Model
 }
 
+func (rl RequestList) HelpBindings() []key.Binding {
+	return []key.Binding{
+		config.DefaultKeyMap.Select,
+		config.DefaultKeyMap.Up,
+		config.DefaultKeyMap.Down,
+		config.DefaultKeyMap.Filter,
+		config.DefaultKeyMap.CreateNew,
+		config.DefaultKeyMap.Duplicate,
+		config.DefaultKeyMap.Delete,
+		config.DefaultKeyMap.Quit,
+	}
+}
+
 func (rl RequestList) Init() tea.Cmd {
 	return nil
 }

@@ -3,6 +3,7 @@ package scrollable
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -15,6 +16,13 @@ type Model struct {
 
 func New(content tea.Model) Model {
 	return Model{Content: content}
+}
+
+func (m Model) HelpBindings() []key.Binding {
+	if h, ok := m.Content.(interface{ HelpBindings() []key.Binding }); ok {
+		return h.HelpBindings()
+	}
+	return nil
 }
 
 func (m Model) Init() tea.Cmd {

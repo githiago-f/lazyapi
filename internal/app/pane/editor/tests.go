@@ -1,7 +1,9 @@
 package editor
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/githiago-f/lazyapi/internal/config"
 )
 
 type testsPane struct {
@@ -14,6 +16,12 @@ func (tp *testsPane) SetActive(b bool) {
 
 func TestsTab() *testsPane {
 	return &testsPane{}
+}
+
+func (tp testsPane) HelpBindings() []key.Binding {
+	return []key.Binding{
+		config.DefaultKeyMap.Back,
+	}
 }
 
 func (tp testsPane) Init() tea.Cmd {

@@ -59,6 +59,9 @@ func (d *documentation) IsActive() bool {
 func (d documentation) View() string {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
+	d.Summary.Style = d.Summary.Style.UnsetBorderForeground()
+	d.Description.Style = d.Description.Style.UnsetBorderForeground()
+
 	if d.active {
 		switch docField(d.fieldCursor) {
 		case summary:
@@ -72,6 +75,14 @@ func (d documentation) View() string {
 		d.Summary.View(),
 		d.Description.View(),
 	)
+}
+
+func (d documentation) HelpBindings() []key.Binding {
+	return []key.Binding{
+		config.DefaultKeyMap.Next,
+		config.DefaultKeyMap.Prev,
+		config.DefaultKeyMap.Back,
+	}
 }
 
 func (d documentation) Init() tea.Cmd {
@@ -90,7 +101,11 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		d.Summary.Style = d.Summary.Style.Width(msg.Width)
-		d.Description.Style = d.Description.Style.Width(msg.Width)
+		d.Summary.TextInput.Width = max(0, msg.Width-2)
+		descHeight := max(1, msg.Height-8)
+		d.Description.Style = d.Description.Style.Width(msg.Width).Height(descHeight)
+		d.Description.TextArea.SetWidth(max(0, msg.Width-2))
+		d.Description.TextArea.SetHeight(descHeight)
 
 	case tabs.SetActiveTabMsg:
 		d.active = msg.Active

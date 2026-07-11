@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	overlay "github.com/rmhubbert/bubbletea-overlay"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/scrollable"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
@@ -143,6 +144,13 @@ func New(request *model.Request) *RequestPane {
 func (rp RequestPane) View() string {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
+	rp.Method.Style = rp.Method.Style.UnsetBorderForeground()
+	rp.Server.Style = rp.Server.Style.UnsetBorderForeground()
+	rp.URI.Style = rp.URI.Style.UnsetBorderForeground()
+	rp.Send.Style = rp.Send.Style.UnsetBorderForeground()
+	rp.RequestTabs.Style = rp.RequestTabs.Style.UnsetBorderForeground()
+	rp.ResponsePreview.Style = rp.ResponsePreview.Style.UnsetBorderForeground()
+
 	switch field(rp.fieldsCursor) {
 	case method:
 		rp.Method.Style = rp.Method.Style.BorderForeground(activeColor)
@@ -171,7 +179,7 @@ func (rp RequestPane) View() string {
 		rp.Send.View(),
 	)
 
-	return lipgloss.JoinVertical(
+	fullView := lipgloss.JoinVertical(
 		lipgloss.Top,
 		requestURL,
 		lipgloss.JoinHorizontal(
@@ -180,6 +188,21 @@ func (rp RequestPane) View() string {
 			rp.ResponsePreview.View(),
 		),
 	)
+
+	if field(rp.fieldsCursor) == method && rp.Method.Open {
+		dd := rp.Method.DropDownView()
+		if dd != "" {
+			return overlay.Composite(dd, fullView, overlay.Left, overlay.Top, 0, 1)
+		}
+	} else if field(rp.fieldsCursor) == serverField && rp.Server.Open {
+		dd := rp.Server.DropDownView()
+		if dd != "" {
+			methodWidth, _ := lipgloss.Size(rp.Method.View())
+			return overlay.Composite(dd, fullView, overlay.Left, overlay.Top, methodWidth, 1)
+		}
+	}
+
+	return fullView
 }
 
 func (rp *RequestPane) SetEnvStore(s *env.Store) {
@@ -321,6 +344,73 @@ func (rp RequestPane) shouldBlockTabCommands() bool {
 	return field(rp.fieldsCursor) == reqTabs && rp.BlockTab
 }
 
+func (rp RequestPane) HelpBindings() []key.Binding {
+	var bindings []key.Binding
+
+	switch field(rp.fieldsCursor) {
+	case method, serverField:
+		var sel components.Selector
+		if field(rp.fieldsCursor) == method {
+			sel = rp.Method
+		} else {
+			sel = rp.Server
+		}
+		if sel.Open {
+			bindings = append(bindings,
+				config.DefaultKeyMap.Up,
+				config.DefaultKeyMap.Down,
+				config.DefaultKeyMap.Select,
+				config.DefaultKeyMap.Back,
+			)
+		} else {
+			bindings = append(bindings,
+				config.DefaultKeyMap.Up,
+				config.DefaultKeyMap.Down,
+				config.DefaultKeyMap.Select,
+			)
+		}
+
+	case uri:
+		// no special bindings
+
+	case send:
+		bindings = append(bindings,
+			config.DefaultKeyMap.Select,
+		)
+
+	case reqTabs:
+		if !rp.BlockTab {
+			bindings = append(bindings,
+				config.DefaultKeyMap.Left,
+				config.DefaultKeyMap.Right,
+				config.DefaultKeyMap.Select,
+			)
+		} else {
+			content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor].Content
+			if h, ok := content.(interface{ HelpBindings() []key.Binding }); ok {
+				bindings = append(bindings, h.HelpBindings()...)
+			}
+			return bindings
+		}
+
+	case response:
+		// viewport handles PgUp/PgDown internally
+	}
+
+	// Core keys valid when not inside tab content
+	if !rp.BlockTab {
+		bindings = append(bindings,
+			config.DefaultKeyMap.Back,
+			config.DefaultKeyMap.Save,
+			config.DefaultKeyMap.SaveExample,
+			config.DefaultKeyMap.Next,
+			config.DefaultKeyMap.Prev,
+		)
+	}
+
+	return bindings
+}
+
 func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmd      tea.Cmd
@@ -341,6 +431,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = rp.Send.Update(msg)
 		rp.Send, _ = model.(components.Button)
 		if rp.Send.Clicked {
+			rp.Send.Clicked = false
 			req := rp.GetAsRequestData()
 			cmd = tea.Batch(cmd, req.RunRequest())
 		}
@@ -373,7 +464,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		rp.RequestTabs.Width = (msg.Width / 2) - 15
+		rp.RequestTabs.Width = msg.Width / 2
 		methodWidth, methodHeight := lipgloss.Size(rp.Method.View())
 		serverWidth, _ := lipgloss.Size(rp.Server.View())
 		sendWidth, _ := lipgloss.Size(rp.Send.View())
@@ -382,13 +473,12 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tabsHeight := msg.Height - (methodHeight + 5)
 		rp.RequestTabs.Style = rp.RequestTabs.Style.Height(tabsHeight)
 
-		respWidth := msg.Width - (rp.RequestTabs.Width + 5)
+		respWidth := msg.Width - rp.RequestTabs.Width
 		rp.ResponsePreview.Width = max(0, respWidth-2)
-		rp.ResponsePreview.Height = max(0, tabsHeight-2)
+		rp.ResponsePreview.Height = max(0, tabsHeight)
 		rp.ResponsePreview.Style = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
-			Width(respWidth).
-			Height(tabsHeight)
+			Width(respWidth)
 
 		childrenMsg := tea.WindowSizeMsg{Width: rp.RequestTabs.Width - 2, Height: tabsHeight}
 
@@ -400,6 +490,16 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if consumed || rp.shouldBlockTabCommands() {
 			break
 		}
+
+		if (field(rp.fieldsCursor) == method && rp.Method.Open) ||
+			(field(rp.fieldsCursor) == serverField && rp.Server.Open) {
+			if key.Matches(msg, config.DefaultKeyMap.Next) || key.Matches(msg, config.DefaultKeyMap.Prev) {
+				rp.Method.Open = false
+				rp.Server.Open = false
+				break
+			}
+		}
+
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Select) && field(rp.fieldsCursor) == reqTabs:
 			rp.BlockTab = true
@@ -408,7 +508,13 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, config.DefaultKeyMap.Prev) && !rp.BlockTab:
 			rp.fieldsCursor = inmath.Circle(rp.fieldsCursor-1, 0, int(lastField))
 		case key.Matches(msg, config.DefaultKeyMap.Save) && !rp.BlockTab:
-			cmd = tea.Batch(cmd, store.SaveFile(rp.GetAsRequestData()))
+			cmd = tea.Batch(cmd, store.SaveFile(rp.GetAsRequestData()),
+				func() tea.Msg {
+					return components.ShowNotificationMsg{
+						Message: "✓ Request saved",
+						Type:    components.Success,
+					}
+				})
 		case key.Matches(msg, config.DefaultKeyMap.Back) && !rp.BlockTab:
 			return rp, closePane(false)
 		}

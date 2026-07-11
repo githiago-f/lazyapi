@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
@@ -39,11 +40,18 @@ func (b *body) Value() string {
 	return b.editor.Value()
 }
 
+func (b body) HelpBindings() []key.Binding {
+	return []key.Binding{
+		config.DefaultKeyMap.Back,
+	}
+}
+
 func (b body) Init() tea.Cmd {
 	return nil
 }
 
 func (b body) View() string {
+	b.editor.Style = b.editor.Style.UnsetBorderForeground()
 	if b.active {
 		b.editor.Style = b.editor.Style.BorderForeground(config.DefaultConfig.PrimaryColor())
 	}
@@ -53,9 +61,12 @@ func (b body) View() string {
 func (b body) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		bodyHeight := max(1, msg.Height-5)
 		b.editor.Style = b.editor.Style.
 			Width(msg.Width - 1).
-			Height(msg.Height - 4)
+			Height(bodyHeight)
+		b.editor.TextArea.SetWidth(max(0, msg.Width-3))
+		b.editor.TextArea.SetHeight(bodyHeight)
 
 	case tabs.SetActiveTabMsg:
 		b.SetActive(msg.Active)

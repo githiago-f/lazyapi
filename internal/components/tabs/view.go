@@ -1,9 +1,12 @@
 package tabs
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/inmath"
 )
@@ -49,7 +52,8 @@ func (t Model) View() string {
 			tabStyle = activeTabStyle
 		}
 
-		tabs = lipgloss.JoinHorizontal(lipgloss.Left, tabs, tabStyle.Render(tab.label))
+		tabLabel := tabStyle.Render(tab.label)
+		tabs = lipgloss.JoinHorizontal(lipgloss.Left, tabs, zone.Mark(tabZoneID(i), tabLabel))
 	}
 
 	tabContent := t.Tabs[t.Cursor].Content
@@ -64,6 +68,10 @@ func (t Model) View() string {
 				tabContent.View(),
 			),
 		)
+}
+
+func tabZoneID(i int) string {
+	return fmt.Sprintf("tab-label-%d", i)
 }
 
 func (t Model) Init() tea.Cmd {
@@ -102,6 +110,16 @@ func (t Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			t.Cursor = inmath.Circle(t.Cursor-1, 0, len(t.Tabs)-1)
 		case key.Matches(msg, config.DefaultKeyMap.Right) && !t.selected:
 			t.Cursor = inmath.Circle(t.Cursor+1, 0, len(t.Tabs)-1)
+		}
+
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			for i := range t.Tabs {
+				if zone.Get(tabZoneID(i)).InBounds(msg) {
+					t.Cursor = i
+					return t, nil
+				}
+			}
 		}
 	}
 

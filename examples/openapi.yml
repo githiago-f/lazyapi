@@ -1,3 +1,4 @@
+components: {}
 info:
     description: A sample OpenAPI spec for testing lazyapi
     title: Example API

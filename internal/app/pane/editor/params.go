@@ -12,7 +12,6 @@ import (
 type params struct {
 	active bool
 	width  int
-	prevKey rune
 
 	focusPos int // linear index across all sub-fields; -1 = none
 	params   []paramField
@@ -59,6 +58,7 @@ func (p *params) SetValue(query map[string]string, pathParams map[string]string)
 	if len(p.params) == 0 {
 		p.params = []paramField{createParam()}
 	}
+	p.updateFieldWidths()
 }
 
 func (p *params) QueryValue() map[string]string {
@@ -81,35 +81,45 @@ func (p params) View() string {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
 	for i := range p.query {
-		if p.active && p.focusPos >= 0 && p.focusPos < len(p.query)*2 {
-			row := p.focusPos / 2
-			col := p.focusPos % 2
-			if row == i {
-				if col == 0 {
-					p.query[i].name.Style = p.query[i].name.Style.BorderForeground(activeColor)
-				} else {
-					p.query[i].value.Style = p.query[i].value.Style.BorderForeground(activeColor)
-				}
+		p.query[i].name.Style = p.query[i].name.Style.UnsetBorderForeground()
+		p.query[i].value.Style = p.query[i].value.Style.UnsetBorderForeground()
+	}
+	for i := range p.params {
+		p.params[i].name.Style = p.params[i].name.Style.UnsetBorderForeground()
+		p.params[i].value.Style = p.params[i].value.Style.UnsetBorderForeground()
+	}
+
+	if p.active && p.focusPos >= 0 && p.focusPos < len(p.query)*2 {
+		row := p.focusPos / 2
+		col := p.focusPos % 2
+		if row < len(p.query) {
+			if col == 0 {
+				p.query[row].name.Style = p.query[row].name.Style.BorderForeground(activeColor)
+			} else {
+				p.query[row].value.Style = p.query[row].value.Style.BorderForeground(activeColor)
 			}
 		}
+	}
+	if p.active && p.focusPos >= len(p.query)*2 {
+		offset := p.focusPos - len(p.query)*2
+		row := offset / 2
+		col := offset % 2
+		if row < len(p.params) {
+			if col == 0 {
+				p.params[row].name.Style = p.params[row].name.Style.BorderForeground(activeColor)
+			} else {
+				p.params[row].value.Style = p.params[row].value.Style.BorderForeground(activeColor)
+			}
+		}
+	}
+
+	for i := range p.query {
 		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, p.query[i].View())
 	}
 
 	customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, titleStyle.Render("Path params"))
 
 	for i := range p.params {
-		if p.active && p.focusPos >= len(p.query)*2 {
-			offset := p.focusPos - len(p.query)*2
-			row := offset / 2
-			col := offset % 2
-			if row == i {
-				if col == 0 {
-					p.params[i].name.Style = p.params[i].name.Style.BorderForeground(activeColor)
-				} else {
-					p.params[i].value.Style = p.params[i].value.Style.BorderForeground(activeColor)
-				}
-			}
-		}
 		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, p.params[i].View())
 	}
 
@@ -117,19 +127,35 @@ func (p params) View() string {
 }
 
 func (p *params) updateFieldWidths() {
-	width := (p.width / 2)
+	totalWidth := p.width - 2
+	nameWidth := totalWidth / 2
+	valueWidth := totalWidth - nameWidth
 	for i := range p.query {
-		p.query[i].name.Style = lipgloss.NewStyle().Width(width - 2)
-		p.query[i].value.Style = lipgloss.NewStyle().Width(width)
+		p.query[i].name.Style = lipgloss.NewStyle().Width(nameWidth)
+		p.query[i].name.TextInput.Width = max(0, nameWidth-2)
+		p.query[i].value.Style = lipgloss.NewStyle().Width(valueWidth)
+		p.query[i].value.TextInput.Width = max(0, valueWidth-2)
 	}
 	for i := range p.params {
-		p.params[i].name.Style = lipgloss.NewStyle().Width(width - 2)
-		p.params[i].value.Style = lipgloss.NewStyle().Width(width)
+		p.params[i].name.Style = lipgloss.NewStyle().Width(nameWidth)
+		p.params[i].name.TextInput.Width = max(0, nameWidth-2)
+		p.params[i].value.Style = lipgloss.NewStyle().Width(valueWidth)
+		p.params[i].value.TextInput.Width = max(0, valueWidth-2)
 	}
 }
 
 func (p params) Init() tea.Cmd {
 	return nil
+}
+
+func (p params) HelpBindings() []key.Binding {
+	return []key.Binding{
+		config.DefaultKeyMap.Next,
+		config.DefaultKeyMap.Prev,
+		config.DefaultKeyMap.AddQueryParam,
+		config.DefaultKeyMap.AddPathParam,
+		config.DefaultKeyMap.Back,
+	}
 }
 
 func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -143,23 +169,17 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return &p, nil
 
 	case tea.KeyMsg:
-		if p.focusPos < 0 {
-			isNewCmd := p.prevKey == 'n'
-			switch {
-			case key.Matches(msg, config.DefaultKeyMap.New):
-				p.prevKey = 'n'
-			case msg.String() == "q" && isNewCmd:
-				p.query = append(p.query, createParam())
-				p.prevKey = '0'
-			case msg.String() == "p" && isNewCmd:
-				p.params = append(p.params, createParam())
-				p.prevKey = '0'
-			default:
-				p.prevKey = '0'
-			}
+		if !p.active {
+			return &p, nil
 		}
 
-		if !p.active {
+		// Shortcuts intercepted before field processing
+		if key.Matches(msg, config.DefaultKeyMap.AddQueryParam) {
+			p.query = append(p.query, createParam())
+			return &p, nil
+		}
+		if key.Matches(msg, config.DefaultKeyMap.AddPathParam) {
+			p.params = append(p.params, createParam())
 			return &p, nil
 		}
 
@@ -177,7 +197,7 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		default:
-			if p.focusPos < 0 || total == 0 {
+			if total == 0 {
 				return &p, nil
 			}
 
