@@ -75,8 +75,7 @@ func (p *params) Reset() {
 }
 
 func (p params) View() string {
-	titleStyle = titleStyle.Width(p.width)
-	customParams := titleStyle.Render("Query")
+	customParams := titleStyle.Width(p.width).Render("Query")
 
 	activeColor := config.DefaultConfig.PrimaryColor()
 
@@ -176,10 +175,12 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Shortcuts intercepted before field processing
 		if key.Matches(msg, config.DefaultKeyMap.AddQueryParam) {
 			p.query = append(p.query, createParam())
+			p.updateFieldWidths()
 			return &p, nil
 		}
 		if key.Matches(msg, config.DefaultKeyMap.AddPathParam) {
 			p.params = append(p.params, createParam())
+			p.updateFieldWidths()
 			return &p, nil
 		}
 

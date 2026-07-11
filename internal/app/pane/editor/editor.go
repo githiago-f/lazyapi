@@ -480,7 +480,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Border(lipgloss.NormalBorder()).
 			Width(respWidth)
 
-		childrenMsg := tea.WindowSizeMsg{Width: rp.RequestTabs.Width - 2, Height: tabsHeight}
+		childrenMsg := tea.WindowSizeMsg{Width: rp.RequestTabs.Width - 2, Height: max(0, tabsHeight-4)}
 
 		model, cmd = rp.RequestTabs.Update(childrenMsg)
 		rp.RequestTabs, _ = model.(tabs.Model)

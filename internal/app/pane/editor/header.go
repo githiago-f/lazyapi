@@ -42,7 +42,7 @@ func (h header) Init() tea.Cmd {
 }
 
 func (h header) View() string {
-	customParams := titleStyle.Render("Headers")
+	customParams := titleStyle.Width(h.width).Render("Headers")
 	activeColor := config.DefaultConfig.PrimaryColor()
 
 	for i := range h.headers {
@@ -132,6 +132,7 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Shortcuts intercepted before field processing
 		if key.Matches(msg, config.DefaultKeyMap.AddHeader) {
 			h.headers = append(h.headers, createParam())
+			h.updateFieldWidths()
 			return &h, nil
 		}
 
