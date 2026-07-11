@@ -31,9 +31,13 @@ func IsOpenAPIFile(path string) bool {
 }
 
 func ParseSpec(path string) (*openapi3.T, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read OpenAPI spec %s: %w", path, err)
+	}
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = false
-	doc, err := loader.LoadFromFile(path)
+	doc, err := loader.LoadFromData(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OpenAPI spec %s: %w", path, err)
 	}
@@ -488,13 +492,13 @@ func applyAuthSchemes(spec *openapi3.T, ref model.OpenAPIRef, schemes []model.Au
 
 	if len(schemes) == 0 {
 		if ref.Path == "" {
-			spec.Security = openapi3.SecurityRequirements{}
+			spec.Security = nil
 		} else {
 			pathItem := spec.Paths.Find(ref.Path)
 			if pathItem != nil {
 				op := pathItem.GetOperation(ref.Method)
 				if op != nil {
-					op.Security = &openapi3.SecurityRequirements{}
+					op.Security = nil
 				}
 			}
 		}

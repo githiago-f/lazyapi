@@ -14,7 +14,6 @@ type KeyMap struct {
 	Select    key.Binding
 	Filter    key.Binding
 	Delete    key.Binding
-	New       key.Binding
 	CreateNew key.Binding
 	Duplicate key.Binding
 	Ok        key.Binding
@@ -30,23 +29,26 @@ type KeyMap struct {
 	Quit key.Binding
 	Kill key.Binding
 
-	Help key.Binding
+	HelpToggle key.Binding
+
+	// Tab-specific actions (editor)
+	AddQueryParam  key.Binding
+	AddPathParam   key.Binding
+	AddHeader      key.Binding
+	AddAuth        key.Binding
+	DelAuth        key.Binding
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
-	if DefaultConfig.Active == RequestEditor {
-		return []key.Binding{k.Back, k.Save, k.SaveExample, k.Next, k.Prev, k.Help}
-	}
-
-	return []key.Binding{k.Select, k.Up, k.Down, k.Filter, k.CreateNew, k.Help}
+	return nil
 }
 
 func (k KeyMap) FullHelp() [][]key.Binding {
 	if DefaultConfig.Active == RequestEditor {
 		return [][]key.Binding{
 			{k.Next, k.Prev},
-			{k.Back, k.Save, k.SaveExample},
-			{k.Kill},
+			{k.Back, k.Save, k.SaveExample, k.Quit, k.Kill},
+			{k.AddQueryParam, k.AddPathParam, k.AddHeader, k.AddAuth, k.DelAuth},
 		}
 	}
 
@@ -62,8 +64,8 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("↑/k", "move up"),
 	),
 	Left: key.NewBinding(
-		key.WithKeys("h", tea.KeyLeft.String()),
-		key.WithHelp("h", "move left"),
+		key.WithKeys(tea.KeyLeft.String()),
+		key.WithHelp("←", "move left"),
 	),
 	Right: key.NewBinding(
 		key.WithKeys("l", tea.KeyRight.String()),
@@ -106,16 +108,12 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("esc", "back"),
 	),
 	Save: key.NewBinding(
-		key.WithKeys(tea.KeyCtrlS.String()),
-		key.WithHelp("ctrl+s", "save"),
+		key.WithKeys(tea.KeyCtrlO.String()),
+		key.WithHelp("ctrl+o", "save"),
 	),
 	SaveExample: key.NewBinding(
 		key.WithKeys(tea.KeyCtrlE.String()),
 		key.WithHelp("ctrl+e", "save example"),
-	),
-	New: key.NewBinding(
-		key.WithKeys("n", "+"),
-		key.WithHelp("+/n", "add"),
 	),
 	CreateNew: key.NewBinding(
 		key.WithKeys(tea.KeyCtrlN.String()),
@@ -123,14 +121,34 @@ var DefaultKeyMap = KeyMap{
 	),
 	Duplicate: key.NewBinding(
 		key.WithKeys("d"),
-		key.WithHelp("d", "duplicate request"),
+		key.WithHelp("d", "duplicate"),
 	),
 	Delete: key.NewBinding(
 		key.WithKeys("x"),
-		key.WithHelp("x", "eXclude request"),
+		key.WithHelp("x", "delete"),
 	),
-	Help: key.NewBinding(
-		key.WithKeys("h"),
-		key.WithHelp("h", "help"),
+	HelpToggle: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "help"),
+	),
+	AddQueryParam: key.NewBinding(
+		key.WithKeys(tea.KeyCtrlQ.String()),
+		key.WithHelp("ctrl+q", "add query"),
+	),
+	AddPathParam: key.NewBinding(
+		key.WithKeys(tea.KeyCtrlP.String()),
+		key.WithHelp("ctrl+p", "add path param"),
+	),
+	AddHeader: key.NewBinding(
+		key.WithKeys(tea.KeyCtrlG.String()),
+		key.WithHelp("ctrl+g", "add header"),
+	),
+	AddAuth: key.NewBinding(
+		key.WithKeys(tea.KeyCtrlR.String()),
+		key.WithHelp("ctrl+r", "add auth"),
+	),
+	DelAuth: key.NewBinding(
+		key.WithKeys(tea.KeyBackspace.String(), tea.KeyDelete.String()),
+		key.WithHelp("⌫/del", "delete"),
 	),
 }

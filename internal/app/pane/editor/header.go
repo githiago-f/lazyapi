@@ -10,9 +10,8 @@ import (
 )
 
 type header struct {
-	active    bool
-	width     int
-	cmdBuffer rune
+	active   bool
+	width    int
 
 	focusPos int
 	headers  []paramField
@@ -47,17 +46,23 @@ func (h header) View() string {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
 	for i := range h.headers {
-		if h.active && h.focusPos >= 0 {
-			row := h.focusPos / 2
-			col := h.focusPos % 2
-			if row == i {
-				if col == 0 {
-					h.headers[i].name.Style = h.headers[i].name.Style.BorderForeground(activeColor)
-				} else {
-					h.headers[i].value.Style = h.headers[i].value.Style.BorderForeground(activeColor)
-				}
+		h.headers[i].name.Style = h.headers[i].name.Style.UnsetBorderForeground()
+		h.headers[i].value.Style = h.headers[i].value.Style.UnsetBorderForeground()
+	}
+
+	if h.active && h.focusPos >= 0 {
+		row := h.focusPos / 2
+		col := h.focusPos % 2
+		if row < len(h.headers) {
+			if col == 0 {
+				h.headers[row].name.Style = h.headers[row].name.Style.BorderForeground(activeColor)
+			} else {
+				h.headers[row].value.Style = h.headers[row].value.Style.BorderForeground(activeColor)
 			}
 		}
+	}
+
+	for i := range h.headers {
 		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, h.headers[i].View())
 	}
 
@@ -65,9 +70,14 @@ func (h header) View() string {
 }
 
 func (h *header) updateFieldWidths() {
+	totalWidth := h.width - 2
+	nameWidth := totalWidth / 2
+	valueWidth := totalWidth - nameWidth
 	for i := range h.headers {
-		h.headers[i].name.Style = lipgloss.NewStyle().Width(h.width/2 - 2)
-		h.headers[i].value.Style = lipgloss.NewStyle().Width(h.width / 2)
+		h.headers[i].name.Style = lipgloss.NewStyle().Width(nameWidth)
+		h.headers[i].name.TextInput.Width = max(0, nameWidth-2)
+		h.headers[i].value.Style = lipgloss.NewStyle().Width(valueWidth)
+		h.headers[i].value.TextInput.Width = max(0, valueWidth-2)
 	}
 }
 
@@ -80,6 +90,7 @@ func (h *header) SetValue(headers map[string]string) {
 	if len(h.headers) == 0 {
 		h.headers = []paramField{createParam()}
 	}
+	h.updateFieldWidths()
 }
 
 func (h *header) Value() map[string]string {
@@ -94,6 +105,15 @@ func (h *header) Value() map[string]string {
 	return result
 }
 
+func (h header) HelpBindings() []key.Binding {
+	return []key.Binding{
+		config.DefaultKeyMap.Next,
+		config.DefaultKeyMap.Prev,
+		config.DefaultKeyMap.AddHeader,
+		config.DefaultKeyMap.Back,
+	}
+}
+
 func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -105,20 +125,13 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return &h, nil
 
 	case tea.KeyMsg:
-		if h.focusPos < 0 {
-			isNewCmd := h.cmdBuffer == 'n'
-			switch {
-			case key.Matches(msg, config.DefaultKeyMap.New):
-				h.cmdBuffer = 'n'
-			case msg.String() == "h" && isNewCmd:
-				h.headers = append(h.headers, createParam())
-				h.cmdBuffer = '0'
-			default:
-				h.cmdBuffer = '0'
-			}
+		if !h.active {
+			return &h, nil
 		}
 
-		if !h.active {
+		// Shortcuts intercepted before field processing
+		if key.Matches(msg, config.DefaultKeyMap.AddHeader) {
+			h.headers = append(h.headers, createParam())
 			return &h, nil
 		}
 
@@ -136,7 +149,7 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		default:
-			if h.focusPos < 0 || total == 0 {
+			if total == 0 {
 				return &h, nil
 			}
 

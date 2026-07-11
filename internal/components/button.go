@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
@@ -17,7 +18,8 @@ type Button struct {
 
 	Clicked bool
 
-	Style lipgloss.Style
+	Style   lipgloss.Style
+	zoneID  string
 }
 
 func (b Button) Init() tea.Cmd {
@@ -25,14 +27,19 @@ func (b Button) Init() tea.Cmd {
 }
 
 func (b Button) View() string {
+	var v string
 	switch {
 	case !b.Active:
-		return b.Style.
+		v = b.Style.
 			Background(lipgloss.Color(config.Overlay1)).
 			Render(b.Label)
 	default:
-		return b.Style.Render(b.Label)
+		v = b.Style.Render(b.Label)
 	}
+	if b.zoneID == "" {
+		b.zoneID = "btn-" + b.Label
+	}
+	return zone.Mark(b.zoneID, v)
 }
 
 func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -43,7 +50,20 @@ func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Select) && b.Active:
 			b.Clicked = true
-			return b, tea.Tick(300, func(t time.Time) tea.Msg {
+			return b, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
+				return ButtonClickedMsg{}
+			})
+		}
+	case tea.MouseMsg:
+		if msg.Action != tea.MouseActionRelease || msg.Button != tea.MouseButtonLeft || !b.Active {
+			break
+		}
+		if b.zoneID == "" {
+			b.zoneID = "btn-" + b.Label
+		}
+		if zone.Get(b.zoneID).InBounds(msg) {
+			b.Clicked = true
+			return b, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
 				return ButtonClickedMsg{}
 			})
 		}

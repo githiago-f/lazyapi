@@ -185,7 +185,8 @@ func (as *authScheme) viewFields(width int, isActive bool, activeFieldIdx int) s
 
 func renderField(label string, f *components.Field, width int, focused bool) string {
 	activeColor := config.DefaultConfig.PrimaryColor()
-	f.Style = lipgloss.NewStyle().Width(width - len(label) - 2)
+	f.Style = lipgloss.NewStyle().Width(width).UnsetBorderForeground()
+	f.TextInput.Width = max(0, width-2)
 	if focused {
 		f.Style = f.Style.BorderForeground(activeColor)
 	}
@@ -198,7 +199,7 @@ func renderField(label string, f *components.Field, width int, focused bool) str
 
 func renderSelector(label string, s *components.Selector, width int, focused bool) string {
 	activeColor := config.DefaultConfig.PrimaryColor()
-	s.Style = lipgloss.NewStyle().Width(width - len(label) - 2)
+	s.Style = lipgloss.NewStyle().Width(width).UnsetBorderForeground()
 	if focused {
 		s.Style = s.Style.BorderForeground(activeColor)
 	}
@@ -210,11 +211,10 @@ func renderSelector(label string, s *components.Selector, width int, focused boo
 }
 
 type auth struct {
-	active    bool
-	width     int
-	cmdBuffer rune
-	focusPos  int
-	schemes   []authScheme
+	active   bool
+	width    int
+	focusPos int
+	schemes  []authScheme
 }
 
 func AuthorizeTab() *auth {
@@ -291,7 +291,7 @@ func (a auth) View() string {
 			label = a.schemes[si].schemeName
 		}
 
-		schemeContent := " " + label + "\n" + a.schemes[si].viewFields(a.width-2, isFocused, relFocus)
+		schemeContent := " " + label + "\n" + a.schemes[si].viewFields(max(0, a.width-6), isFocused, relFocus)
 
 		s := schemeStyle
 		if isFocused {
@@ -382,6 +382,16 @@ func (a *auth) Value() []model.AuthScheme {
 	return schemes
 }
 
+func (a auth) HelpBindings() []key.Binding {
+	return []key.Binding{
+		config.DefaultKeyMap.Next,
+		config.DefaultKeyMap.Prev,
+		config.DefaultKeyMap.AddAuth,
+		config.DefaultKeyMap.DelAuth,
+		config.DefaultKeyMap.Back,
+	}
+}
+
 func (a auth) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -398,42 +408,26 @@ func (a auth) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		total := a.totalFields()
 
-		// Two-key chords: n+a = add, x+a = delete focused scheme
-		if a.cmdBuffer != 0 {
-			suffix := msg.String()
-			prev := a.cmdBuffer
-			a.cmdBuffer = 0
-			if prev == 'n' && suffix == "a" {
-				a.schemes = append(a.schemes, newAuthScheme())
-				if a.focusPos < 0 {
-					a.focusPos = 0
-				}
-				return &a, nil
-			}
-			if prev == 'x' && suffix == "a" {
-				if len(a.schemes) > 0 && a.focusPos >= 0 {
-					si, _ := a.resolveField(a.focusPos)
-					a.schemes = append(a.schemes[:si], a.schemes[si+1:]...)
-					if len(a.schemes) == 0 {
-						a.focusPos = -1
-					} else {
-						a.focusPos = max(0, min(a.focusPos, a.totalFields()-1))
-					}
-				}
-				return &a, nil
-			}
+		// Add scheme — intercepted before field processing
+		if key.Matches(msg, config.DefaultKeyMap.AddAuth) {
+			a.schemes = append(a.schemes, newAuthScheme())
+			a.focusPos = 0
+			return &a, nil
 		}
 
-		// Chord prefix keys
-		if a.focusPos < 0 {
-			if key.Matches(msg, config.DefaultKeyMap.New) {
-				a.cmdBuffer = 'n'
+		// Delete scheme — only on the type selector (field 0) to avoid
+		// stealing backspace from text fields
+		if a.focusPos >= 0 {
+			si, fi := a.resolveField(a.focusPos)
+			if fi == 0 && key.Matches(msg, config.DefaultKeyMap.DelAuth) {
+				a.schemes = append(a.schemes[:si], a.schemes[si+1:]...)
+				if len(a.schemes) == 0 {
+					a.focusPos = -1
+				} else {
+					a.focusPos = max(0, min(a.focusPos, a.totalFields()-1))
+				}
 				return &a, nil
 			}
-		}
-		if key.Matches(msg, config.DefaultKeyMap.Delete) {
-			a.cmdBuffer = 'x'
-			return &a, nil
 		}
 
 		// Navigation
@@ -449,7 +443,7 @@ func (a auth) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		default:
-			if a.focusPos < 0 || total == 0 {
+			if total == 0 {
 				return &a, nil
 			}
 

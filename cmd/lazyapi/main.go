@@ -4,6 +4,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/githiago-f/lazyapi/internal/app"
 	"github.com/githiago-f/lazyapi/internal/cli"
 )
@@ -31,6 +32,9 @@ func main() {
 			}
 		}
 	}
+
+	zone.NewGlobal()
+	defer zone.Close()
 
 	p := tea.NewProgram(app.NewTui(defaultFile, envFile), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {

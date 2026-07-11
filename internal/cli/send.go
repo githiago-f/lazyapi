@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -11,7 +10,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/store"
 )
 
-func SendRequest(args []string) {
+func SendRequest(args []string) error {
 	var file, path, method, serverURL, envFile string
 	var saveExample bool
 
@@ -41,27 +40,19 @@ func SendRequest(args []string) {
 	}
 
 	if file == "" || path == "" || method == "" {
-		fmt.Fprintln(os.Stderr, "Usage: lazyapi send request <file> <path> <method> [--server url] [--env file] [--save-example]")
-		os.Exit(1)
-	}
-
-	if _, err := os.Stat(file); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "File %q not found\n", file)
-		os.Exit(1)
-	}
-
-	if !store.IsOpenAPIFile(file) {
-		fmt.Fprintf(os.Stderr, "%q is not a valid OpenAPI file\n", file)
-		os.Exit(1)
+		return fmt.Errorf("usage: lazyapi send request <file> <path> <method> [--server url] [--env file] [--save-example]")
 	}
 
 	spec, err := store.ParseSpec(file)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing spec: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error parsing spec: %w", err)
 	}
 
 	methodUpper := strings.ToUpper(method)
+	if methodUpper == "" {
+		return fmt.Errorf("invalid HTTP method: %q", method)
+	}
+
 	ref := model.OpenAPIRef{
 		FilePath: file,
 		Path:     path,
@@ -70,18 +61,13 @@ func SendRequest(args []string) {
 
 	req := store.OperationToRequest(spec, ref)
 	if req.URI == "" {
-		fmt.Fprintf(os.Stderr, "Operation %s %s not found in %s\n", methodUpper, path, file)
-		os.Exit(1)
+		return fmt.Errorf("operation %s %s not found in %s", methodUpper, path, file)
 	}
 
 	if serverURL != "" {
 		if idx, err := strconv.Atoi(serverURL); err == nil {
 			if idx < 0 || idx >= len(req.Servers) {
-				fmt.Fprintf(os.Stderr, "Server index %d out of range. Available servers:\n", idx)
-				for i, s := range req.Servers {
-					fmt.Fprintf(os.Stderr, "  %d: %s\n", i, s)
-				}
-				os.Exit(1)
+				return fmt.Errorf("server index %d out of range", idx)
 			}
 			req.ServerURL = req.Servers[idx]
 		} else {
@@ -92,8 +78,7 @@ func SendRequest(args []string) {
 	}
 
 	if req.ServerURL == "" {
-		fmt.Fprintln(os.Stderr, "No server URL available. Specify one with --server <url>")
-		os.Exit(1)
+		return fmt.Errorf("no server URL available. Specify one with --server <url>")
 	}
 
 	fmt.Printf("Server: %s\n", req.ServerURL)
@@ -101,15 +86,13 @@ func SendRequest(args []string) {
 	envStore := env.NewStore(envFile)
 	envMap, err := envStore.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading env file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error loading env file: %w", err)
 	}
 	req.Env = envMap
 
 	response, body, err := req.Send()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Request failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 
@@ -127,13 +110,13 @@ func SendRequest(args []string) {
 
 	if saveExample {
 		if err := store.SaveResponseExample(spec, ref, response.StatusCode, response.Header, body); err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving example: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error saving example: %w", err)
 		}
 		if err := store.SaveSpec(file, spec); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing spec: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error writing spec: %w", err)
 		}
 		fmt.Println("\n✓ Example saved to spec")
 	}
+
+	return nil
 }
