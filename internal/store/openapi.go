@@ -50,7 +50,7 @@ func ListOperations(spec *openapi3.T, filePath string) []requests.RequestItem {
 		}
 		for method, op := range pathItem.Operations() {
 			items = append(items, requests.RequestItem{
-				Method: methodFromLabel(method),
+				Method: model.MethodFromLabel(method),
 				URI:    pathKey,
 				About: model.About{
 					Summary:     op.Summary,
@@ -76,27 +76,6 @@ func ListOperations(spec *openapi3.T, filePath string) []requests.RequestItem {
 	return items
 }
 
-func methodFromLabel(label string) model.Method {
-	switch label {
-	case "GET":
-		return model.GET
-	case "POST":
-		return model.POST
-	case "PATCH":
-		return model.PATCH
-	case "PUT":
-		return model.PUT
-	case "DELETE":
-		return model.DELETE
-	case "OPTIONS":
-		return model.OPTIONS
-	case "HEAD":
-		return model.HEAD
-	default:
-		return model.GET
-	}
-}
-
 func OperationToRequest(spec *openapi3.T, ref model.OpenAPIRef) model.Request {
 	pathItem := spec.Paths.Find(ref.Path)
 	if pathItem == nil {
@@ -111,7 +90,7 @@ func OperationToRequest(spec *openapi3.T, ref model.OpenAPIRef) model.Request {
 	req := model.Request{
 		FileName: ref.FilePath,
 		URI:      ref.Path,
-		Method:   methodFromLabel(ref.Method),
+		Method:   model.MethodFromLabel(ref.Method),
 		About: model.About{
 			Summary:     op.Summary,
 			Description: op.Description,
@@ -210,14 +189,7 @@ func ApplyRequestToOperation(spec *openapi3.T, ref model.OpenAPIRef, data model.
 		key := "path:" + name
 		keep[key] = true
 		if _, ok := existing[key]; !ok {
-			op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
-				Value: &openapi3.Parameter{
-					Name:     name,
-					In:       "path",
-					Required: true,
-					Schema:   &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				},
-			})
+			op.Parameters = append(op.Parameters, makeParamRef(name, "path", true))
 		}
 	}
 
@@ -225,13 +197,7 @@ func ApplyRequestToOperation(spec *openapi3.T, ref model.OpenAPIRef, data model.
 		key := "query:" + name
 		keep[key] = true
 		if _, ok := existing[key]; !ok {
-			op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
-				Value: &openapi3.Parameter{
-					Name:   name,
-					In:     "query",
-					Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				},
-			})
+			op.Parameters = append(op.Parameters, makeParamRef(name, "query", false))
 		}
 	}
 
@@ -239,13 +205,7 @@ func ApplyRequestToOperation(spec *openapi3.T, ref model.OpenAPIRef, data model.
 		key := "header:" + name
 		keep[key] = true
 		if _, ok := existing[key]; !ok {
-			op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
-				Value: &openapi3.Parameter{
-					Name: name,
-					In:   "header",
-					Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-				},
-			})
+			op.Parameters = append(op.Parameters, makeParamRef(name, "header", false))
 		}
 	}
 
@@ -283,28 +243,9 @@ func RemoveOperationFromSpec(spec *openapi3.T, ref model.OpenAPIRef) error {
 		return fmt.Errorf("path %q not found", ref.Path)
 	}
 
-	switch ref.Method {
-	case "GET":
-		pathItem.Get = nil
-	case "POST":
-		pathItem.Post = nil
-	case "PUT":
-		pathItem.Put = nil
-	case "PATCH":
-		pathItem.Patch = nil
-	case "DELETE":
-		pathItem.Delete = nil
-	case "OPTIONS":
-		pathItem.Options = nil
-	case "HEAD":
-		pathItem.Head = nil
-	default:
-		return fmt.Errorf("unknown method %q", ref.Method)
-	}
+	pathItem.SetOperation(ref.Method, nil)
 
-	if pathItem.Get == nil && pathItem.Post == nil && pathItem.Put == nil &&
-		pathItem.Patch == nil && pathItem.Delete == nil && pathItem.Options == nil &&
-		pathItem.Head == nil {
+	if pathItem.Operations() == nil || len(pathItem.Operations()) == 0 {
 		spec.Paths.Delete(ref.Path)
 	}
 
@@ -323,32 +264,13 @@ func AddOperationToSpec(spec *openapi3.T, path, method string, data model.Reques
 	op.Description = data.About.Description
 
 	for name := range data.Params {
-		op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
-			Value: &openapi3.Parameter{
-				Name:     name,
-				In:       "path",
-				Required: true,
-				Schema:   &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-			},
-		})
+		op.Parameters = append(op.Parameters, makeParamRef(name, "path", true))
 	}
 	for name := range data.Query {
-		op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
-			Value: &openapi3.Parameter{
-				Name:   name,
-				In:     "query",
-				Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-			},
-		})
+		op.Parameters = append(op.Parameters, makeParamRef(name, "query", false))
 	}
 	for name := range data.Headers {
-		op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
-			Value: &openapi3.Parameter{
-				Name: name,
-				In:   "header",
-				Schema: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-			},
-		})
+		op.Parameters = append(op.Parameters, makeParamRef(name, "header", false))
 	}
 
 	if data.Body.Raw != "" {
@@ -377,6 +299,17 @@ func AddOperationToSpec(spec *openapi3.T, path, method string, data model.Reques
 
 	ref := model.OpenAPIRef{Path: path, Method: method}
 	return applyAuthSchemes(spec, ref, data.Auth)
+}
+
+func makeParamRef(name, in string, required bool) *openapi3.ParameterRef {
+	return &openapi3.ParameterRef{
+		Value: &openapi3.Parameter{
+			Name:     name,
+			In:       in,
+			Required: required,
+			Schema:   &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+		},
+	}
 }
 
 func LoadServers(filePath string) ([]string, string) {

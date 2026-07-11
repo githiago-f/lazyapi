@@ -47,9 +47,6 @@ func (h header) View() string {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
 	for i := range h.headers {
-		h.headers[i].name.Style = lipgloss.NewStyle().Width(h.width/2 - 2)
-		h.headers[i].value.Style = lipgloss.NewStyle().Width(h.width / 2)
-
 		if h.active && h.focusPos >= 0 {
 			row := h.focusPos / 2
 			col := h.focusPos % 2
@@ -65,6 +62,13 @@ func (h header) View() string {
 	}
 
 	return customParams
+}
+
+func (h *header) updateFieldWidths() {
+	for i := range h.headers {
+		h.headers[i].name.Style = lipgloss.NewStyle().Width(h.width/2 - 2)
+		h.headers[i].value.Style = lipgloss.NewStyle().Width(h.width / 2)
+	}
 }
 
 func (h *header) SetValue(headers map[string]string) {
@@ -94,6 +98,7 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		h.width = msg.Width
+		h.updateFieldWidths()
 
 	case tabs.SetActiveTabMsg:
 		h.SetActive(msg.Active)

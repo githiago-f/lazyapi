@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -70,8 +71,13 @@ func (r *Request) Send() (*http.Response, string, error) {
 	for name, value := range r.Params {
 		resolvedParams[name] = env.Resolve(value, ctx)
 	}
-	for name, value := range resolvedParams {
-		fullURL = strings.ReplaceAll(fullURL, "{"+name+"}", value)
+	paramKeys := make([]string, 0, len(resolvedParams))
+	for name := range resolvedParams {
+		paramKeys = append(paramKeys, name)
+	}
+	sort.Strings(paramKeys)
+	for _, name := range paramKeys {
+		fullURL = strings.ReplaceAll(fullURL, "{"+name+"}", resolvedParams[name])
 	}
 
 	resolvedBody := env.Resolve(r.Body.Raw, ctx)

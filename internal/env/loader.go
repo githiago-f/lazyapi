@@ -28,15 +28,8 @@ func Load(filepath string) (map[string]string, error) {
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 {
-			key := strings.TrimSpace(parts[0])
-			val := strings.TrimSpace(parts[1])
-			val = strings.Trim(val, `"'`)
+		key, val, ok := parseEnvLine(scanner.Text())
+		if ok {
 			env[key] = val
 		}
 	}
@@ -111,17 +104,25 @@ func mergeDotenv(base map[string]string, data string) map[string]string {
 	}
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 {
-			key := strings.TrimSpace(parts[0])
-			val := strings.TrimSpace(parts[1])
-			val = strings.Trim(val, `"'`)
+		key, val, ok := parseEnvLine(scanner.Text())
+		if ok {
 			out[key] = val
 		}
 	}
 	return out
+}
+
+func parseEnvLine(line string) (key, value string, ok bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return "", "", false
+	}
+	parts := strings.SplitN(line, "=", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	key = strings.TrimSpace(parts[0])
+	val := strings.TrimSpace(parts[1])
+	val = strings.Trim(val, `"'`)
+	return key, val, true
 }

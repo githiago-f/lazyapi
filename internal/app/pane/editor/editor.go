@@ -71,6 +71,7 @@ type RequestPane struct {
 	envStore *env.Store
 
 	BlockTab bool
+	dirty    bool
 
 	Method components.Selector
 	Server components.Selector
@@ -395,6 +396,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rp.RequestTabs, _ = model.(tabs.Model)
 
 	case tea.KeyMsg:
+		rp.dirty = true
 		if consumed || rp.shouldBlockTabCommands() {
 			break
 		}
@@ -412,7 +414,8 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if rp.fileName != "" {
+	if rp.fileName != "" && rp.dirty {
+		rp.dirty = false
 		cmd = tea.Batch(cmd, store.SaveTempFile(rp.GetAsRequestData()))
 	}
 

@@ -9,80 +9,152 @@ cmd/
   lazyapi/main.go          # Entry — TUI (default) or CLI (subcommands)
 internal/
   app/                     # bubbletea model + views
-    tui.go                 #   Main Tui struct, Init/Update/View
+    tui.go                 #   Main Tui struct, Init/Update/View, state machine
     pane/
       editor/              #   Request editor (method, URL, headers, body, params, tests, auth)
+        editor.go          #     RequestPane — top-level Update/View, cursor field cycle
+        documentation.go   #     Summary + Description fields
+        body.go            #     Body textarea
+        header.go          #     Header key/value pairs (n+a to add)
+        params.go          #     Query + Path params (n+q / n+p to add)
+        auth.go            #     Auth schemes (n+a / x+a to add/remove)
+        tests.go           #     Stub — returns "Tests" string
+        field.go           #     paramField helper (name+value pair)
       requests/            #   Request list (tree with GroupByResource, CRUD messages)
-      responses/           #   Response preview
-  cli/                     # CLI commands (create, remove, add, smoke)
-  components/              # Reusable UI components (button, field, modal, tabs, selector, etc.)
+        list.go            #     RequestList — wraps bubbles/list, emits open/delete/duplicate msgs
+        group.go           #     TreeDelegate renderer + GroupByResource (splits URI roots)
+        item.go            #     RequestItem (Method, URI, About, timing badges)
+      responses/           #   Response preview (stub — not used; editor uses viewport.Model directly)
+  cli/                     # CLI commands (create, remove, add, send, smoke)
+    cli.go                 #   Run() dispatcher + printUsage
+    add.go                 #   AddRequest, AddServer
+    create.go              #   CreateFile
+    remove.go              #   RemoveRequest
+    send.go                #   SendRequest (parses --server, --env, --save-example ad-hoc)
+    server.go              #   AddServer
+    smoke.go               #   SmokeTests (not implemented — prints stub message)
+  components/              # Reusable UI components
+    button.go              #   Button with click debounce
+    field.go               #   Field wraps textinput.Model
+    modal.go               #   Empty file (package decl only)
+    passfield.go           #   PassField — Field with ctrl+p toggle
+    prompt.go              #   PromptModel — overlay input for answers
+    selector.go            #   Selector — up/down cycle through Labels
+    text.go                #   Text wraps textarea.Model
+    title_bar.go           #   TitleBar — top bar with config.Name()
+    view.go                #   View — generic bordered content (unused)
+    scrollable/            #   Scrollable model wrapper with pgup/pgdown/mouse
+      scrollable.go
+    tabs/                  #   Tabbed container
+      tab.go               #     Tab struct (label + Content tea.Model)
+      view.go              #     Model — renders tab bar + content, SetActiveTabMsg
   config/                  # Catppuccin Mocha color palette + keybindings + page constants
-  env/                     # Environment variable loading/resolution (STUB — both functions empty)
-  inmath/                  # Math utilities (Cicle for cycling field focus)
-  model/                   # Core types: Request, Method, Body, Response, OpenAPIRef, About
+    config.go              #   Config struct, DefaultConfig, color constants
+    keymap.go              #   DefaultKeyMap, KeyMap, ShortHelp/FullHelp
+    pages.go               #   PageIndex enum (RequestList, RequestEditor)
+  env/                     # Environment variable loading/resolution
+    loader.go              #   Load() — reads .env, merges with system env; Store with hash-based caching
+    resolver.go            #   Resolve() — replaces {{env.X}} / {{var.X}} in strings
+  inmath/                  # Math utilities
+    counters.go            #   Circle() — wraps int within [min, max] (typo: Circle → Circle)
+  model/                   # Core types
+    request.go             #   Request, OpenAPIRef, Send(), RunRequest() tea.Cmd
+    method.go              #   Method iota (POST=0..HEAD), MarshalYAML/UnmarshalYAML/Label
+    body.go                #   Body {MimeType, Raw}, MimeType constants
+    auth.go                #   AuthType iota, AuthScheme {all secrets + schema metadata}
+    about.go               #   About {Summary, Description}
+    response.go            #   Response {StatusCode, Body} (unused)
   store/                   # File system + OpenAPI spec operations
+    openapi.go             #   ParseSpec, SaveSpec, ListOperations, OperationToRequest,
+                           #   AddOperationToSpec, RemoveOperationFromSpec,
+                           #   ApplyRequestToOperation, SaveResponseExample,
+                           #   auth helpers (applyAuthSchemes, extractSecurityFromSpec,
+                           #   ExtractGlobalSecurity, ExtractOperationSecurity)
+    file_system.go         #   tea.Cmd wrappers: FindRequestFiles, LoadRequestsList,
+                           #   OpenRequestFile, OpenDraftFile, SaveTempFile, SaveFile,
+                           #   DeleteRequestFile, LoadForDuplicate, SaveResponseExampleCmd
+    filepath.go            #   Glob() with ** support (Globs type + Expand method)
+    openapi_test.go        #   Auth roundtrip tests using testdata fixtures
+    testdata/              #   Static .yml fixtures (minimal.yml, global_security.yml)
 ```
 
 ## Key Types
 
-- **`model.Request`** — Central data type: URI, Method, Body, Headers, Params, Query, About, ServerURL, Servers, OpenAPIRef, DraftPath, FileName. Has `RunRequest()` (sends via `http.DefaultClient`).
-- **`model.Method`** — iota enum (POST=0, GET, PATCH, PUT, DELETE, OPTIONS, HEAD). Marshals/unmarshals to/from YAML lowercase strings. `Label()` returns uppercase.
+- **`model.Request`** — Central data type: URI, Method, Body, Headers, Params, Query, About, ServerURL, Servers, OpenAPIRef, DraftPath, FileName, Env, Vars, Auth. Has `Send()` (synchronous) and `RunRequest()` (wraps Send in `tea.Cmd`).
+- **`model.Method`** — iota enum (POST=0, GET, PATCH, PUT, DELETE, OPTIONS, HEAD). `MarshalYAML`/`UnmarshalYAML` for lowercase strings. `Label()` returns uppercase.
 - **`model.OpenAPIRef`** — `{FilePath, Path, Method}` referencing an OpenAPI operation.
-- **`model.About`** — `{Summary, Description}` for documentation.
-- **`model.Body`** — `{MimeType, Raw}`. MimeType constants: `ApplicationJSON` (`"application/json"`), `PlainText` (`"plain/txt"` — non-standard).
-- **`requests.RequestItem`** — Display item wrapping Method, URI, About, FileName, DraftPath, OpenAPIRef, RequestTime.
+- **`model.About`** — `{Summary, Description}` for operation documentation.
+- **`model.Body`** — `{MimeType, Raw}`. Constants: `ApplicationJSON` (`"application/json"`), `PlainText` (`"text/plain"`).
+- **`model.AuthScheme`** — Single struct for all types (Basic, Bearer, API Key, OAuth2) with both schema-definition fields and secret fields.
+- **`requests.RequestItem`** — Display item wrapping Method, URI, About, FileName, DraftPath, OpenAPIRef, RequestTime. Implements `list.Item`.
+- **`config.PageIndex`** — `RequestList` (0) or `RequestEditor` (1).
 
 ## Store Layer
 
-`internal/store/` — data access. All core functions are synchronous; `tea.Cmd` wrappers in `file_system.go` for TUI.
+`internal/store/` — data access. Core functions are synchronous; `tea.Cmd` wrappers in `file_system.go` for TUI.
 
-- **OpenAPI as source of truth** — every `.yml`/`.yaml` file is parsed as OpenAPI 3.x via `openapi3.Loader`. `IsOpenAPIFile()` checks for `openapi` or `swagger` root keys.
-- **Temp/draft files** — stored in `os.TempDir()/lazyapi/<sanitized-abs-path>/`. Format: `tmp.<METHOD>.<sanitized-path>` for OpenAPI-ref operations, `draft.new.<N>` for new unsaved requests. On "save", merged back into the spec via `AddOperationToSpec` or `ApplyRequestToOperation`.
-- **Key functions** — `ParseSpec`, `SaveSpec`, `ListOperations`, `OperationToRequest`, `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (only updates Summary/Description — body/params/query NOT applied back), `LoadServers`, `IsOpenAPIFile`.
-- **`Glob`** — custom double-star (`**`) glob implementation in `filepath.go`.
+- **OpenAPI as source of truth** — every `.yml`/`.yaml` file parsed as OpenAPI 3.x via `openapi3.Loader`. `IsOpenAPIFile()` checks for `openapi` or `swagger` root keys via YAML unmarshal.
+- **Temp/draft files** — stored in `os.TempDir()/lazyapi/<sanitized-abs-path>/`. Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
+- **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations`, `OperationToRequest`, `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`.
+- **`Glob`** — custom double-star (`**`) glob in `filepath.go` using `strings.Split` + `filepath.Walk`.
 
 ## TUI vs CLI
 
-- **TUI** (`lazyapi` with no subcommand or non-CLI arg) — interactive bubbletea UI. Default mode.
-- **CLI** (`lazyapi create|remove|add|smoke ...`) — headless commands. Subcommands: `create file [name] [servers...]`, `add request <file> <path> <method>`, `add server <file> <url>`, `remove request <file> <method> <path>`, `smoke tests <file> [--server url] [--env file]` (not yet implemented).
-- **Dispatch** — `cmd/lazyapi/main.go` checks `os.Args[1]`; CLI verbs → `cli.Run()`, else → `tea.NewProgram(app.NewTui(...))`.
-- **The `--server` and `--env` flag parsing in `smoke.go` is ad-hoc** (manual loop, no `flag` package).
+- **TUI** (`lazyapi` with no subcommand) — interactive bubbletea UI. Default mode.
+- **CLI** (`lazyapi create|remove|add|send|smoke ...`) — headless commands. Dispatch: `cmd/lazyapi/main.go` checks `os.Args[1]`; known verbs → `cli.Run()`, else → `tea.NewProgram(app.NewTui(...))`.
+- **Flag parsing** — ad-hoc manual loop in `main.go`, `send.go`, and `smoke.go`. No `flag` package.
+- **CLI subcommands**: `create file [name] [servers...]`, `add request <file> <path> <method>`, `add server <file> <url>`, `remove request <file> <method> <path>`, `send request <file> <path> <method> [--server url] [--env file] [--save-example]`, `smoke tests <file> [--server url] [--env file]` (stub).
+
+## Editor Field Cycle
+
+The editor (`RequestPane`) has 6 top-level fields cycled by Tab/Shift+Tab: `method → server → uri → [send button] → reqTabs → response → method → ...`
+
+When `reqTabs` is focused, Enter activates the tab content (`BlockTab = true`). Tab/Shift+Tab then cycles within the tab's sub-fields. Esc first blurs the tab content, then a second Esc exits the tab back to top-level fields.
 
 ## Building & Running
 
 ```bash
-go build -o lazyapi ./cmd/lazyapi   # Single binary (also goreleaser entry)
-./lazyapi                            # TUI (default)
-./lazyapi examples/openapi.yml       # TUI with a spec preloaded
+go build -o lazyapi ./cmd/lazyapi
+./lazyapi                            # TUI
+./lazyapi examples/openapi.yml       # TUI with spec preloaded
 ./lazyapi create file my-api.yml     # CLI
-go test ./...                        # All tests
+./lazyapi send request spec.yml /pets GET --server http://localhost:8080
+go test ./...                        # Tests
 golangci-lint run                    # Lint (config: .golangci.yml)
 ```
 
-## Conventions
+## Known Issues (from code review)
 
-- Method strings are uppercase (GET, POST, etc.)
-- OpenAPI refs use `{FilePath, Path, Method}` structure
-- YAML files use `openapi: 3.0.0` at the root
-- No external CLI framework — ad-hoc `os.Args` parsing
-- No database — everything is file-based
-- Release: goreleaser v2, builds for linux/windows/darwin (amd64 + arm64)
-- **Tab/Shift+Tab within tab content always wraps** — cycling through sub-fields goes from last back to first (and vice versa). There is no exit state via Tab; the user blurs the tab with Esc.
+### Errors (will cause bugs)
+- **`store.LoadForDuplicate`** closes the draft file before reading from it.
+- **`store.SaveFile` (else branch)** closes the created file before encoding YAML to it.
+- **param/header styling** in `View()` resets `lipgloss.Style` each frame, making focus highlighting fragile.
+
+### Warnings (design debt)
+- HTTP-method→string mapping repeated in 5 places (Method.Label, Method.UnmarshalYAML, methodFromLabel, RemoveOperationFromSpec, hardcoded strings).
+- Parameter-ref creation blocks duplicated between `AddOperationToSpec` and `ApplyRequestToOperation`.
+- `env.Load()` and `mergeDotenv()` share identical line-parsing logic.
+- TUI auto-saves on every Update (window resize, mouse move, keystroke).
+- Path-param URL substitution iterates a map (non-deterministic order).
+- Dead/stub code: `modal.go` (empty), `tests.go` (stub), `responses/preview.go` (unused), `view.go` (unused).
+
+### Linter (3 deprecations)
+- `scrollable.go` uses deprecated `msg.Type`, `tea.MouseWheelUp`, `tea.MouseWheelDown` — should migrate to `MouseAction`/`MouseButton`.
 
 ## Testing
 
-- **Test files** live next to the code they test (`internal/store/openapi_test.go`).
-- **Fixtures** live in `internal/store/testdata/` as static `.yml` files. Use `fixturePath(name)` to reference them. Prefer programmatic spec construction for small isolated tests; use fixtures for realistic multi-operation specs and pre-configured auth scenarios.
-- **Avoid `/tmp`** — use `t.TempDir()` for ephemeral file roundtrip tests.
-- **Test patterns** — focus on roundtrip (marshal → write → read → unmarshal → verify), not on UI interactions.
+- **Test files** next to code (`internal/store/openapi_test.go`).
+- **Fixtures** in `internal/store/testdata/` as `.yml` files. Use `fixturePath(name)`.
+- **Avoid `/tmp`** — use `t.TempDir()` for file roundtrips.
+- **Pattern** — roundtrip (marshal → write → read → unmarshal → verify), not UI interaction.
 - Run: `go test ./...`
 
-## Known Quirks
+## Conventions
 
-- **`ApplyRequestToOperation`** persists Summary, Description, Body content type, and parameter definitions (names + `in` type). Runtime values (Body.Raw, param/query/header values) are session-only and stored in temp files, not in the OpenAPI spec.
-- **`RunRequest`** sends the request via `http.DefaultClient.Do`.
-- **`env/`** package has empty stubs (`Load()` and `Resolve()` do nothing).
-- **`smoke tests`** subcommand prints "not implemented yet".
-- **No CI workflows** configured yet.
-- **`inmath.Cicle`** has a typo (should be `Circle`).
-- **Editor `BlockTab`** uses a two-stage Esc pattern: first Esc blurs the tab's inner content, second Esc exits the tab field.
+- Method strings uppercase in code, lowercase in YAML.
+- OpenAPI refs: `{FilePath, Path, Method}`.
+- YAML files: `openapi: 3.0.0` root key.
+- No external CLI framework — ad-hoc `os.Args`.
+- No database — everything file-based.
+- Tab/Shift+Tab within tab content wraps cyclically (last → first, first → last). No exit via Tab; Esc blurs then exits.
+- `lipgloss` for all styling; Catppuccin Mocha palette in `config/config.go`.

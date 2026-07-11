@@ -284,12 +284,11 @@ func LoadForDuplicate(item requests.RequestItem) tea.Cmd {
 				msg := fmt.Sprintf("Error when opening draft for duplicate, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-
-			err = file.Close()
-			if err != nil {
-				msg := fmt.Sprintf("Error closing file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
+			defer func() {
+				if cerr := file.Close(); cerr != nil {
+					panic(cerr)
+				}
+			}()
 
 			var req model.Request
 			decoder := yaml.NewDecoder(file)
@@ -365,12 +364,11 @@ func SaveFile(data model.Request) tea.Cmd {
 				msg := fmt.Sprintf("Error when trying to save file, %v", err)
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
-
-			err = file.Close()
-			if err != nil {
-				msg := fmt.Sprintf("Error closing file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
-			}
+			defer func() {
+				if cerr := file.Close(); cerr != nil {
+					panic(cerr)
+				}
+			}()
 
 			encoder := yaml.NewEncoder(file)
 			err = encoder.Encode(data)

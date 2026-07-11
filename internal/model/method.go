@@ -71,3 +71,24 @@ func (m Method) Label() string {
 		return ""
 	}
 }
+
+func MethodFromLabel(label string) Method {
+	switch strings.ToUpper(label) {
+	case "GET":
+		return GET
+	case "POST":
+		return POST
+	case "PATCH":
+		return PATCH
+	case "PUT":
+		return PUT
+	case "DELETE":
+		return DELETE
+	case "OPTIONS":
+		return OPTIONS
+	case "HEAD":
+		return HEAD
+	default:
+		return GET
+	}
+}

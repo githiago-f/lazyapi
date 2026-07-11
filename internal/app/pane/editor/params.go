@@ -75,16 +75,12 @@ func (p *params) Reset() {
 }
 
 func (p params) View() string {
-	width := (p.width / 2)
 	titleStyle = titleStyle.Width(p.width)
 	customParams := titleStyle.Render("Query")
 
 	activeColor := config.DefaultConfig.PrimaryColor()
 
 	for i := range p.query {
-		p.query[i].name.Style = lipgloss.NewStyle().Width(width - 2)
-		p.query[i].value.Style = lipgloss.NewStyle().Width(width)
-
 		if p.active && p.focusPos >= 0 && p.focusPos < len(p.query)*2 {
 			row := p.focusPos / 2
 			col := p.focusPos % 2
@@ -102,9 +98,6 @@ func (p params) View() string {
 	customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, titleStyle.Render("Path params"))
 
 	for i := range p.params {
-		p.params[i].name.Style = lipgloss.NewStyle().Width(width - 2)
-		p.params[i].value.Style = lipgloss.NewStyle().Width(width)
-
 		if p.active && p.focusPos >= len(p.query)*2 {
 			offset := p.focusPos - len(p.query)*2
 			row := offset / 2
@@ -123,6 +116,18 @@ func (p params) View() string {
 	return customParams
 }
 
+func (p *params) updateFieldWidths() {
+	width := (p.width / 2)
+	for i := range p.query {
+		p.query[i].name.Style = lipgloss.NewStyle().Width(width - 2)
+		p.query[i].value.Style = lipgloss.NewStyle().Width(width)
+	}
+	for i := range p.params {
+		p.params[i].name.Style = lipgloss.NewStyle().Width(width - 2)
+		p.params[i].value.Style = lipgloss.NewStyle().Width(width)
+	}
+}
+
 func (p params) Init() tea.Cmd {
 	return nil
 }
@@ -131,6 +136,7 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		p.width = msg.Width
+		p.updateFieldWidths()
 
 	case tabs.SetActiveTabMsg:
 		p.SetActive(msg.Active)

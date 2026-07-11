@@ -41,12 +41,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMsg:
-		switch msg.Type {
-		case tea.MouseWheelUp:
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonWheelUp {
 			m.YOffset -= 3
-		case tea.MouseWheelDown:
+		} else if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonWheelDown {
 			m.YOffset += 3
-		default:
+		} else {
 			m.Content, cmd = m.Content.Update(msg)
 		}
 
