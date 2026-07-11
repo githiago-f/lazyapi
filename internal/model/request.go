@@ -32,7 +32,7 @@ type Request struct {
 
 	Auth []AuthScheme `yaml:"auth,omitempty"`
 
-	ServerURL string   `yaml:"-"`
+	ServerURL string   `yaml:"serverUrl,omitempty"`
 	Servers   []string `yaml:"-"`
 
 	OpenAPIRef *OpenAPIRef `yaml:"-"`

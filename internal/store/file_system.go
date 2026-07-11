@@ -143,7 +143,20 @@ func OpenRequestFile(ref model.OpenAPIRef) tea.Cmd {
 
 			var request model.Request
 			decoder := yaml.NewDecoder(file)
-			if err := decoder.Decode(&request); err == nil && request.OpenAPIRef != nil {
+			if err := decoder.Decode(&request); err == nil {
+				request.OpenAPIRef = &model.OpenAPIRef{
+					FilePath: ref.FilePath,
+					Path:     ref.Path,
+					Method:   ref.Method,
+				}
+				servers, defaultURL := LoadServers(ref.FilePath)
+				request.Servers = servers
+				if !contains(servers, request.ServerURL) {
+					request.ServerURL = defaultURL
+				}
+				if request.ServerURL == "" {
+					request.ServerURL = defaultURL
+				}
 				return LoadedFile{Data: request}
 			}
 		}
@@ -175,7 +188,11 @@ func OpenDraftFile(draftPath, fileName string) tea.Cmd {
 		}
 		request.DraftPath = draftPath
 		request.FileName = fileName
+		prevURL := request.ServerURL
 		request.Servers, request.ServerURL = LoadServers(fileName)
+		if prevURL != "" && contains(request.Servers, prevURL) {
+			request.ServerURL = prevURL
+		}
 
 		err = file.Close()
 		if err != nil {
@@ -220,6 +237,15 @@ func ListDrafts(filePath string) []requests.RequestItem {
 		})
 	}
 	return items
+}
+
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 func sanitizePath(path string) string {
@@ -297,7 +323,11 @@ func LoadForDuplicate(item requests.RequestItem) tea.Cmd {
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
 			req.FileName = item.FileName
+			prevURL := req.ServerURL
 			req.Servers, req.ServerURL = LoadServers(item.FileName)
+			if prevURL != "" && contains(req.Servers, prevURL) {
+				req.ServerURL = prevURL
+			}
 			return DuplicateData{Data: req}
 		}
 
