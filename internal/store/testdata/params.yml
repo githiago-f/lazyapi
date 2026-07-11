@@ -1,0 +1,44 @@
+openapi: "3.0.0"
+info:
+  title: Params Test API
+  version: 1.0.0
+paths:
+  /items/{id}:
+    get:
+      summary: Get item by ID
+      description: Returns a single item by its ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filter
+          in: query
+          schema:
+            type: string
+        - name: X-Custom
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /items:
+    post:
+      summary: Create item
+      description: Creates a new item
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+servers:
+  - url: https://api.example.com/v2

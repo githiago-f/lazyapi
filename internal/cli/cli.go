@@ -1,4 +1,3 @@
-// Package cli defines cli commands
 package cli
 
 import (
@@ -7,16 +6,23 @@ import (
 )
 
 func Run(args []string) {
+	if err := run(args); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
 	if len(args) < 1 {
 		printUsage()
-		os.Exit(1)
+		return fmt.Errorf("no command specified")
 	}
 
 	switch args[0] {
 	case "create":
 		if len(args) < 2 || args[1] != "file" {
 			fmt.Println("Usage: lazyapi create file [filename] [servers...]")
-			os.Exit(1)
+			return fmt.Errorf("invalid create command")
 		}
 		filename := "openapi.yml"
 		servers := []string{}
@@ -24,55 +30,55 @@ func Run(args []string) {
 			filename = args[2]
 			servers = args[3:]
 		}
-		CreateFile(filename, servers)
+		return CreateFile(filename, servers)
 
 	case "remove":
 		if len(args) < 5 || args[1] != "request" {
 			fmt.Println("Usage: lazyapi remove request <file> <method> <path>")
-			os.Exit(1)
+			return fmt.Errorf("invalid remove command")
 		}
-		RemoveRequest(args[2], args[3], args[4])
+		return RemoveRequest(args[2], args[3], args[4])
 
 	case "add":
 		if len(args) < 2 {
 			fmt.Println("Usage: lazyapi add request|server ...")
-			os.Exit(1)
+			return fmt.Errorf("invalid add command")
 		}
 		switch args[1] {
 		case "request":
 			if len(args) < 5 {
 				fmt.Println("Usage: lazyapi add request <file> <path> <method>")
-				os.Exit(1)
+				return fmt.Errorf("invalid add request command")
 			}
-			AddRequest(args[2], args[3], args[4])
+			return AddRequest(args[2], args[3], args[4])
 		case "server":
 			if len(args) < 4 {
 				fmt.Println("Usage: lazyapi add server <file> <url>")
-				os.Exit(1)
+				return fmt.Errorf("invalid add server command")
 			}
-			AddServer(args[2], args[3])
+			return AddServer(args[2], args[3])
 		default:
 			fmt.Println("Usage: lazyapi add request|server ...")
-			os.Exit(1)
+			return fmt.Errorf("invalid add subcommand: %s", args[1])
 		}
 
 	case "send":
 		if len(args) < 2 || args[1] != "request" {
 			fmt.Println("Usage: lazyapi send request <file> <path> <method> [--server url]")
-			os.Exit(1)
+			return fmt.Errorf("invalid send command")
 		}
-		SendRequest(args[2:])
+		return SendRequest(args[2:])
 
 	case "smoke":
 		if len(args) < 3 || args[1] != "tests" {
 			fmt.Println("Usage: lazyapi smoke tests <file> [--server url] [--env file]")
-			os.Exit(1)
+			return fmt.Errorf("invalid smoke command")
 		}
-		SmokeTests(args[2:])
+		return SmokeTests(args[2:])
 
 	default:
 		printUsage()
-		os.Exit(1)
+		return fmt.Errorf("unknown command: %s", args[0])
 	}
 }
 

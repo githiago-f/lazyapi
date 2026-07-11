@@ -40,6 +40,8 @@ type Request struct {
 
 	Env  map[string]string `yaml:"-"`
 	Vars map[string]string `yaml:"-"`
+
+	HTTPClient *http.Client `yaml:"-"`
 }
 
 type FailureMsg struct {
@@ -124,7 +126,11 @@ func (r *Request) Send() (*http.Response, string, error) {
 		}
 	}
 
-	response, err := http.DefaultClient.Do(req)
+	client := http.DefaultClient
+	if r.HTTPClient != nil {
+		client = r.HTTPClient
+	}
+	response, err := client.Do(req)
 	if err != nil {
 		return nil, "", err
 	}

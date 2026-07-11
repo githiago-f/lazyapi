@@ -2,12 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/githiago-f/lazyapi/internal/env"
 )
 
-func SmokeTests(args []string) {
+func SmokeTests(args []string) error {
 	var server, envFile string
 	var file string
 
@@ -31,21 +30,14 @@ func SmokeTests(args []string) {
 	}
 
 	if file == "" {
-		fmt.Fprintln(os.Stderr, "Usage: lazyapi smoke tests <file> [--server url] [--env file]")
-		os.Exit(1)
-	}
-
-	if _, err := os.Stat(file); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "File %q not found\n", file)
-		os.Exit(1)
+		return fmt.Errorf("usage: lazyapi smoke tests <file> [--server url] [--env file]")
 	}
 
 	envStore := env.NewStore(envFile)
 
 	envMap, err := envStore.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading env file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error loading env file: %w", err)
 	}
 
 	fmt.Println("Smoke tests are not implemented yet")
@@ -59,4 +51,5 @@ func SmokeTests(args []string) {
 	if envMap != nil {
 		fmt.Println("  Env vars loaded with hash-based auto-reload")
 	}
+	return nil
 }
