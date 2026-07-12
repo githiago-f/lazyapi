@@ -1,8 +1,8 @@
 package editor
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
@@ -28,8 +28,8 @@ func (tp testsPane) Init() tea.Cmd {
 	return nil
 }
 
-func (tp testsPane) View() string {
-	return "Tests"
+func (tp testsPane) View() tea.View {
+	return tea.NewView("Tests")
 }
 
 func (tp testsPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

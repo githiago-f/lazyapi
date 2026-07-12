@@ -1,8 +1,8 @@
 package editor
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
@@ -50,12 +50,12 @@ func (b body) Init() tea.Cmd {
 	return nil
 }
 
-func (b body) View() string {
+func (b body) View() tea.View {
 	b.editor.Style = b.editor.Style.UnsetBorderForeground()
 	if b.active {
 		b.editor.Style = b.editor.Style.BorderForeground(config.DefaultConfig.PrimaryColor())
 	}
-	return b.editor.View()
+	return tea.NewView(b.editor.View().Content)
 }
 
 func (b body) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

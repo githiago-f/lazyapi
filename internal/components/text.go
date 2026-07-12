@@ -1,9 +1,9 @@
 package components
 
 import (
-	"github.com/charmbracelet/bubbles/textarea"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type Text struct {
@@ -43,8 +43,8 @@ func (t *Text) Blur() {
 	t.TextArea.Blur()
 }
 
-func (t Text) View() string {
-	return t.Style.Inherit(defaultTextStyle).Render(t.TextArea.View())
+func (t Text) View() tea.View {
+	return tea.NewView(t.Style.Inherit(defaultTextStyle).Render(t.TextArea.View()))
 }
 
 func (t Text) Init() tea.Cmd {

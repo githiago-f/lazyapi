@@ -3,13 +3,13 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	overlay "github.com/rmhubbert/bubbletea-overlay"
 	"github.com/githiago-f/lazyapi/internal/app/pane/editor"
 	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
@@ -42,6 +42,7 @@ type Tui struct {
 
 	notes components.Notifications
 
+	showHelp     bool
 	defaultFile  string
 	openAPIFiles []string
 }
@@ -73,18 +74,49 @@ func NewTui(defaultFile string, envFile string) Tui {
 	return tui
 }
 
-func (t Tui) View() string {
+func renderHelpList(bindings []key.Binding) string {
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green))
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(config.Text))
+
+	type entry struct{ keys, desc string }
+	var entries []entry
+	seen := map[string]bool{}
+	maxKey := 0
+
+	for _, b := range bindings {
+		k := strings.Join(b.Keys(), "/")
+		d := b.Help().Desc
+		if d == "" || seen[k+":"+d] {
+			continue
+		}
+		seen[k+":"+d] = true
+		entries = append(entries, entry{k, d})
+		if len(k) > maxKey {
+			maxKey = len(k)
+		}
+	}
+
+	rows := make([]string, 0, len(entries))
+	for _, e := range entries {
+		padded := lipgloss.NewStyle().Width(maxKey).Render(e.keys)
+		rows = append(rows, keyStyle.Render(padded)+"  "+descStyle.Render(e.desc))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+func (t Tui) View() tea.View {
 	var currentView string
 	var vkm viewKeyMap
 
 	switch config.DefaultConfig.Active {
 	case config.RequestList:
-		currentView = t.requestList.View()
+		currentView = t.requestList.View().Content
 		vkm.short = t.requestList.HelpBindings()
 		vkm.full = config.DefaultKeyMap.FullHelp()
 
 	case config.RequestEditor:
-		currentView = t.editor.View()
+		currentView = t.editor.View().Content
 		bindings := t.editor.HelpBindings()
 		if len(bindings) > 0 {
 			vkm.short = bindings
@@ -102,15 +134,14 @@ func (t Tui) View() string {
 
 	base := lipgloss.JoinVertical(
 		lipgloss.Left,
-		t.prompt.View(),
-		t.titleBar.View(),
+		t.prompt.View().Content,
+		t.titleBar.View().Content,
 		currentView,
-		t.help.View(vkm),
 	)
 
 	if t.notes.Visible() {
 		base = overlay.Composite(
-			t.notes.View(),
+			t.notes.View().Content,
 			base,
 			overlay.Center,
 			overlay.Top,
@@ -119,7 +150,30 @@ func (t Tui) View() string {
 		)
 	}
 
-	return zone.Scan(base)
+	if t.showHelp {
+		var allBindings []key.Binding
+		allBindings = append(allBindings, vkm.ShortHelp()...)
+		for _, section := range vkm.FullHelp() {
+			allBindings = append(allBindings, section...)
+		}
+		helpContent := renderHelpList(allBindings)
+		helpWidth := min(60, t.titleBar.Width-4)
+		helpBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(config.Peach)).
+			Background(lipgloss.Color(config.Surface0)).
+			Padding(1, 2).
+			Width(helpWidth).
+			Render(helpContent)
+		base = overlay.Composite(helpBox, base, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	scanned := components.Z.Scan(base)
+	return tea.View{
+		Content:   scanned,
+		AltScreen: true,
+		MouseMode: tea.MouseModeCellMotion,
+	}
 }
 
 func (t Tui) Init() tea.Cmd {
@@ -131,14 +185,16 @@ func (t Tui) Init() tea.Cmd {
 			)
 		}
 		return tea.Batch(
-			tea.EnterAltScreen,
-			tea.WindowSize(),
+			func() tea.Msg { return tea.RequestWindowSize() },
 			func() tea.Msg {
 				return store.RequestFilesMsg{Paths: []string{t.defaultFile}}
 			},
 		)
 	}
-	return tea.Batch(tea.EnterAltScreen, tea.WindowSize(), store.FindRequestFiles())
+	return tea.Batch(
+		func() tea.Msg { return tea.RequestWindowSize() },
+		store.FindRequestFiles(),
+	)
 }
 
 func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -202,7 +258,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case requests.DeleteRequestMsg:
 		return t, tea.Batch(
 			store.DeleteRequestFile(msg.Item),
-			store.FindRequestFiles(),
+			store.LoadRequestsList(t.openAPIFiles),
 			func() tea.Msg {
 				return components.ShowNotificationMsg{
 					Message: "Request deleted",
@@ -248,7 +304,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.SaveToFile {
 			cmd = tea.Batch(
 				store.SaveFile(t.editor.GetAsRequestData()),
-				store.FindRequestFiles(),
+				store.LoadRequestsList(t.openAPIFiles),
 			)
 		}
 		t.editor.Reset()
@@ -282,9 +338,9 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
-		_, titleBarHeight := lipgloss.Size(t.titleBar.View())
+		_, titleBarHeight := lipgloss.Size(t.titleBar.View().Content)
 		t.titleBar.Width = msg.Width
-		t.help.Width = msg.Width
+		t.help.SetWidth(msg.Width)
 
 		t.requestList.List.SetSize(msg.Width, msg.Height-(titleBarHeight+1))
 
@@ -304,10 +360,16 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t, nil
 		}
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
+		if key.Matches(msg, config.DefaultKeyMap.HelpToggle) {
+			t.showHelp = !t.showHelp
+			return t, nil
+		}
+		if t.showHelp {
+			t.showHelp = false
+			return t, nil
+		}
 		switch {
-		case key.Matches(msg, config.DefaultKeyMap.HelpToggle):
-			t.help.ShowAll = !t.help.ShowAll
 		case config.DefaultConfig.Active == config.PageIndex(0) && key.Matches(msg, config.DefaultKeyMap.Quit):
 			return t, tea.Quit
 		case key.Matches(msg, config.DefaultKeyMap.Kill):
@@ -336,7 +398,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.notes, noteCmd = t.notes.Update(msg)
 		return t, noteCmd
 
-	case tea.MouseMsg:
+	case tea.MouseClickMsg:
 		var noteCmd tea.Cmd
 		t.notes, noteCmd = t.notes.Update(msg)
 		cmd = noteCmd

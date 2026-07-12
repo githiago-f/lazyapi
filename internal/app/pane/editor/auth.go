@@ -3,9 +3,9 @@ package editor
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
@@ -186,14 +186,14 @@ func (as *authScheme) viewFields(width int, isActive bool, activeFieldIdx int) s
 func renderField(label string, f *components.Field, width int, focused bool) string {
 	activeColor := config.DefaultConfig.PrimaryColor()
 	f.Style = lipgloss.NewStyle().Width(width).UnsetBorderForeground()
-	f.TextInput.Width = max(0, width-2)
+	f.TextInput.SetWidth(max(0, width-2))
 	if focused {
 		f.Style = f.Style.BorderForeground(activeColor)
 	}
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		label,
-		f.View(),
+		f.View().Content,
 	)
 }
 
@@ -206,7 +206,7 @@ func renderSelector(label string, s *components.Selector, width int, focused boo
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		label,
-		s.View(),
+		s.View().Content,
 	)
 }
 
@@ -263,9 +263,9 @@ func (a *auth) resolveField(pos int) (int, int) {
 	return 0, 0
 }
 
-func (a auth) View() string {
+func (a auth) View() tea.View {
 	if len(a.schemes) == 0 {
-		return "No auth schemes defined. Press n+a to add one."
+		return tea.NewView("No auth schemes defined. Press n+a to add one.")
 	}
 
 	activeColor := config.DefaultConfig.PrimaryColor()
@@ -300,7 +300,7 @@ func (a auth) View() string {
 		rendered = append(rendered, s.Render(schemeContent))
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Top, rendered...)
+	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, rendered...))
 }
 
 func (a *auth) SetValue(schemes []model.AuthScheme) {
@@ -401,7 +401,7 @@ func (a auth) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.SetActive(msg.Active)
 		return &a, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if !a.active {
 			return &a, nil
 		}

@@ -2,9 +2,9 @@
 package requests
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/model"
 )
@@ -64,8 +64,8 @@ func (rl RequestList) Init() tea.Cmd {
 	return nil
 }
 
-func (rl RequestList) View() string {
-	return rl.List.View()
+func (rl RequestList) View() tea.View {
+	return tea.NewView(rl.List.View())
 }
 
 func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -73,7 +73,7 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	rl.List, cmd = rl.List.Update(msg)
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		item, ok := rl.List.SelectedItem().(RequestItem)
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Select) && ok:

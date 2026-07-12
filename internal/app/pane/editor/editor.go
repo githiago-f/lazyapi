@@ -7,10 +7,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 	overlay "github.com/rmhubbert/bubbletea-overlay"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/scrollable"
@@ -83,7 +84,10 @@ type RequestPane struct {
 
 	ResponsePreview viewport.Model
 
+	respContentWidth int
+
 	lastStatusCode int
+	lastStatus     string
 	lastHeader     http.Header
 	lastBody       string
 }
@@ -115,7 +119,7 @@ func New(request *model.Request) *RequestPane {
 		Method: components.Selector{
 			Cursor: 0,
 			Labels: methodLabels(),
-			Width:  9,
+			Width:  13,
 		},
 		Server: components.Selector{
 			Width: 45,
@@ -137,11 +141,11 @@ func New(request *model.Request) *RequestPane {
 			tabs.NewTab("Tests", scrollable.New(tests)),
 		),
 
-		ResponsePreview: viewport.New(0, 0),
+		ResponsePreview: viewport.New(viewport.WithWidth(0), viewport.WithHeight(0)),
 	}
 }
 
-func (rp RequestPane) View() string {
+func (rp RequestPane) View() tea.View {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
 	rp.Method.Style = rp.Method.Style.UnsetBorderForeground()
@@ -161,22 +165,19 @@ func (rp RequestPane) View() string {
 	case send:
 		rp.Send.Style = rp.Send.Style.BorderForeground(activeColor).Background(activeColor)
 	case reqTabs:
-		if rp.BlockTab {
-			rp.RequestTabs.Tabs[rp.RequestTabs.Cursor].Active = true
-		}
 		rp.RequestTabs.Style = rp.RequestTabs.Style.BorderForeground(activeColor)
 	case response:
 		rp.ResponsePreview.Style = rp.ResponsePreview.Style.BorderForeground(activeColor)
-		rp.ResponsePreview.Width = max(0, rp.ResponsePreview.Width)
-		rp.ResponsePreview.Height = max(0, rp.ResponsePreview.Height)
+		rp.ResponsePreview.SetWidth(max(0, rp.ResponsePreview.Width()))
+		rp.ResponsePreview.SetHeight(max(0, rp.ResponsePreview.Height()))
 	}
 
 	requestURL := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		rp.Method.View(),
-		rp.Server.View(),
-		rp.URI.View(),
-		rp.Send.View(),
+		rp.Method.View().Content,
+		rp.Server.View().Content,
+		rp.URI.View().Content,
+		rp.Send.View().Content,
 	)
 
 	fullView := lipgloss.JoinVertical(
@@ -184,7 +185,7 @@ func (rp RequestPane) View() string {
 		requestURL,
 		lipgloss.JoinHorizontal(
 			lipgloss.Left,
-			rp.RequestTabs.View(),
+			rp.RequestTabs.View().Content,
 			rp.ResponsePreview.View(),
 		),
 	)
@@ -192,17 +193,17 @@ func (rp RequestPane) View() string {
 	if field(rp.fieldsCursor) == method && rp.Method.Open {
 		dd := rp.Method.DropDownView()
 		if dd != "" {
-			return overlay.Composite(dd, fullView, overlay.Left, overlay.Top, 0, 1)
+			return tea.NewView(overlay.Composite(dd, fullView, overlay.Left, overlay.Top, 0, 1))
 		}
 	} else if field(rp.fieldsCursor) == serverField && rp.Server.Open {
 		dd := rp.Server.DropDownView()
 		if dd != "" {
-			methodWidth, _ := lipgloss.Size(rp.Method.View())
-			return overlay.Composite(dd, fullView, overlay.Left, overlay.Top, methodWidth, 1)
+			methodWidth, _ := lipgloss.Size(rp.Method.View().Content)
+			return tea.NewView(overlay.Composite(dd, fullView, overlay.Left, overlay.Top, methodWidth, 1))
 		}
 	}
 
-	return fullView
+	return tea.NewView(fullView)
 }
 
 func (rp *RequestPane) SetEnvStore(s *env.Store) {
@@ -254,7 +255,7 @@ func (rp *RequestPane) Reset() {
 	rp.lastHeader = nil
 	rp.lastBody = ""
 
-	rp.RequestTabs.Cursor = 0
+	rp.RequestTabs.SetCursor(0)
 }
 
 func (rp RequestPane) GetAsRequestData() model.Request {
@@ -288,30 +289,36 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 }
 
 func (rp RequestPane) SetResponse(statusCode int, status string, header http.Header, body string) RequestPane {
-	var b strings.Builder
-	_, _ = fmt.Fprintf(&b, "Status: %d %s\n\n", statusCode, status)
+	rp.lastStatusCode = statusCode
+	rp.lastStatus = status
+	rp.lastHeader = header
+	rp.lastBody = body
+	rp.ResponsePreview.SetContent(rp.buildResponseContent())
+	return rp
+}
 
-	if len(header) > 0 {
+func (rp RequestPane) buildResponseContent() string {
+	var b strings.Builder
+	_, _ = fmt.Fprintf(&b, "Status: %d %s\n\n", rp.lastStatusCode, rp.lastStatus)
+
+	if len(rp.lastHeader) > 0 {
 		b.WriteString("--- Headers ---\n")
 		var names []string
-		for name := range header {
+		for name := range rp.lastHeader {
 			names = append(names, name)
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			_, _ = fmt.Fprintf(&b, "  %s: %s\n", name, header.Get(name))
+			_, _ = fmt.Fprintf(&b, "  %s: %s\n", name, rp.lastHeader.Get(name))
 		}
 		b.WriteString("\n")
 	}
 
 	b.WriteString("--- Body ---\n")
-	b.WriteString(body)
+	contentType := rp.lastHeader.Get("Content-Type")
+	b.WriteString(formatContent(rp.lastBody, contentType, rp.respContentWidth))
 
-	rp.ResponsePreview.SetContent(b.String())
-	rp.lastStatusCode = statusCode
-	rp.lastHeader = header
-	rp.lastBody = body
-	return rp
+	return b.String()
 }
 
 func (rp RequestPane) SetResponseFeedback(feedback string) RequestPane {
@@ -386,7 +393,7 @@ func (rp RequestPane) HelpBindings() []key.Binding {
 				config.DefaultKeyMap.Select,
 			)
 		} else {
-			content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor].Content
+			content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor()].Content
 			if h, ok := content.(interface{ HelpBindings() []key.Binding }); ok {
 				bindings = append(bindings, h.HelpBindings()...)
 			}
@@ -439,8 +446,8 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Two-stage Esc: check if content is active before the tabs update
 		wasActive := false
 		if rp.BlockTab {
-			if keyMsg, ok := msg.(tea.KeyMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
-				content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor].Content
+			if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
+				content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor()].Content
 				if a, ok := content.(interface{ IsActive() bool }); ok {
 					wasActive = a.IsActive()
 				}
@@ -452,7 +459,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Only exit tab if content was NOT active (Esc already blurred it)
 		if rp.BlockTab && !wasActive {
-			if keyMsg, ok := msg.(tea.KeyMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
+			if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
 				rp.BlockTab = false
 				consumed = true
 			}
@@ -460,32 +467,46 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case response:
 		rp.ResponsePreview, cmd = rp.ResponsePreview.Update(msg)
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.CopyResponse) && rp.lastBody != "" {
+			if err := clipboard.WriteAll(rp.lastBody); err == nil {
+				cmd = tea.Batch(cmd, func() tea.Msg {
+					return components.ShowNotificationMsg{
+						Message: "✓ Response body copied",
+						Type:    components.Success,
+					}
+				})
+			}
+		}
 	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		rp.RequestTabs.Width = msg.Width / 2
-		methodWidth, methodHeight := lipgloss.Size(rp.Method.View())
-		serverWidth, _ := lipgloss.Size(rp.Server.View())
-		sendWidth, _ := lipgloss.Size(rp.Send.View())
+		rp.RequestTabs.SetWidth(msg.Width / 2)
+		methodWidth, methodHeight := lipgloss.Size(rp.Method.View().Content)
+		serverWidth, _ := lipgloss.Size(rp.Server.View().Content)
+		sendWidth, _ := lipgloss.Size(rp.Send.View().Content)
 
 		rp.URI.Style = rp.URI.Style.Width(msg.Width - (methodWidth + serverWidth + sendWidth + 3))
 		tabsHeight := msg.Height - (methodHeight + 5)
 		rp.RequestTabs.Style = rp.RequestTabs.Style.Height(tabsHeight)
 
-		respWidth := msg.Width - rp.RequestTabs.Width
-		rp.ResponsePreview.Width = max(0, respWidth-2)
-		rp.ResponsePreview.Height = max(0, tabsHeight)
+		respWidth := msg.Width - rp.RequestTabs.Width()
+		rp.respContentWidth = max(0, respWidth-2)
+		rp.ResponsePreview.SetWidth(max(0, respWidth-2))
+		rp.ResponsePreview.SetHeight(max(0, tabsHeight))
+		if rp.lastBody != "" {
+			rp.ResponsePreview.SetContent(rp.buildResponseContent())
+		}
 		rp.ResponsePreview.Style = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
 			Width(respWidth)
 
-		childrenMsg := tea.WindowSizeMsg{Width: rp.RequestTabs.Width - 2, Height: max(0, tabsHeight-4)}
+		childrenMsg := tea.WindowSizeMsg{Width: rp.RequestTabs.Width() - 2, Height: max(0, tabsHeight-4)}
 
 		model, cmd = rp.RequestTabs.Update(childrenMsg)
 		rp.RequestTabs, _ = model.(tabs.Model)
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		rp.dirty = true
 		if consumed || rp.shouldBlockTabCommands() {
 			break

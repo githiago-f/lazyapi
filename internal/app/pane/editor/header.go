@@ -1,9 +1,9 @@
 package editor
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
@@ -41,7 +41,7 @@ func (h header) Init() tea.Cmd {
 	return nil
 }
 
-func (h header) View() string {
+func (h header) View() tea.View {
 	customParams := titleStyle.Width(h.width).Render("Headers")
 	activeColor := config.DefaultConfig.PrimaryColor()
 
@@ -63,10 +63,10 @@ func (h header) View() string {
 	}
 
 	for i := range h.headers {
-		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, h.headers[i].View())
+		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, h.headers[i].View().Content)
 	}
 
-	return customParams
+	return tea.NewView(customParams)
 }
 
 func (h *header) updateFieldWidths() {
@@ -75,9 +75,9 @@ func (h *header) updateFieldWidths() {
 	valueWidth := totalWidth - nameWidth
 	for i := range h.headers {
 		h.headers[i].name.Style = lipgloss.NewStyle().Width(nameWidth)
-		h.headers[i].name.TextInput.Width = max(0, nameWidth-2)
+		h.headers[i].name.TextInput.SetWidth(max(0, nameWidth-2))
 		h.headers[i].value.Style = lipgloss.NewStyle().Width(valueWidth)
-		h.headers[i].value.TextInput.Width = max(0, valueWidth-2)
+		h.headers[i].value.TextInput.SetWidth(max(0, valueWidth-2))
 	}
 }
 
@@ -124,7 +124,7 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		h.SetActive(msg.Active)
 		return &h, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if !h.active {
 			return &h, nil
 		}

@@ -3,9 +3,9 @@ package components
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
@@ -66,7 +66,7 @@ func (m PromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case OpenMsg:
 		m.open = true
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if !m.open {
 			return m, nil
 		}
@@ -93,13 +93,13 @@ var box = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(config.DefaultConfig.PrimaryColor())
 
-func (m PromptModel) View() string {
+func (m PromptModel) View() tea.View {
 	if !m.open {
-		return ""
+		return tea.NewView("")
 	}
 
-	modal := box.Render(fmt.Sprintf("%s\n%s", m.question, m.answer.View()))
+	modal := box.Render(fmt.Sprintf("%s\n%s", m.question, m.answer.View().Content))
 
 	xView := lipgloss.PlaceHorizontal(m.pos.x, lipgloss.Center, modal)
-	return lipgloss.PlaceVertical(m.pos.y, lipgloss.Center, xView)
+	return tea.NewView(lipgloss.PlaceVertical(m.pos.y, lipgloss.Center, xView))
 }

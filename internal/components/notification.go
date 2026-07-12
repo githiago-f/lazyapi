@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/config"
 )
 
@@ -51,7 +50,7 @@ type NotificationTickMsg struct {
 func NewNotifications() Notifications {
 	return Notifications{
 		limit:   5,
-		zonePfx: zone.NewPrefix(),
+		zonePfx: Z.NewPrefix(),
 	}
 }
 
@@ -102,12 +101,12 @@ func (n Notifications) Update(msg tea.Msg) (Notifications, tea.Cmd) {
 			}
 		}
 
-	case tea.MouseMsg:
-		if msg.Action != tea.MouseActionRelease || msg.Button != tea.MouseButtonLeft {
+	case tea.MouseClickMsg:
+		if msg.Button != tea.MouseLeft {
 			break
 		}
 		for _, note := range n.notes {
-			if zone.Get(note.ID).InBounds(msg) {
+			if Z.Get(note.ID).InBounds(msg) {
 				for i, n2 := range n.notes {
 					if n2.ID == note.ID {
 						n.notes = append(n.notes[:i], n.notes[i+1:]...)
@@ -121,9 +120,9 @@ func (n Notifications) Update(msg tea.Msg) (Notifications, tea.Cmd) {
 	return n, nil
 }
 
-func (n Notifications) View() string {
+func (n Notifications) View() tea.View {
 	if len(n.notes) == 0 {
-		return ""
+		return tea.NewView("")
 	}
 
 	var rendered []string
@@ -146,8 +145,8 @@ func (n Notifications) View() string {
 			Padding(0, 2).
 			Render(note.Message)
 
-		rendered = append(rendered, zone.Mark(note.ID, box))
+		rendered = append(rendered, Z.Mark(note.ID, box))
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Top, rendered...)
+	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, rendered...))
 }

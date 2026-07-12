@@ -1,9 +1,6 @@
 package config
 
-import (
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-)
+import "charm.land/bubbles/v2/key"
 
 type KeyMap struct {
 	Up    key.Binding
@@ -31,6 +28,9 @@ type KeyMap struct {
 
 	HelpToggle key.Binding
 
+	// Response pane
+	CopyResponse key.Binding
+
 	// Tab-specific actions (editor)
 	AddQueryParam  key.Binding
 	AddPathParam   key.Binding
@@ -47,7 +47,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	if DefaultConfig.Active == RequestEditor {
 		return [][]key.Binding{
 			{k.Next, k.Prev},
-			{k.Back, k.Save, k.SaveExample, k.Quit, k.Kill},
+			{k.Back, k.Save, k.SaveExample, k.CopyResponse, k.Quit, k.Kill},
 			{k.AddQueryParam, k.AddPathParam, k.AddHeader, k.AddAuth, k.DelAuth},
 		}
 	}
@@ -64,11 +64,11 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("↑/k", "move up"),
 	),
 	Left: key.NewBinding(
-		key.WithKeys(tea.KeyLeft.String()),
+		key.WithKeys("left"),
 		key.WithHelp("←", "move left"),
 	),
 	Right: key.NewBinding(
-		key.WithKeys("l", tea.KeyRight.String()),
+		key.WithKeys("l", "right"),
 		key.WithHelp("l", "move right"),
 	),
 	Filter: key.NewBinding(
@@ -80,11 +80,11 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("↓/j", "move down"),
 	),
 	Select: key.NewBinding(
-		key.WithKeys(tea.KeyEnter.String(), tea.KeySpace.String()),
+		key.WithKeys("enter", "space"),
 		key.WithHelp("enter/space", "select"),
 	),
 	Ok: key.NewBinding(
-		key.WithKeys(tea.KeyEnter.String()),
+		key.WithKeys("enter"),
 		key.WithHelp("enter", "Accept"),
 	),
 	Quit: key.NewBinding(
@@ -92,31 +92,35 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("q", "quit"),
 	),
 	Kill: key.NewBinding(
-		key.WithKeys(tea.KeyCtrlC.String()),
+		key.WithKeys("ctrl+c"),
 		key.WithHelp("ctrl+c", "exit"),
 	),
 	Next: key.NewBinding(
-		key.WithKeys(tea.KeyTab.String()),
+		key.WithKeys("tab"),
 		key.WithHelp("tab", "next"),
 	),
 	Prev: key.NewBinding(
-		key.WithKeys(tea.KeyShiftTab.String()),
+		key.WithKeys("shift+tab"),
 		key.WithHelp("shift+tab", "prev"),
 	),
 	Back: key.NewBinding(
-		key.WithKeys(tea.KeyEsc.String()),
+		key.WithKeys("esc"),
 		key.WithHelp("esc", "back"),
 	),
 	Save: key.NewBinding(
-		key.WithKeys(tea.KeyCtrlO.String()),
+		key.WithKeys("ctrl+o"),
 		key.WithHelp("ctrl+o", "save"),
 	),
 	SaveExample: key.NewBinding(
-		key.WithKeys(tea.KeyCtrlE.String()),
+		key.WithKeys("ctrl+e"),
 		key.WithHelp("ctrl+e", "save example"),
 	),
+	CopyResponse: key.NewBinding(
+		key.WithKeys("ctrl+y"),
+		key.WithHelp("ctrl+y", "copy response"),
+	),
 	CreateNew: key.NewBinding(
-		key.WithKeys(tea.KeyCtrlN.String()),
+		key.WithKeys("ctrl+n"),
 		key.WithHelp("ctrl+n", "new request"),
 	),
 	Duplicate: key.NewBinding(
@@ -132,23 +136,23 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("?", "help"),
 	),
 	AddQueryParam: key.NewBinding(
-		key.WithKeys(tea.KeyCtrlQ.String()),
+		key.WithKeys("ctrl+q"),
 		key.WithHelp("ctrl+q", "add query"),
 	),
 	AddPathParam: key.NewBinding(
-		key.WithKeys(tea.KeyCtrlP.String()),
+		key.WithKeys("ctrl+p"),
 		key.WithHelp("ctrl+p", "add path param"),
 	),
 	AddHeader: key.NewBinding(
-		key.WithKeys(tea.KeyCtrlG.String()),
+		key.WithKeys("ctrl+g"),
 		key.WithHelp("ctrl+g", "add header"),
 	),
 	AddAuth: key.NewBinding(
-		key.WithKeys(tea.KeyCtrlR.String()),
+		key.WithKeys("ctrl+r"),
 		key.WithHelp("ctrl+r", "add auth"),
 	),
 	DelAuth: key.NewBinding(
-		key.WithKeys(tea.KeyBackspace.String(), tea.KeyDelete.String()),
+		key.WithKeys("bksp", "del"),
 		key.WithHelp("⌫/del", "delete"),
 	),
 }

@@ -1,7 +1,11 @@
 // Package config defines colors and defaults for the software
 package config
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 const (
 	Rosewater = "#f5e0dc"
@@ -52,6 +56,6 @@ func (c Config) Name() string {
 	return ">_ lazyapi"
 }
 
-func (c Config) PrimaryColor() lipgloss.Color {
+func (c Config) PrimaryColor() color.Color {
 	return lipgloss.Color(Peach)
 }

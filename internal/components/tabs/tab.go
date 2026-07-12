@@ -1,17 +1,13 @@
-// Package tabs define a tab component
+// Package tabs implements tab component
 package tabs
 
-import (
-	tea "github.com/charmbracelet/bubbletea"
-)
+import tea "charm.land/bubbletea/v2"
 
 type Tab struct {
-	label string
-
-	Active  bool
+	Label   string
 	Content tea.Model
 }
 
 func NewTab(label string, content tea.Model) Tab {
-	return Tab{label: label, Content: content}
+	return Tab{Label: label, Content: content}
 }

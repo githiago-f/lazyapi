@@ -3,10 +3,10 @@ package main
 import (
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
-	zone "github.com/lrstanley/bubblezone"
+	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/app"
 	"github.com/githiago-f/lazyapi/internal/cli"
+	"github.com/githiago-f/lazyapi/internal/components"
 )
 
 func main() {
@@ -33,10 +33,10 @@ func main() {
 		}
 	}
 
-	zone.NewGlobal()
-	defer zone.Close()
+	components.Z.NewGlobal()
+	defer components.Z.Close()
 
-	p := tea.NewProgram(app.NewTui(defaultFile, envFile), tea.WithMouseCellMotion())
+	p := tea.NewProgram(app.NewTui(defaultFile, envFile))
 	if _, err := p.Run(); err != nil {
 		panic(err)
 	}

@@ -1,7 +1,7 @@
 package editor
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/model"
 )
 
@@ -33,5 +33,5 @@ func DebugRenderPane(width, height int) string {
 	}
 
 	m, _ := New(&req).Update(tea.WindowSizeMsg{Width: width, Height: height})
-	return m.(RequestPane).View()
+	return m.(RequestPane).View().Content
 }

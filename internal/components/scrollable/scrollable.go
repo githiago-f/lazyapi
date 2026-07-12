@@ -3,8 +3,8 @@ package scrollable
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 )
 
 type Model struct {
@@ -38,24 +38,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Height = msg.Height
 		m.Content, cmd = m.Content.Update(msg)
 
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyPgUp:
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "pgup":
 			m.YOffset -= m.Height
-		case tea.KeyPgDown:
+		case "pgdown":
 			m.YOffset += m.Height
 		default:
 			m.Content, cmd = m.Content.Update(msg)
 		}
 
-	case tea.MouseMsg:
-		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonWheelUp {
+	case tea.MouseWheelMsg:
+		if msg.Button == tea.MouseWheelUp {
 			m.YOffset -= 3
-		} else if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonWheelDown {
+		} else if msg.Button == tea.MouseWheelDown {
 			m.YOffset += 3
-		} else {
-			m.Content, cmd = m.Content.Update(msg)
 		}
+
+	case tea.MouseMsg:
+		m.Content, cmd = m.Content.Update(msg)
 
 	default:
 		m.Content, cmd = m.Content.Update(msg)
@@ -73,7 +74,7 @@ func (m Model) IsActive() bool {
 }
 
 func (m *Model) clampOffset() {
-	content := m.Content.View()
+	content := m.Content.View().Content
 	lines := strings.Split(content, "\n")
 	contentHeight := len(lines)
 	maxOffset := contentHeight - m.Height
@@ -88,8 +89,8 @@ func (m *Model) clampOffset() {
 	}
 }
 
-func (m Model) View() string {
-	content := m.Content.View()
+func (m Model) View() tea.View {
+	content := m.Content.View().Content
 	lines := strings.Split(content, "\n")
 	contentHeight := len(lines)
 
@@ -110,8 +111,8 @@ func (m Model) View() string {
 		end = len(lines)
 	}
 	if yOffset >= len(lines) {
-		return ""
+		return tea.NewView("")
 	}
 
-	return strings.Join(lines[yOffset:end], "\n")
+	return tea.NewView(strings.Join(lines[yOffset:end], "\n"))
 }

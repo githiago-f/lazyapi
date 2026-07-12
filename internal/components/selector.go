@@ -3,10 +3,9 @@ package components
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/inmath"
 )
@@ -39,18 +38,18 @@ func (s Selector) Init() tea.Cmd {
 	return nil
 }
 
-func (s Selector) View() string {
+func (s Selector) View() tea.View {
 	label := s.Value()
 	style := s.Style.Inherit(selectorStyle)
 	if s.Width > 0 {
 		style = style.Width(s.Width)
 	}
-	return style.Render(label)
+	return tea.NewView(style.Render(label))
 }
 
 func (s Selector) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if s.Open {
 			switch {
 			case key.Matches(msg, config.DefaultKeyMap.Up):
@@ -153,7 +152,7 @@ func (s Selector) DropDownView() string {
 		}
 	}
 
-	return zone.Mark(s.zoneID(), dropDownBox.Width(w).Render(strings.Join(items, "\n")))
+	return Z.Mark(s.zoneID(), dropDownBox.Width(w).Render(strings.Join(items, "\n")))
 }
 
 func (s Selector) zoneID() string {

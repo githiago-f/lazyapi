@@ -1,9 +1,9 @@
 package components
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 )
 
 type PassField struct {
@@ -31,19 +31,19 @@ func (p PassField) ToggleVisibility() PassField {
 	return p
 }
 
-func (p PassField) View() string {
+func (p PassField) View() tea.View {
 	indicator := "○"
 	if !p.ShowContent {
 		indicator = "●"
 	}
-	return p.Style.Inherit(defaultStyle).Render(
+	return tea.NewView(p.Style.Inherit(defaultStyle).Render(
 		p.TextInput.View() + " " + indicator,
-	)
+	))
 }
 
 func (p PassField) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if key.Matches(msg, passToggleKey) {
 			return p.ToggleVisibility(), nil
 		}

@@ -1,8 +1,8 @@
 package editor
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
 )
 
@@ -52,8 +52,8 @@ func (pf paramField) Init() tea.Cmd {
 	return nil
 }
 
-func (pf paramField) View() string {
-	return lipgloss.JoinHorizontal(lipgloss.Top, pf.name.View(), pf.value.View())
+func (pf paramField) View() tea.View {
+	return tea.NewView(lipgloss.JoinHorizontal(lipgloss.Top, pf.name.View().Content, pf.value.View().Content))
 }
 
 func (pf paramField) Update(_ tea.Msg) (tea.Model, tea.Cmd) {

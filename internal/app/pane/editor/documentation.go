@@ -1,9 +1,9 @@
 package editor
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
@@ -56,7 +56,7 @@ func (d *documentation) IsActive() bool {
 	return d.active
 }
 
-func (d documentation) View() string {
+func (d documentation) View() tea.View {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
 	d.Summary.Style = d.Summary.Style.UnsetBorderForeground()
@@ -71,10 +71,10 @@ func (d documentation) View() string {
 		}
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Top,
-		d.Summary.View(),
-		d.Description.View(),
-	)
+	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top,
+		d.Summary.View().Content,
+		d.Description.View().Content,
+	))
 }
 
 func (d documentation) HelpBindings() []key.Binding {
@@ -91,7 +91,7 @@ func (d documentation) Init() tea.Cmd {
 
 func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Next) && d.active:
 			d.fieldCursor = inmath.Circle(d.fieldCursor+1, 0, int(description))
@@ -101,7 +101,7 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		d.Summary.Style = d.Summary.Style.Width(msg.Width)
-		d.Summary.TextInput.Width = max(0, msg.Width-2)
+		d.Summary.TextInput.SetWidth(max(0, msg.Width-2))
 		descHeight := max(1, msg.Height-8)
 		d.Description.Style = d.Description.Style.Width(msg.Width).Height(descHeight)
 		d.Description.TextArea.SetWidth(max(0, msg.Width-2))

@@ -1,9 +1,9 @@
 package editor
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
@@ -74,7 +74,7 @@ func (p *params) Reset() {
 	p.params = []paramField{createParam()}
 }
 
-func (p params) View() string {
+func (p params) View() tea.View {
 	customParams := titleStyle.Width(p.width).Render("Query")
 
 	activeColor := config.DefaultConfig.PrimaryColor()
@@ -113,16 +113,16 @@ func (p params) View() string {
 	}
 
 	for i := range p.query {
-		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, p.query[i].View())
+		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, p.query[i].View().Content)
 	}
 
 	customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, titleStyle.Render("Path params"))
 
 	for i := range p.params {
-		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, p.params[i].View())
+		customParams = lipgloss.JoinVertical(lipgloss.Top, customParams, p.params[i].View().Content)
 	}
 
-	return customParams
+	return tea.NewView(customParams)
 }
 
 func (p *params) updateFieldWidths() {
@@ -131,15 +131,15 @@ func (p *params) updateFieldWidths() {
 	valueWidth := totalWidth - nameWidth
 	for i := range p.query {
 		p.query[i].name.Style = lipgloss.NewStyle().Width(nameWidth)
-		p.query[i].name.TextInput.Width = max(0, nameWidth-2)
+		p.query[i].name.TextInput.SetWidth(max(0, nameWidth-2))
 		p.query[i].value.Style = lipgloss.NewStyle().Width(valueWidth)
-		p.query[i].value.TextInput.Width = max(0, valueWidth-2)
+		p.query[i].value.TextInput.SetWidth(max(0, valueWidth-2))
 	}
 	for i := range p.params {
 		p.params[i].name.Style = lipgloss.NewStyle().Width(nameWidth)
-		p.params[i].name.TextInput.Width = max(0, nameWidth-2)
+		p.params[i].name.TextInput.SetWidth(max(0, nameWidth-2))
 		p.params[i].value.Style = lipgloss.NewStyle().Width(valueWidth)
-		p.params[i].value.TextInput.Width = max(0, valueWidth-2)
+		p.params[i].value.TextInput.SetWidth(max(0, valueWidth-2))
 	}
 }
 
@@ -167,7 +167,7 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.SetActive(msg.Active)
 		return &p, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if !p.active {
 			return &p, nil
 		}
