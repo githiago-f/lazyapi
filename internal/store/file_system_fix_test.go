@@ -23,7 +23,7 @@ func TestNewDraftPath_CreatesDir(t *testing.T) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		t.Errorf("parent dir was not created: %s", dir)
 	}
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 }
 
 func TestNewDraftPath_Increments(t *testing.T) {
@@ -33,7 +33,7 @@ func TestNewDraftPath_Increments(t *testing.T) {
 		t.Errorf("expected different draft paths, got same: %s", p1)
 	}
 	dir := filepath.Dir(p1)
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 }
 
 func TestTempPath_Format(t *testing.T) {
@@ -65,7 +65,7 @@ func TestSaveTempFile_Roundtrip(t *testing.T) {
 	if _, err := os.Stat(tempFile); os.IsNotExist(err) {
 		t.Fatal("SaveTempFile did not create a temp file at", tempFile)
 	}
-	defer os.Remove(tempFile)
+	defer func() { _ = os.Remove(tempFile) }()
 
 	content, err := os.ReadFile(tempFile)
 	if err != nil {
@@ -89,14 +89,16 @@ func TestListDrafts_Empty(t *testing.T) {
 func TestListDrafts_WithDrafts(t *testing.T) {
 	// Create a draft file where ListDrafts will look
 	draftDir := tempDirForFile("spec.yml")
-	os.MkdirAll(draftDir, 0755)
+	if err := os.MkdirAll(draftDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	draftContent := "uri: /items\nmethod: get\nabout:\n  summary: Test\n"
 	draftFile := filepath.Join(draftDir, "draft.new.1")
 	if err := os.WriteFile(draftFile, []byte(draftContent), 0644); err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(draftDir)
+	defer func() { _ = os.RemoveAll(draftDir) }()
 
 	items := ListDrafts("spec.yml")
 	if len(items) != 1 {
@@ -112,8 +114,10 @@ func TestListDrafts_WithDrafts(t *testing.T) {
 
 func TestLoadForDuplicate_Draft(t *testing.T) {
 	draftDir := tempDirForFile("spec.yml")
-	os.MkdirAll(draftDir, 0755)
-	defer os.RemoveAll(draftDir)
+	if err := os.MkdirAll(draftDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(draftDir) }()
 
 	draftContent := "uri: /items\nmethod: post\nabout:\n  summary: Create item\n"
 	draftFile := filepath.Join(draftDir, "draft.new.1")
@@ -259,7 +263,7 @@ func TestOpenRequestFile_TempPreservesAllEditableFields(t *testing.T) {
 	if msg != nil {
 		t.Fatalf("SaveTempFile returned msg: %v", msg)
 	}
-	defer os.RemoveAll(tempDirForFile(ref.FilePath))
+	defer func() { _ = os.RemoveAll(tempDirForFile(ref.FilePath)) }()
 
 	// Load from temp
 	loadCmd := OpenRequestFile(ref)
@@ -335,7 +339,7 @@ func TestOpenRequestFile_TempRestoresServers(t *testing.T) {
 	if msg != nil {
 		t.Fatalf("SaveTempFile returned msg: %v", msg)
 	}
-	defer os.RemoveAll(tempDirForFile(ref.FilePath))
+	defer func() { _ = os.RemoveAll(tempDirForFile(ref.FilePath)) }()
 
 	loadCmd := OpenRequestFile(ref)
 	loadMsg := loadCmd()
@@ -379,7 +383,7 @@ func TestOpenRequestFile_TempPreservesAuth(t *testing.T) {
 	if msg != nil {
 		t.Fatalf("SaveTempFile returned msg: %v", msg)
 	}
-	defer os.RemoveAll(tempDirForFile(ref.FilePath))
+	defer func() { _ = os.RemoveAll(tempDirForFile(ref.FilePath)) }()
 
 	loadCmd := OpenRequestFile(ref)
 	loadMsg := loadCmd()
@@ -428,7 +432,7 @@ func TestOpenRequestFile_TempRestoresOpenAPIRef(t *testing.T) {
 	if msg != nil {
 		t.Fatalf("SaveTempFile returned msg: %v", msg)
 	}
-	defer os.RemoveAll(tempDirForFile(ref.FilePath))
+	defer func() { _ = os.RemoveAll(tempDirForFile(ref.FilePath)) }()
 
 	loadCmd := OpenRequestFile(ref)
 	loadMsg := loadCmd()
@@ -474,7 +478,7 @@ func TestOpenRequestFile_ServerURLFallback(t *testing.T) {
 	if msg != nil {
 		t.Fatalf("SaveTempFile returned msg: %v", msg)
 	}
-	defer os.RemoveAll(tempDirForFile(ref.FilePath))
+	defer func() { _ = os.RemoveAll(tempDirForFile(ref.FilePath)) }()
 
 	loadCmd := OpenRequestFile(ref)
 	loadMsg := loadCmd()
@@ -499,7 +503,7 @@ func TestOpenRequestFile_NoTempFile_FallsBackToSpec(t *testing.T) {
 	}
 
 	// Ensure no temp file exists
-	os.RemoveAll(tempDirForFile(ref.FilePath))
+	_ = os.RemoveAll(tempDirForFile(ref.FilePath))
 
 	loadCmd := OpenRequestFile(ref)
 	loadMsg := loadCmd()
@@ -552,7 +556,7 @@ servers:
 	if msg := saveCmd(); msg != nil {
 		t.Fatalf("SaveTempFile returned msg: %v", msg)
 	}
-	defer os.RemoveAll(tempDirForFile(specFile))
+	defer func() { _ = os.RemoveAll(tempDirForFile(specFile)) }()
 
 	// Load draft
 	loadCmd := OpenDraftFile(draftPath, specFile)
@@ -619,7 +623,7 @@ servers:
 	if msg := saveCmd(); msg != nil {
 		t.Fatalf("SaveTempFile returned msg: %v", msg)
 	}
-	defer os.RemoveAll(tempDirForFile(specFile))
+	defer func() { _ = os.RemoveAll(tempDirForFile(specFile)) }()
 
 	loadCmd := OpenDraftFile(draftPath, specFile)
 	loadMsg := loadCmd()
@@ -666,7 +670,7 @@ servers:
 	if msg := saveCmd(); msg != nil {
 		t.Fatalf("SaveTempFile returned msg: %v", msg)
 	}
-	defer os.RemoveAll(tempDirForFile(specFile))
+	defer func() { _ = os.RemoveAll(tempDirForFile(specFile)) }()
 
 	loadCmd := OpenDraftFile(draftPath, specFile)
 	loadMsg := loadCmd()
@@ -701,8 +705,10 @@ servers:
 	}
 
 	draftDir := tempDirForFile(specFile)
-	os.MkdirAll(draftDir, 0755)
-	defer os.RemoveAll(draftDir)
+	if err := os.MkdirAll(draftDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(draftDir) }()
 
 	draftFile := filepath.Join(draftDir, "draft.new.1")
 	draftReq := model.Request{

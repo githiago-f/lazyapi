@@ -977,7 +977,7 @@ func TestAddOperationToSpec_EmptyMethodPanics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseSpec: %v", err)
 	}
-	AddOperationToSpec(spec, "/test", "", model.Request{})
+	_ = AddOperationToSpec(spec, "/test", "", model.Request{})
 }
 
 func TestApplyRequestToOperation_BodyContentTypeAdded(t *testing.T) {

@@ -28,7 +28,6 @@ type notification struct {
 type Notifications struct {
 	notes   []notification
 	limit   int
-	width   int
 	zonePfx string
 	nextID  int
 }

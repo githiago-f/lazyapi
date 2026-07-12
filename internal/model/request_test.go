@@ -11,7 +11,7 @@ func TestSend_WithMockServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Custom", "test-header")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}))
 	defer srv.Close()
 
@@ -26,7 +26,7 @@ func TestSend_WithMockServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -272,7 +272,7 @@ func TestSend_Error(t *testing.T) {
 func TestRunRequest_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}))
 	defer srv.Close()
 

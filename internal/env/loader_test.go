@@ -146,8 +146,10 @@ func TestLoad_NonExistentFile(t *testing.T) {
 
 func TestLoad_DotenvOverridesSystem(t *testing.T) {
 	// Set a temp env var
-	os.Setenv("OVERRIDE_TEST", "system")
-	defer os.Unsetenv("OVERRIDE_TEST")
+	if err := os.Setenv("OVERRIDE_TEST", "system"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Unsetenv("OVERRIDE_TEST") }()
 
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")

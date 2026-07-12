@@ -8,9 +8,15 @@ import (
 
 func TestGlob_WithoutDoubleStar(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "a.yml"), []byte("a"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "b.yaml"), []byte("b"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "c.txt"), []byte("c"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "a.yml"), []byte("a"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "b.yaml"), []byte("b"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "c.txt"), []byte("c"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Use absolute path pattern to avoid working directory dependency
 	pattern := filepath.Join(tmpDir, "*.yml")
@@ -28,10 +34,18 @@ func TestGlob_WithoutDoubleStar(t *testing.T) {
 
 func TestGlob_WithDoubleStar(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.MkdirAll(filepath.Join(tmpDir, "sub", "subsub"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, "a.yml"), []byte("a"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "sub", "b.yml"), []byte("b"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "sub", "subsub", "c.yaml"), []byte("c"), 0644)
+	if err := os.MkdirAll(filepath.Join(tmpDir, "sub", "subsub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "a.yml"), []byte("a"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "sub", "b.yml"), []byte("b"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "sub", "subsub", "c.yaml"), []byte("c"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	pattern := filepath.Join(tmpDir, "**", "*.yml")
 	matches, err := Glob(pattern)
@@ -62,9 +76,15 @@ func TestGlob_WithDoubleStar(t *testing.T) {
 
 func TestGlob_WithDoubleStarDeepYaml(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.MkdirAll(filepath.Join(tmpDir, "sub", "subsub"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, "a.yml"), []byte("a"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "sub", "subsub", "c.yaml"), []byte("c"), 0644)
+	if err := os.MkdirAll(filepath.Join(tmpDir, "sub", "subsub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "a.yml"), []byte("a"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "sub", "subsub", "c.yaml"), []byte("c"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	pattern := filepath.Join(tmpDir, "**", "*.yaml")
 	matches, err := Glob(pattern)
@@ -102,8 +122,12 @@ func TestGlobsExpand_MultipleSegments(t *testing.T) {
 	// e.g., a/**/b/**/c
 	// We'll just test the direct Expand path
 	tmpDir := t.TempDir()
-	os.MkdirAll(filepath.Join(tmpDir, "a", "b", "c"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, "a", "b", "c", "file.txt"), []byte(""), 0644)
+	if err := os.MkdirAll(filepath.Join(tmpDir, "a", "b", "c"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "a", "b", "c", "file.txt"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// This pattern has two ** segments after splitting
 	pattern := filepath.Join(tmpDir, "**", "*.txt")
@@ -130,13 +154,21 @@ func TestGlobsExpand_EmptyPattern(t *testing.T) {
 func TestGlob_RelativeDoubleStar(t *testing.T) {
 	tmpDir := t.TempDir()
 	subDir := filepath.Join(tmpDir, "nested")
-	os.MkdirAll(subDir, 0755)
-	os.WriteFile(filepath.Join(tmpDir, "root.yml"), []byte("r"), 0644)
-	os.WriteFile(filepath.Join(subDir, "nested.yml"), []byte("n"), 0644)
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "root.yml"), []byte("r"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "nested.yml"), []byte("n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	origDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
 
 	matches, err := Glob("./**/*.yml")
 	if err != nil {

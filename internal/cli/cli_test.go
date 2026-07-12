@@ -50,7 +50,9 @@ func TestCreateFile_NoServers(t *testing.T) {
 func TestCreateFile_AlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "existing.yml")
-	os.WriteFile(path, []byte("existing"), 0644)
+	if err := os.WriteFile(path, []byte("existing"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	err := CreateFile(path, nil)
 	if err == nil {
@@ -92,7 +94,9 @@ func TestAddRequest_FileNotFound(t *testing.T) {
 func TestAddRequest_NotOpenAPI(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "not-openapi.yml")
-	os.WriteFile(path, []byte("name: test\n"), 0644)
+	if err := os.WriteFile(path, []byte("name: test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	err := AddRequest(path, "/test", "GET")
 	if err == nil {
@@ -180,7 +184,9 @@ func TestRemoveRequest_FileNotFound(t *testing.T) {
 func TestRemoveRequest_NotOpenAPI(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "not-openapi.yml")
-	os.WriteFile(path, []byte("name: test\n"), 0644)
+	if err := os.WriteFile(path, []byte("name: test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	err := RemoveRequest(path, "GET", "/test")
 	if err == nil {
@@ -219,7 +225,9 @@ func TestSmokeTests_NoFile(t *testing.T) {
 func TestSmokeTests_WithFlags(t *testing.T) {
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")
-	os.WriteFile(envFile, []byte("TEST=val\n"), 0644)
+	if err := os.WriteFile(envFile, []byte("TEST=val\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	err := SmokeTests([]string{"test-file.yml", "--server", "https://example.com", "--env", envFile})
 	if err != nil {
@@ -337,8 +345,10 @@ func TestCreateFile_DefaultName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
 
 	// CreateFile with default name (called from Run, not directly)
 	err = CreateFile("openapi.yml", nil)
