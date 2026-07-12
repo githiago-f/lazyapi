@@ -50,6 +50,8 @@ type SendRequestMsg struct{}
 
 type EditTagsMsg struct{}
 
+type CycleServerMsg struct{}
+
 type CursorPosMsg struct {
 	Y int
 }
@@ -339,6 +341,9 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case key.Matches(msg, config.DefaultKeyMap.EditTags):
 				return rl, func() tea.Msg { return EditTagsMsg{} }
+
+			case key.Matches(msg, config.DefaultKeyMap.CycleServer):
+				return rl, func() tea.Msg { return CycleServerMsg{} }
 			}
 		}
 	}

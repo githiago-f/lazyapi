@@ -80,6 +80,37 @@ func UpdateDraftTagsCmd(draftPath string, tags []string) tea.Cmd {
 	}
 }
 
+func PersistServerURLCmd(ref model.OpenAPIRef, url string) tea.Cmd {
+	return func() tea.Msg {
+		path := tempPathForRef(ref)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		var req model.Request
+		if err := yaml.Unmarshal(data, &req); err != nil {
+			return nil
+		}
+		if req.ServerURL == url {
+			return nil
+		}
+		req.ServerURL = url
+		file, err := os.Create(path)
+		if err != nil {
+			return nil
+		}
+		encoder := yaml.NewEncoder(file)
+		if err := encoder.Encode(req); err != nil {
+			_ = file.Close()
+			return nil
+		}
+		if err := file.Close(); err != nil {
+			return nil
+		}
+		return nil
+	}
+}
+
 func SaveResponseExampleCmd(ref model.OpenAPIRef, statusCode int, header http.Header, body string) tea.Cmd {
 	return func() tea.Msg {
 		spec, err := ParseSpec(ref.FilePath)

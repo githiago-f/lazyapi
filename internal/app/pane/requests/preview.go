@@ -25,10 +25,11 @@ type PreviewModel struct {
 	lastHeader     http.Header
 	lastBody       string
 
-	sending bool
-	err     string
-	width   int
-	height  int
+	serverIdx int
+	sending   bool
+	err       string
+	width     int
+	height    int
 }
 
 func (p *PreviewModel) SetSize(w, h int) {
@@ -67,6 +68,7 @@ func NewPreview() PreviewModel {
 
 func (p *PreviewModel) SetItem(item RequestItem, servers []string, serverURL string) {
 	p.item = &item
+	p.serverIdx = 0
 	p.sending = false
 	p.err = ""
 
@@ -88,6 +90,34 @@ func (p *PreviewModel) SetItem(item RequestItem, servers []string, serverURL str
 	} else {
 		p.request = nil
 	}
+}
+
+func (p *PreviewModel) CycleServer() {
+	if p.request == nil || len(p.request.Servers) < 2 {
+		return
+	}
+	p.serverIdx = (p.serverIdx + 1) % len(p.request.Servers)
+	p.request.ServerURL = p.request.Servers[p.serverIdx]
+}
+
+func (p *PreviewModel) SetServerURL(url string) {
+	if p.request == nil || url == "" {
+		return
+	}
+	p.request.ServerURL = url
+	for i, s := range p.request.Servers {
+		if s == url {
+			p.serverIdx = i
+			return
+		}
+	}
+}
+
+func (p *PreviewModel) CurrentServerURL() string {
+	if p.request == nil {
+		return ""
+	}
+	return p.request.ServerURL
 }
 
 func (p *PreviewModel) Send() tea.Cmd {
@@ -141,11 +171,6 @@ var (
 	previewServerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0))
 	previewSepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Surface2))
 	previewKeyHintStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
-	previewBadgeStyle   = lipgloss.NewStyle().
-				Background(lipgloss.Color(config.Surface2)).
-				Foreground(lipgloss.Color(config.Crust)).
-				Bold(true).
-				Padding(0, 1)
 	respLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Peach))
 )
 
@@ -156,7 +181,7 @@ func (p PreviewModel) View() tea.View {
 
 	var b strings.Builder
 
-	badge := previewBadgeStyle.Render(p.item.Method.Label())
+	badge := p.item.methodStyle().Render(p.item.Method.Label())
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Left, badge, " ", previewURIStyle.Render(p.item.URI)))
 	b.WriteString("\n")
 
@@ -166,7 +191,11 @@ func (p PreviewModel) View() tea.View {
 	}
 
 	if p.request != nil && p.request.ServerURL != "" {
-		b.WriteString(previewServerStyle.Render("Server: " + p.request.ServerURL))
+		serverLine := "Server: " + p.request.ServerURL
+		if len(p.request.Servers) > 1 {
+			serverLine = "◀ " + serverLine + " ▶"
+		}
+		b.WriteString(previewServerStyle.Render(serverLine))
 		b.WriteString("\n")
 	}
 
@@ -177,7 +206,7 @@ func (p PreviewModel) View() tea.View {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(previewKeyHintStyle.Render("[s] Send  [Ctrl+T] Edit Tags"))
+	b.WriteString(previewKeyHintStyle.Render("[s] Send  [o] Server  [Ctrl+T] Tags"))
 	b.WriteString("\n")
 
 	sep := strings.Repeat("─", max(10, p.width-2))

@@ -352,6 +352,26 @@ func LoadServers(filePath string) ([]string, string) {
 	return servers, ""
 }
 
+func LoadPersistedServerURL(item requests.RequestItem) string {
+	var path string
+	if item.OpenAPIRef != nil {
+		path = tempPathForRef(*item.OpenAPIRef)
+	} else if item.DraftPath != "" {
+		path = item.DraftPath
+	} else {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var req model.Request
+	if err := yaml.Unmarshal(data, &req); err != nil {
+		return ""
+	}
+	return req.ServerURL
+}
+
 func SaveSpec(path string, spec *openapi3.T) error {
 	data, err := yaml.Marshal(spec)
 	if err != nil {

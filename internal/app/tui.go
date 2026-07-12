@@ -313,6 +313,14 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.tagsOverlay = &ov
 		return t, nil
 
+	case requests.CycleServerMsg:
+		t.preview.CycleServer()
+		item, ok := t.requestList.SelectedItem()
+		if ok && item.OpenAPIRef != nil {
+			return t, store.PersistServerURLCmd(*item.OpenAPIRef, t.preview.CurrentServerURL())
+		}
+		return t, nil
+
 	case requests.SaveTagsMsg:
 		t.tagsOverlay = nil
 		switch {
@@ -496,6 +504,11 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		selected, ok := t.requestList.SelectedItem()
 		if ok && (!t.preview.HasItem() || selectedChanged(t.preview, selected)) {
 			servers, serverURL := store.LoadServers(selected.FileName)
+
+			if persistedURL := store.LoadPersistedServerURL(selected); persistedURL != "" {
+				serverURL = persistedURL
+			}
+
 			t.preview.SetItem(selected, servers, serverURL)
 		}
 
