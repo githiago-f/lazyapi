@@ -4,8 +4,6 @@ package editor
 import (
 	"fmt"
 	"net/http"
-	"sort"
-	"strings"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
@@ -20,6 +18,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/inmath"
 	"github.com/githiago-f/lazyapi/internal/model"
+	resp "github.com/githiago-f/lazyapi/internal/response"
 	"github.com/githiago-f/lazyapi/internal/store"
 )
 
@@ -293,32 +292,8 @@ func (rp RequestPane) SetResponse(statusCode int, status string, header http.Hea
 	rp.lastStatus = status
 	rp.lastHeader = header
 	rp.lastBody = body
-	rp.ResponsePreview.SetContent(rp.buildResponseContent())
+	rp.ResponsePreview.SetContent(resp.BuildContent(rp.lastStatusCode, rp.lastStatus, rp.lastHeader, rp.lastBody, rp.respContentWidth))
 	return rp
-}
-
-func (rp RequestPane) buildResponseContent() string {
-	var b strings.Builder
-	_, _ = fmt.Fprintf(&b, "Status: %d %s\n\n", rp.lastStatusCode, rp.lastStatus)
-
-	if len(rp.lastHeader) > 0 {
-		b.WriteString("--- Headers ---\n")
-		var names []string
-		for name := range rp.lastHeader {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			_, _ = fmt.Fprintf(&b, "  %s: %s\n", name, rp.lastHeader.Get(name))
-		}
-		b.WriteString("\n")
-	}
-
-	b.WriteString("--- Body ---\n")
-	contentType := rp.lastHeader.Get("Content-Type")
-	b.WriteString(formatContent(rp.lastBody, contentType, rp.respContentWidth))
-
-	return b.String()
 }
 
 func (rp RequestPane) SetResponseFeedback(feedback string) RequestPane {
@@ -495,7 +470,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rp.ResponsePreview.SetWidth(max(0, respWidth-2))
 		rp.ResponsePreview.SetHeight(max(0, tabsHeight))
 		if rp.lastBody != "" {
-			rp.ResponsePreview.SetContent(rp.buildResponseContent())
+			rp.ResponsePreview.SetContent(resp.BuildContent(rp.lastStatusCode, rp.lastStatus, rp.lastHeader, rp.lastBody, rp.respContentWidth))
 		}
 		rp.ResponsePreview.Style = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/model"
@@ -20,7 +19,7 @@ type RequestFilesMsg struct {
 }
 
 type LoadedRequestListMsg struct {
-	Items []list.Item
+	Items []requests.RequestItem
 }
 
 type LoadedFile struct {
@@ -38,6 +37,47 @@ type DuplicateData struct {
 type ExampleSavedMsg struct {
 	Success bool
 	Error   string
+}
+
+type TagsUpdatedMsg struct {
+	Success bool
+	Error   string
+}
+
+func UpdateOperationTagsCmd(ref model.OpenAPIRef, tags []string) tea.Cmd {
+	return func() tea.Msg {
+		if err := UpdateOperationTags(ref, tags); err != nil {
+			return TagsUpdatedMsg{Error: err.Error()}
+		}
+		return TagsUpdatedMsg{Success: true}
+	}
+}
+
+func UpdateDraftTagsCmd(draftPath string, tags []string) tea.Cmd {
+	return func() tea.Msg {
+		data, err := os.ReadFile(draftPath)
+		if err != nil {
+			return TagsUpdatedMsg{Error: fmt.Sprintf("failed to read draft: %v", err)}
+		}
+		var req model.Request
+		if err := yaml.Unmarshal(data, &req); err != nil {
+			return TagsUpdatedMsg{Error: fmt.Sprintf("failed to parse draft: %v", err)}
+		}
+		req.Tags = tags
+
+		file, err := os.Create(draftPath)
+		if err != nil {
+			return TagsUpdatedMsg{Error: fmt.Sprintf("failed to write draft: %v", err)}
+		}
+		encoder := yaml.NewEncoder(file)
+		if err := encoder.Encode(req); err != nil {
+			return TagsUpdatedMsg{Error: fmt.Sprintf("failed to encode draft: %v", err)}
+		}
+		if err := file.Close(); err != nil {
+			return TagsUpdatedMsg{Error: fmt.Sprintf("failed to close draft: %v", err)}
+		}
+		return TagsUpdatedMsg{Success: true}
+	}
 }
 
 func SaveResponseExampleCmd(ref model.OpenAPIRef, statusCode int, header http.Header, body string) tea.Cmd {
@@ -102,7 +142,7 @@ func FindRequestFiles() tea.Cmd {
 
 func LoadRequestsList(paths []string) tea.Cmd {
 	return func() tea.Msg {
-		listItems := []list.Item{}
+		var listItems []requests.RequestItem
 		for _, filePath := range paths {
 			spec, err := ParseSpec(filePath)
 			if err != nil {
@@ -110,14 +150,10 @@ func LoadRequestsList(paths []string) tea.Cmd {
 				return tea.Batch(tea.Println(msg), tea.Quit)
 			}
 			ops := ListOperations(spec, filePath)
-			for _, op := range ops {
-				listItems = append(listItems, op)
-			}
+			listItems = append(listItems, ops...)
 
 			drafts := ListDrafts(filePath)
-			for _, d := range drafts {
-				listItems = append(listItems, d)
-			}
+			listItems = append(listItems, drafts...)
 		}
 		return LoadedRequestListMsg{
 			Items: listItems,
@@ -232,6 +268,7 @@ func ListDrafts(filePath string) []requests.RequestItem {
 			Method:    req.Method,
 			URI:       req.URI,
 			About:     req.About,
+			Tags:      req.Tags,
 			FileName:  filePath,
 			DraftPath: draftFile,
 		})

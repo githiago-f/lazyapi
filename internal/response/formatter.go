@@ -1,14 +1,41 @@
-package editor
+package response
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"sort"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"gopkg.in/yaml.v3"
 )
 
-func formatContent(body string, contentType string, width int) string {
+func BuildContent(statusCode int, status string, header http.Header, body string, contentWidth int) string {
+	var b strings.Builder
+	_, _ = fmt.Fprintf(&b, "Status: %d %s\n\n", statusCode, status)
+
+	if len(header) > 0 {
+		b.WriteString("--- Headers ---\n")
+		var names []string
+		for name := range header {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			_, _ = fmt.Fprintf(&b, "  %s: %s\n", name, header.Get(name))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("--- Body ---\n")
+	contentType := header.Get("Content-Type")
+	b.WriteString(FormatContent(body, contentType, contentWidth))
+
+	return b.String()
+}
+
+func FormatContent(body string, contentType string, width int) string {
 	if ct := detectType(contentType, body); ct == "json" {
 		var parsed any
 		if err := json.Unmarshal([]byte(body), &parsed); err == nil {

@@ -30,6 +30,7 @@ type Request struct {
 	Params  map[string]string `yaml:"pathParams"`
 	Query   map[string]string `yaml:"query"`
 
+	Tags []string     `yaml:"tags,omitempty"`
 	Auth []AuthScheme `yaml:"auth,omitempty"`
 
 	ServerURL string   `yaml:"serverUrl,omitempty"`

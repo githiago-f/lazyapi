@@ -60,6 +60,7 @@ func ListOperations(spec *openapi3.T, filePath string) []requests.RequestItem {
 					Summary:     op.Summary,
 					Description: op.Description,
 				},
+				Tags:     op.Tags,
 				FileName: filePath,
 				OpenAPIRef: &model.OpenAPIRef{
 					FilePath: filePath,
@@ -254,6 +255,26 @@ func RemoveOperationFromSpec(spec *openapi3.T, ref model.OpenAPIRef) error {
 	}
 
 	return nil
+}
+
+func UpdateOperationTags(ref model.OpenAPIRef, tags []string) error {
+	spec, err := ParseSpec(ref.FilePath)
+	if err != nil {
+		return fmt.Errorf("failed to parse spec: %w", err)
+	}
+
+	pathItem := spec.Paths.Find(ref.Path)
+	if pathItem == nil {
+		return fmt.Errorf("path %q not found", ref.Path)
+	}
+
+	op := pathItem.GetOperation(ref.Method)
+	if op == nil {
+		return fmt.Errorf("operation %s %s not found", ref.Method, ref.Path)
+	}
+
+	op.Tags = tags
+	return SaveSpec(ref.FilePath, spec)
 }
 
 func AddOperationToSpec(spec *openapi3.T, path, method string, data model.Request) error {

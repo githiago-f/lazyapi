@@ -20,11 +20,15 @@ internal/
         auth.go            #     Auth schemes (n+a / x+a to add/remove)
         tests.go           #     Stub — returns "Tests" string
         field.go           #     paramField helper (name+value pair)
-      requests/            #   Request list (tree with GroupByResource, CRUD messages)
-        list.go            #     RequestList — wraps bubbles/list, emits open/delete/duplicate msgs
-        group.go           #     TreeDelegate renderer + GroupByResource (splits URI roots)
-        item.go            #     RequestItem (Method, URI, About, timing badges)
+      requests/            #   Request browser (compact list + preview + tags)
+        list.go            #     RequestList — custom compact list with filter, tag grouping, scroll
+        group.go           #     GroupByTags — groups items by first OpenAPI tag
+        item.go            #     RequestItem (Method, URI, About, Tags, RenderCompact)
+        preview.go         #     PreviewModel — request info, send action, response viewport
+        tags.go            #     TagsOverlay — cursor-positioned tag editor (add/delete/change)
       responses/           #   Response preview (stub — not used; editor uses viewport.Model directly)
+  response/                # Shared response formatting
+    formatter.go           #   BuildContent, FormatContent — status/headers/body formatting
   cli/                     # CLI commands (create, remove, add, send, smoke)
     cli.go                 #   Run() dispatcher + printUsage
     add.go                 #   AddRequest, AddServer
@@ -86,7 +90,7 @@ internal/
 - **`model.About`** — `{Summary, Description}` for operation documentation.
 - **`model.Body`** — `{MimeType, Raw}`. Constants: `ApplicationJSON` (`"application/json"`), `PlainText` (`"text/plain"`).
 - **`model.AuthScheme`** — Single struct for all types (Basic, Bearer, API Key, OAuth2) with both schema-definition fields and secret fields.
-- **`requests.RequestItem`** — Display item wrapping Method, URI, About, FileName, DraftPath, OpenAPIRef, RequestTime. Implements `list.Item`.
+- **`requests.RequestItem`** — Display item: Method, URI, About, Tags, FileName, DraftPath, OpenAPIRef, RequestTime. Has `RenderCompact()` for single-line list rendering. No longer implements `list.Item`.
 - **`config.PageIndex`** — `RequestList` (0) or `RequestEditor` (1).
 
 ## Store Layer
@@ -95,7 +99,7 @@ internal/
 
 - **OpenAPI as source of truth** — every `.yml`/`.yaml` file parsed as OpenAPI 3.x via `openapi3.Loader`. `IsOpenAPIFile()` checks for `openapi` or `swagger` root keys via YAML unmarshal.
 - **Temp/draft files** — stored in `os.TempDir()/lazyapi/<sanitized-abs-path>/`. Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
-- **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations`, `OperationToRequest`, `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`.
+- **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]requests.RequestItem` with Tags), `OperationToRequest`, `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
 - **`Glob`** — custom double-star (`**`) glob in `filepath.go` using `strings.Split` + `filepath.Walk`.
 
 ## TUI vs CLI
@@ -136,7 +140,8 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - `env.Load()` and `mergeDotenv()` share identical line-parsing logic.
 - TUI auto-saves on every Update (window resize, mouse move, keystroke).
 - Path-param URL substitution iterates a map (non-deterministic order).
-- Dead/stub code: `modal.go` (empty), `tests.go` (stub), `responses/preview.go` (unused), `view.go` (unused).
+- Dead/stub code: `modal.go` (empty), `tests.go` (stub), `view.go` (unused).
+- Preview panel auto-sends on `s` without confirmation.
 
 ### Linter (3 deprecations)
 - `scrollable.go` uses deprecated `msg.Type`, `tea.MouseWheelUp`, `tea.MouseWheelDown` — should migrate to `MouseAction`/`MouseButton`.

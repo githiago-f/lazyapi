@@ -23,22 +23,30 @@ paths:
                                 OK
                     description: OK
             summary: Create a sale
+            tags:
+                - Sales
     /sales/{id}:
         delete:
             responses:
                 "200":
                     description: OK
             summary: Delete specified sale
+            tags:
+                - Sales
         get:
             responses:
                 "200":
                     description: OK
             summary: View a sale
+            tags:
+                - Sales
         patch:
             responses:
                 "200":
                     description: OK
             summary: Patch sale
+            tags:
+                - Sales
     /users:
         get:
             operationId: listUsers
@@ -57,6 +65,8 @@ paths:
                 "200":
                     description: A list of users
             summary: List all users
+            tags:
+                - Users
         post:
             operationId: createUser
             requestBody:
@@ -73,6 +83,8 @@ paths:
                 "201":
                     description: User created
             summary: Create a new user
+            tags:
+                - Users
     /users/{id}:
         delete:
             operationId: deleteUser
@@ -86,6 +98,8 @@ paths:
                 "204":
                     description: User deleted
             summary: Delete a user
+            tags:
+                - Users
         get:
             operationId: getUser
             parameters:
@@ -99,6 +113,8 @@ paths:
                 "200":
                     description: A single user
             summary: Get a user by ID
+            tags:
+                - Users
 servers:
     - description: Production
       url: https://api.example.com/v1

@@ -1,4 +1,3 @@
-// Package app implements the tui main view
 package app
 
 import (
@@ -7,7 +6,6 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	overlay "github.com/rmhubbert/bubbletea-overlay"
@@ -36,6 +34,8 @@ type Tui struct {
 
 	help        help.Model
 	requestList requests.RequestList
+	preview     requests.PreviewModel
+	tagsOverlay *requests.TagsOverlay
 	editor      *editor.RequestPane
 	prompt      components.PromptModel
 	envStore    *env.Store
@@ -47,12 +47,14 @@ type Tui struct {
 	openAPIFiles []string
 }
 
-func NewTui(defaultFile string, envFile string) Tui {
-	actualList := list.New([]list.Item{}, requests.TreeDelegate{}, 0, 0)
-	actualList.Title = "Requests"
-	actualList.SetShowHelp(false)
-	actualList.SetShowStatusBar(false)
+func selectedChanged(p requests.PreviewModel, selected requests.RequestItem) bool {
+	if !p.HasItem() {
+		return true
+	}
+	return p.CurrentItemURI() != selected.URI || p.CurrentItemMethod() != selected.Method
+}
 
+func NewTui(defaultFile string, envFile string) Tui {
 	tui := Tui{
 		defaultFile: defaultFile,
 		titleBar: components.TitleBar{
@@ -60,12 +62,11 @@ func NewTui(defaultFile string, envFile string) Tui {
 				Border(lipgloss.NormalBorder(), false, false, true, false),
 		},
 		help: help.New(),
-		requestList: requests.RequestList{
-			List: actualList,
-		},
-		prompt:   components.Prompt(""),
-		envStore: env.NewStore(envFile),
-		notes:    components.NewNotifications(),
+		requestList: requests.NewRequestList(),
+		preview:     requests.NewPreview(),
+		prompt:      components.Prompt(""),
+		envStore:    env.NewStore(envFile),
+		notes:       components.NewNotifications(),
 	}
 
 	tui.editor = editor.New(tui.currentRequest)
@@ -111,7 +112,20 @@ func (t Tui) View() tea.View {
 
 	switch config.DefaultConfig.Active {
 	case config.RequestList:
-		currentView = t.requestList.View().Content
+		listView := t.requestList.View().Content
+		previewView := t.preview.View().Content
+
+		if t.tagsOverlay != nil {
+			ov := t.tagsOverlay.View().Content
+			cursorY := t.requestList.CursorPosY()
+			_, titleBarHeight := lipgloss.Size(t.titleBar.View().Content)
+			yOff := titleBarHeight + cursorY
+			currentView = overlay.Composite(ov, listView+"\n"+previewView, overlay.Left, overlay.Top, 0, yOff)
+		} else {
+			split := lipgloss.JoinHorizontal(lipgloss.Top, listView, previewView)
+			currentView = split
+		}
+
 		vkm.short = t.requestList.HelpBindings()
 		vkm.full = config.DefaultKeyMap.FullHelp()
 
@@ -203,17 +217,36 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd      tea.Cmd
 	)
 
+	// When tag overlay is open, route keyboard events to it.
+	// Ctrl+C still quits. Lifecycle/resize messages pass through.
+	if t.tagsOverlay != nil {
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+			if key.Matches(keyMsg, config.DefaultKeyMap.Kill) {
+				return t, tea.Quit
+			}
+			model, overlayCmd := t.tagsOverlay.Update(keyMsg)
+			t.tagsOverlay, _ = model.(*requests.TagsOverlay)
+			return t, overlayCmd
+		}
+		switch msg.(type) {
+		case requests.CancelTagsMsg, requests.SaveTagsMsg, tea.WindowSizeMsg:
+		default:
+			return t, nil
+		}
+	}
+
 	switch msg := msg.(type) {
 	case store.RequestFilesMsg:
 		t.openAPIFiles = msg.Paths
 		return t, store.LoadRequestsList(msg.Paths)
 
 	case store.LoadedRequestListMsg:
-		if len(msg.Items) == 0 {
-			return t, cmd
+		t.requestList = t.requestList.SetItems(msg.Items)
+		if len(msg.Items) > 0 {
+			first := msg.Items[0]
+			servers, serverURL := store.LoadServers(first.FileName)
+			t.preview.SetItem(first, servers, serverURL)
 		}
-		grouped := requests.GroupByResource(msg.Items)
-		cmd = t.requestList.List.SetItems(grouped)
 		return t, cmd
 
 	case requests.OpenRequestViewMsg:
@@ -266,6 +299,49 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			},
 		)
+
+	case requests.SendRequestMsg:
+		cmd = t.preview.Send()
+		return t, cmd
+
+	case requests.EditTagsMsg:
+		item, ok := t.requestList.SelectedItem()
+		if !ok {
+			return t, nil
+		}
+		ov := requests.NewTagsOverlay(item)
+		t.tagsOverlay = &ov
+		return t, nil
+
+	case requests.SaveTagsMsg:
+		t.tagsOverlay = nil
+		switch {
+		case msg.Ref != nil:
+			cmd = tea.Batch(
+				store.UpdateOperationTagsCmd(*msg.Ref, msg.Tags),
+				store.LoadRequestsList(t.openAPIFiles),
+			)
+		case msg.DraftPath != "":
+			cmd = tea.Batch(
+				store.UpdateDraftTagsCmd(msg.DraftPath, msg.Tags),
+				store.LoadRequestsList(t.openAPIFiles),
+			)
+		}
+		return t, cmd
+
+	case requests.CancelTagsMsg:
+		t.tagsOverlay = nil
+		return t, nil
+
+	case store.TagsUpdatedMsg:
+		if !msg.Success {
+			var noteCmd tea.Cmd
+			t.notes, noteCmd = t.notes.Update(components.ShowNotificationMsg{
+				Message: "Failed to update tags: " + msg.Error,
+				Type:    components.Error,
+			})
+			return t, noteCmd
+		}
 
 	case store.DuplicateData:
 		target := msg.Data.FileName
@@ -323,6 +399,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 			return t, noteCmd
 		}
+		t.preview.SetResponse(msg.StatusCode, msg.Status, msg.Header, msg.Body)
 
 	case model.FailureMsg:
 		if config.DefaultConfig.Active == config.RequestEditor {
@@ -336,13 +413,20 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 			return t, noteCmd
 		}
+		t.preview.SetResponseError(msg.Message)
 
 	case tea.WindowSizeMsg:
 		_, titleBarHeight := lipgloss.Size(t.titleBar.View().Content)
 		t.titleBar.Width = msg.Width
 		t.help.SetWidth(msg.Width)
 
-		t.requestList.List.SetSize(msg.Width, msg.Height-(titleBarHeight+1))
+		listWidth := int(float64(msg.Width) * 0.35)
+		previewWidth := msg.Width - listWidth
+
+		t.requestList.SetSize(listWidth, msg.Height-titleBarHeight-1)
+
+		t.preview.SetSize(previewWidth, msg.Height-titleBarHeight-1)
+		t.preview.SetViewportSize(previewWidth-2, msg.Height-titleBarHeight-14)
 
 		subModel, _ = t.editor.Update(msg)
 		ptr := subModel.(editor.RequestPane)
@@ -408,6 +492,13 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case config.RequestList:
 		subModel, cmd = t.requestList.Update(msg)
 		t.requestList, _ = subModel.(requests.RequestList)
+
+		selected, ok := t.requestList.SelectedItem()
+		if ok && (!t.preview.HasItem() || selectedChanged(t.preview, selected)) {
+			servers, serverURL := store.LoadServers(selected.FileName)
+			t.preview.SetItem(selected, servers, serverURL)
+		}
+
 	case config.RequestEditor:
 		subModel, cmd = t.editor.Update(msg)
 		ptr, _ := subModel.(editor.RequestPane)

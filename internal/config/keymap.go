@@ -28,6 +28,9 @@ type KeyMap struct {
 
 	HelpToggle key.Binding
 
+	SendRequest key.Binding
+	EditTags    key.Binding
+
 	// Response pane
 	CopyResponse key.Binding
 
@@ -52,10 +55,11 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		}
 	}
 
-	return [][]key.Binding{
-		{k.Select, k.Up, k.Down, k.Filter, k.CreateNew},
-		{k.Duplicate, k.Delete, k.Quit, k.Kill},
-	}
+		return [][]key.Binding{
+			{k.Select, k.Up, k.Down, k.Filter, k.CreateNew},
+			{k.Duplicate, k.Delete, k.Quit, k.Kill},
+			{k.SendRequest, k.EditTags},
+		}
 }
 
 var DefaultKeyMap = KeyMap{
@@ -134,6 +138,14 @@ var DefaultKeyMap = KeyMap{
 	HelpToggle: key.NewBinding(
 		key.WithKeys("?"),
 		key.WithHelp("?", "help"),
+	),
+	SendRequest: key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "send"),
+	),
+	EditTags: key.NewBinding(
+		key.WithKeys("ctrl+t"),
+		key.WithHelp("ctrl+t", "edit tags"),
 	),
 	AddQueryParam: key.NewBinding(
 		key.WithKeys("ctrl+q"),

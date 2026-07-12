@@ -2,8 +2,6 @@ package requests
 
 import (
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -16,8 +14,8 @@ var (
 			Background(lipgloss.Color(config.Overlay2)).
 			Foreground(lipgloss.Color(config.Crust)).
 			Bold(true).
-			Padding(0, 2).
-			Width(10).
+			Padding(0, 1).
+			Width(9).
 			Align(lipgloss.Center, lipgloss.Center)
 	getStyle = anyStyle.
 			Background(lipgloss.Color(config.Saphire)).
@@ -41,66 +39,66 @@ type RequestItem struct {
 	URI         string
 	About       model.About
 	FileName    string
+	Tags        []string
 	RequestTime float64
 	DraftPath   string
 
 	OpenAPIRef *model.OpenAPIRef
 }
 
-func (ri RequestItem) Title() string {
-	var methodStyle lipgloss.Style
+func (ri RequestItem) methodStyle() lipgloss.Style {
 	switch ri.Method {
 	case model.GET:
-		methodStyle = getStyle
+		return getStyle
 	case model.POST:
-		methodStyle = postStyle
+		return postStyle
 	case model.PATCH:
-		methodStyle = patchStyle
+		return patchStyle
 	case model.PUT:
-		methodStyle = putStyle
+		return putStyle
 	case model.DELETE:
-		methodStyle = deleteStyle
+		return deleteStyle
 	default:
-		methodStyle = anyStyle
+		return anyStyle
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Left, methodStyle.Render(ri.Method.Label()), " ", ri.URI)
 }
 
-func getDecimalPart(f float64) string {
-	_, decimal := math.Modf(f)
-	formatted := fmt.Sprintf("%.10g", decimal)
-	if strings.Contains(formatted, ".") {
-		return formatted[2:]
+var (
+	selItemBg = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface1))
+	draftPre  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0)).SetString("✎ ")
+	sumStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0))
+)
+
+func (ri RequestItem) RenderCompact(width int, selected bool) string {
+	methodLabel := ri.Method.Label()
+	if methodLabel == "" {
+		methodLabel = "ANY"
 	}
-	return formatted
-}
 
-func (ri RequestItem) Description() string {
-	metric := ""
-
-	if ri.RequestTime >= 0.0001 {
-		decimal := getDecimalPart(ri.RequestTime)
-		value, err := strconv.Atoi(decimal)
-		if err != nil {
-			return lipgloss.JoinHorizontal(lipgloss.Left, ri.About.Summary)
-		}
-
-		switch {
-		case value == 0:
-			metric = fmt.Sprintf(" - %.0f", ri.RequestTime)
-		case value >= 1:
-			metric = fmt.Sprintf(" - %.1f", ri.RequestTime)
-		case value >= 10:
-			metric = fmt.Sprintf(" - %.2f", ri.RequestTime)
-		case value >= 100:
-			metric = fmt.Sprintf(" - %.3f", ri.RequestTime)
-		case value >= 1000:
-			metric = fmt.Sprintf(" - %.4f", ri.RequestTime)
+	badge := ri.methodStyle().Render(methodLabel)
+	uriText := ri.URI
+	if ri.DraftPath != "" {
+		uriText = draftPre.String() + uriText
+		if uriText == "" {
+			uriText = draftPre.String() + "<new>"
 		}
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Left, ri.About.Summary, metric)
+
+	summary := ri.About.Summary
+	if summary != "" {
+		summary = "  " + sumStyle.Render(summary)
+	}
+
+	line := badge + " " + uriText + summary
+
+	if selected {
+		line = selItemBg.Render(line)
+	}
+
+	_ = width // reserved for future truncation
+	return line
 }
 
 func (ri RequestItem) FilterValue() string {
-	return fmt.Sprintf("%s %s", ri.URI, ri.About.Summary)
+	return fmt.Sprintf("%s %s %s", ri.URI, ri.About.Summary, strings.Join(ri.Tags, " "))
 }
