@@ -59,7 +59,7 @@ This approach helps reduce duplication, configuration drift, and maintenance ove
 ### Build from Source
 
 ```bash
-git clone https://github.com/<your-org>/lazyapi.git
+git clone https://github.com/githiago-f/lazyapi.git
 
 cd lazyapi
 
