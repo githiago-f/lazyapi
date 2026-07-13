@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/inmath"
 	"github.com/githiago-f/lazyapi/internal/model"
 )
 
@@ -138,6 +139,7 @@ func (rl *RequestList) SetSize(w, h int) {
 }
 
 func (rl RequestList) SetItems(items []RequestItem) RequestList {
+	items = dedupItems(items)
 	rl.items = items
 	rl.groups = GroupByTags(items)
 	rl.applyFilter()
@@ -147,23 +149,43 @@ func (rl RequestList) SetItems(items []RequestItem) RequestList {
 	return rl
 }
 
+func dedupItems(items []RequestItem) []RequestItem {
+	seen := make(map[string]bool)
+	result := make([]RequestItem, 0, len(items))
+	for _, item := range items {
+		key := item.FileName + "|" + strings.ToLower(item.URI) + "|" + strings.ToLower(item.Method.Label())
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, item)
+	}
+	return result
+}
+
 func (rl *RequestList) applyFilter() {
 	q := strings.TrimSpace(rl.filter.Value())
 	if q == "" {
-		rl.filtered = rl.items
 		rl.filteredGroups = rl.groups
-		return
-	}
-
-	qLower := strings.ToLower(q)
-	var filtered []RequestItem
-	for _, item := range rl.items {
-		if strings.Contains(strings.ToLower(item.FilterValue()), qLower) {
-			filtered = append(filtered, item)
+	} else {
+		qLower := strings.ToLower(q)
+		var filtered []RequestItem
+		for _, item := range rl.items {
+			if strings.Contains(strings.ToLower(item.FilterValue()), qLower) {
+				filtered = append(filtered, item)
+			}
 		}
+		rl.filteredGroups = GroupByTags(filtered)
 	}
-	rl.filtered = filtered
-	rl.filteredGroups = GroupByTags(filtered)
+	rl.filtered = flattenGroups(rl.filteredGroups)
+}
+
+func flattenGroups(groups []TagGroup) []RequestItem {
+	var items []RequestItem
+	for _, g := range groups {
+		items = append(items, g.Items...)
+	}
+	return items
 }
 
 func (rl RequestList) Init() tea.Cmd {
@@ -291,10 +313,10 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if rl.filtering {
 			if key.Matches(msg, config.DefaultKeyMap.Up) {
-				rl.cursor = inmathCircle(rl.cursor-1, 0, max(0, len(rl.filtered)-1))
+				rl.cursor = inmath.Circle(rl.cursor-1, 0, max(0, len(rl.filtered)-1))
 			}
 			if key.Matches(msg, config.DefaultKeyMap.Down) {
-				rl.cursor = inmathCircle(rl.cursor+1, 0, max(0, len(rl.filtered)-1))
+				rl.cursor = inmath.Circle(rl.cursor+1, 0, max(0, len(rl.filtered)-1))
 			}
 			return rl, nil
 		}
@@ -302,11 +324,11 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !rl.filtering {
 			switch {
 			case key.Matches(msg, config.DefaultKeyMap.Up):
-				rl.cursor = inmathCircle(rl.cursor-1, 0, max(0, len(rl.filtered)-1))
+				rl.cursor = inmath.Circle(rl.cursor-1, 0, max(0, len(rl.filtered)-1))
 				rl.clampScroll()
 
 			case key.Matches(msg, config.DefaultKeyMap.Down):
-				rl.cursor = inmathCircle(rl.cursor+1, 0, max(0, len(rl.filtered)-1))
+				rl.cursor = inmath.Circle(rl.cursor+1, 0, max(0, len(rl.filtered)-1))
 				rl.clampScroll()
 
 			case key.Matches(msg, config.DefaultKeyMap.Select):
@@ -361,15 +383,4 @@ func (rl *RequestList) clampScroll() {
 	}
 }
 
-func inmathCircle(v, min, max int) int {
-	if min > max {
-		return min
-	}
-	if v < min {
-		return max
-	}
-	if v > max {
-		return min
-	}
-	return v
-}
+

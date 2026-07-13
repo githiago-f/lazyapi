@@ -79,7 +79,7 @@ func (to TagsOverlay) View() tea.View {
 
 	b.WriteString("Add tag: " + to.input.View())
 	b.WriteString("\n\n")
-	b.WriteString(tagHint.Render("Tab: delete mode  Enter: save  Esc: cancel"))
+	b.WriteString(tagHint.Render("Enter: add tag  Tab: delete  Esc: save & close"))
 
 	rendered := tagBox.Render(b.String())
 
@@ -99,7 +99,7 @@ func (to *TagsOverlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				to.focusDel = false
 				return to, nil
 			}
-			return to, func() tea.Msg { return CancelTagsMsg{} }
+			return to, func() tea.Msg { return SaveTagsMsg{to.tags, to.item.OpenAPIRef, to.item.FileName, to.item.DraftPath} }
 
 		case key.Matches(msg, config.DefaultKeyMap.Next):
 			if to.focusDel {
@@ -122,6 +122,9 @@ func (to *TagsOverlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					to.tags = append(to.tags, v)
 					to.input.SetValue("")
+					if !to.input.Focused() {
+						to.input.Focus()
+					}
 					return to, nil
 				}
 			}
@@ -135,14 +138,7 @@ func (to *TagsOverlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return to, nil
 			}
 
-			return to, func() tea.Msg {
-				return SaveTagsMsg{
-					Tags:      to.tags,
-					Ref:       to.item.OpenAPIRef,
-					FileName:  to.item.FileName,
-					DraftPath: to.item.DraftPath,
-				}
-			}
+			return to, nil
 
 		case to.focusDel && key.Matches(msg, config.DefaultKeyMap.Delete):
 			if len(to.tags) > 0 && to.delIdx < len(to.tags) {
