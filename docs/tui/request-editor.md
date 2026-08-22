@@ -62,7 +62,24 @@ Select the type from the dropdown.
 
 ### Tests
 
-Planned feature for response assertions. Currently a placeholder.
+A Lua script editor where you can write test scripts that run against the request and its response. The script has access to:
+
+- **`request`** — the outgoing request (method, URI, headers, body, query params, path params)
+- **`response`** — the received response (status, status text, headers, body)
+- **`env`** — environment variables from the loaded `.env` file
+- **`tests`** — a table to register boolean test results
+- **`test(name, fn)`** — a helper that runs `fn` in protected mode
+- **`json_decode(str)`** / **`json_encode(table)`** — JSON helpers
+
+Press `F5` to run the tests. Results appear in the panel below the script editor.
+
+Example script:
+
+```lua
+tests["Status is 200"] = response.status() == 200
+tests["Content-Type is JSON"] = response.header("Content-Type"):find("json") ~= nil
+test("Body has id", function() assert(json_decode(response.body()).id) end)
+```
 
 ## Field navigation
 

@@ -64,14 +64,14 @@ func run(args []string) error {
 
 	case "send":
 		if len(args) < 2 || args[1] != "request" {
-			fmt.Println("Usage: lazyapi send request <file> <path> <method> [--server url]")
+			fmt.Println("Usage: lazyapi send request <file> <path> <method> [--server url] [--env file] [--save-example] [--script file]")
 			return fmt.Errorf("invalid send command")
 		}
 		return SendRequest(args[2:])
 
 	case "smoke":
 		if len(args) < 3 || args[1] != "tests" {
-			fmt.Println("Usage: lazyapi smoke tests <file> [--server url] [--env file]")
+			fmt.Println("Usage: lazyapi smoke tests <file> [--server url] [--env file] [--script file]")
 			return fmt.Errorf("invalid smoke command")
 		}
 		return SmokeTests(args[2:])
@@ -91,11 +91,12 @@ Usage:
   lazyapi remove request <file> <method> <path>  Remove a request from a spec file
   lazyapi add request <file> <path> <method>     Add a new request to a spec file
   lazyapi add server <file> <url>        Add a server URL to a spec file
-  lazyapi send request <file> <path> <method> [--server url] [--env file]  Send an HTTP request
-  lazyapi smoke tests <file> [flags]     Run smoke tests (not yet implemented)
+  lazyapi send request <file> <path> <method> [--server url] [--env file] [--save-example] [--script file]  Send an HTTP request
+  lazyapi smoke tests <file> [--server url] [--env file] [--script file]     Run smoke tests across all operations
 
 Flags:
   --server url   Base server URL for smoke tests and send request
   --save-example Persist the response as an example in the OpenAPI spec
-  --env file     Environment file for smoke tests`)
+  --env file     Environment file for smoke tests and send request
+  --script file  Lua test script to run against the response(s)`)
 }

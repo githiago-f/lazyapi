@@ -41,6 +41,8 @@ type KeyMap struct {
 	AddHeader      key.Binding
 	AddAuth        key.Binding
 	DelAuth        key.Binding
+
+	RunTests key.Binding
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
@@ -52,7 +54,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		return [][]key.Binding{
 			{k.Next, k.Prev},
 			{k.Back, k.Save, k.SaveExample, k.CopyResponse, k.Quit, k.Kill},
-			{k.AddQueryParam, k.AddPathParam, k.AddHeader, k.AddAuth, k.DelAuth},
+			{k.AddQueryParam, k.AddPathParam, k.AddHeader, k.AddAuth, k.DelAuth, k.RunTests},
 		}
 	}
 
@@ -171,5 +173,9 @@ var DefaultKeyMap = KeyMap{
 	DelAuth: key.NewBinding(
 		key.WithKeys("bksp", "del"),
 		key.WithHelp("⌫/del", "delete"),
+	),
+	RunTests: key.NewBinding(
+		key.WithKeys("f5"),
+		key.WithHelp("f5", "run tests"),
 	),
 }

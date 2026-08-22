@@ -208,8 +208,19 @@ func TestRemoveRequest_OperationNotFound(t *testing.T) {
 }
 
 func TestSmokeTests_Stub(t *testing.T) {
-	// SmokeTests is a stub - just verify it doesn't crash
-	err := SmokeTests([]string{"test-file.yml"})
+	tmpDir := t.TempDir()
+	specPath := filepath.Join(tmpDir, "spec.yml")
+	if err := os.WriteFile(specPath, []byte(`openapi: "3.0.0"
+info:
+  title: Test
+  version: 1.0.0
+paths: {}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// SmokeTests should not crash even with an empty spec
+	err := SmokeTests([]string{specPath})
 	if err != nil {
 		t.Fatalf("SmokeTests: %v", err)
 	}
@@ -224,12 +235,31 @@ func TestSmokeTests_NoFile(t *testing.T) {
 
 func TestSmokeTests_WithFlags(t *testing.T) {
 	tmpDir := t.TempDir()
+	specPath := filepath.Join(tmpDir, "spec.yml")
+	if err := os.WriteFile(specPath, []byte(`openapi: "3.0.0"
+info:
+  title: Test
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:1
+paths:
+  /test:
+    get:
+      summary: Test endpoint
+      responses:
+        "200":
+          description: OK
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	envFile := filepath.Join(tmpDir, ".env")
 	if err := os.WriteFile(envFile, []byte("TEST=val\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	err := SmokeTests([]string{"test-file.yml", "--server", "https://example.com", "--env", envFile})
+	// SmokeTests should not crash; the request will fail (no server) but that's OK
+	err := SmokeTests([]string{specPath, "--server", "http://127.0.0.1:1", "--env", envFile})
 	if err != nil {
 		t.Fatalf("SmokeTests: %v", err)
 	}

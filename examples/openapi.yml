@@ -1,4 +1,11 @@
-components: {}
+components:
+    securitySchemes:
+        lazyapi_auth_0:
+            in: header
+            type: apiKey
+        lazyapi_auth_1:
+            scheme: basic
+            type: http
 info:
     description: A sample OpenAPI spec for testing lazyapi
     title: Example API
@@ -61,9 +68,19 @@ paths:
                   name: offset
                   schema:
                     type: integer
+                - in: header
+                  name: l
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json: {}
             responses:
                 "200":
                     description: A list of users
+            security:
+                - lazyapi_auth_0: []
+                - lazyapi_auth_1: []
             summary: List all users
             tags:
                 - Users

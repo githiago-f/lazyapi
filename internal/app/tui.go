@@ -452,6 +452,13 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t, nil
 		}
 
+	case editor.TestsResultMsg:
+		if config.DefaultConfig.Active == config.RequestEditor {
+			rp := t.editor.SetTestResults(msg.Result)
+			t.editor = &rp
+			return t, nil
+		}
+
 	case tea.KeyPressMsg:
 		if key.Matches(msg, config.DefaultKeyMap.HelpToggle) {
 			t.showHelp = !t.showHelp

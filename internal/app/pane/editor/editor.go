@@ -17,6 +17,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/inmath"
+	"github.com/githiago-f/lazyapi/internal/lua"
 	"github.com/githiago-f/lazyapi/internal/model"
 	resp "github.com/githiago-f/lazyapi/internal/response"
 	"github.com/githiago-f/lazyapi/internal/store"
@@ -25,6 +26,10 @@ import (
 type CloseRequestPaneMsg struct {
 	SaveToFile bool
 	File       string
+}
+
+type TestsResultMsg struct {
+	Result lua.ScriptResult
 }
 
 func closePane(save bool) tea.Cmd {
@@ -207,6 +212,9 @@ func (rp RequestPane) View() tea.View {
 
 func (rp *RequestPane) SetEnvStore(s *env.Store) {
 	rp.envStore = s
+
+	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+	tp.SetEnvStore(s)
 }
 
 func (rp RequestPane) SetValue(formData model.Request) RequestPane {
@@ -240,6 +248,9 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
 	au.SetValue(formData.Auth)
 
+	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+	tp.SetRequestData(formData)
+
 	return rp
 }
 
@@ -251,8 +262,12 @@ func (rp *RequestPane) Reset() {
 	rp.openAPIRef = nil
 	rp.draftPath = ""
 	rp.lastStatusCode = 0
+	rp.lastStatus = ""
 	rp.lastHeader = nil
 	rp.lastBody = ""
+
+	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+	tp.Reset()
 
 	rp.RequestTabs.SetCursor(0)
 }
@@ -263,6 +278,7 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
 	pr := rp.RequestTabs.Tabs[Params].Content.(scrollable.Model).Content.(*params)
 	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
+	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
 
 	envMap, _ := rp.envStore.Load()
 
@@ -283,6 +299,7 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 		Headers: hd.Value(),
 		Params:  pr.ParamsValue(),
 		Query:   pr.QueryValue(),
+		Tests:   tp.Value(),
 		Env:     envMap,
 	}
 }
@@ -293,6 +310,10 @@ func (rp RequestPane) SetResponse(statusCode int, status string, header http.Hea
 	rp.lastHeader = header
 	rp.lastBody = body
 	rp.ResponsePreview.SetContent(resp.BuildContent(rp.lastStatusCode, rp.lastStatus, rp.lastHeader, rp.lastBody, rp.respContentWidth))
+
+	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+	tp.SetResponseData(statusCode, status, header, body)
+
 	return rp
 }
 
@@ -306,6 +327,10 @@ func (rp RequestPane) SetResponseError(err string) RequestPane {
 	rp.lastStatusCode = 0
 	rp.lastHeader = nil
 	rp.lastBody = ""
+
+	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+	tp.SetResponseError()
+
 	return rp
 }
 
@@ -316,6 +341,16 @@ func (rp RequestPane) FocusResponse() RequestPane {
 
 func (rp RequestPane) LastResponse() (statusCode int, header http.Header, body string) {
 	return rp.lastStatusCode, rp.lastHeader, rp.lastBody
+}
+
+func (rp RequestPane) LastStatusText() string {
+	return rp.lastStatus
+}
+
+func (rp RequestPane) SetTestResults(result lua.ScriptResult) RequestPane {
+	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+	tp.SetResults(result)
+	return rp
 }
 
 func (rp RequestPane) CurrentRef() *model.OpenAPIRef {
@@ -415,6 +450,10 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if rp.Send.Clicked {
 			rp.Send.Clicked = false
 			req := rp.GetAsRequestData()
+
+			tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+			tp.SetRequestData(req)
+
 			cmd = tea.Batch(cmd, req.RunRequest())
 		}
 	case reqTabs:

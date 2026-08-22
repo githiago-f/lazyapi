@@ -48,3 +48,4 @@
 | `n` + `h` | Header | Add header |
 | `n` + `a` | Authorize | Add auth scheme |
 | `x` + `a` | Authorize | Delete selected auth scheme |
+| `F5` | Tests | Run Lua test script |

@@ -32,6 +32,7 @@ type Request struct {
 
 	Tags []string     `yaml:"tags,omitempty"`
 	Auth []AuthScheme `yaml:"auth,omitempty"`
+	Tests string       `yaml:"tests,omitempty"`
 
 	ServerURL string   `yaml:"serverUrl,omitempty"`
 	Servers   []string `yaml:"-"`

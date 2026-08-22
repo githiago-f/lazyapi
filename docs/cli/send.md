@@ -5,7 +5,7 @@ Execute a request directly from the command line using an OpenAPI spec.
 ## Usage
 
 ```bash
-lazyapi send request <file> <path> <method> [--server <url>] [--env <file>] [--save-example]
+lazyapi send request <file> <path> <method> [--server <url>] [--env <file>] [--save-example] [--script <file>]
 ```
 
 ## Arguments
@@ -21,8 +21,9 @@ lazyapi send request <file> <path> <method> [--server <url>] [--env <file>] [--s
 | Flag | Description |
 |------|-------------|
 | `--server <url>` | Override the server URL |
-| `--env <file>` | Path to a `.env` file for `&#123;&#123;env.X&#125;&#125;` resolution |
+| `--env <file>` | Path to a `.env` file for `{{env.X}}` resolution |
 | `--save-example` | Save the response as an OpenAPI example in the spec |
+| `--script <file>` | Path to a Lua test script (see [Lua Test Scripts](../tui/lua-tests.md)) |
 
 ## Examples
 
@@ -38,8 +39,11 @@ lazyapi send request my-api.yml /users POST --env .env
 
 # Save response as example
 lazyapi send request my-api.yml /users/{id} GET --save-example
+
+# Run Lua test script against response
+lazyapi send request my-api.yml /users GET --script tests.lua
 ```
 
 ## Output
 
-The response status, headers, and body are printed to stdout.
+The response status, headers, and body are printed to stdout. If `--script` is provided, test results are printed after the response.
