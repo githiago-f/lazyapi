@@ -21,7 +21,7 @@ lazyapi send request <file> <path> <method> [--server <url>] [--env <file>] [--s
 | Flag | Description |
 |------|-------------|
 | `--server <url>` | Override the server URL |
-| `--env <file>` | Path to a `.env` file for `{{env.X}}` resolution |
+| `--env <file>` | Path to a `.env` file for `{{ '{{' }}env.X{{ '}}' }}` resolution |
 | `--save-example` | Save the response as an OpenAPI example in the spec |
 | `--script <file>` | Path to a Lua test script (see [Lua Test Scripts](../tui/lua-tests.md)) |
 
