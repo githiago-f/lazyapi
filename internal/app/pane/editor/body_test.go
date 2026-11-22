@@ -16,7 +16,7 @@ func TestBodyFormRoundTrip(t *testing.T) {
 	b.SetValue(`{"zeta": "1", "alpha": 2, "tags": ["a", "b"], "meta": {"x": true}}`)
 
 	var names []string
-	for _, f := range b.fields {
+	for _, f := range b.grid.rows {
 		names = append(names, f.name.Value()+"="+f.value.Value())
 	}
 	want := []string{"zeta=1", "alpha=2", "tags=a", "tags=b", `meta={"x":true}`}
@@ -40,8 +40,8 @@ func TestBodyFormRoundTrip(t *testing.T) {
 		t.Errorf("urlencoded input → %q", b.Value())
 	}
 	b.SetValue("")
-	if len(b.fields) != 1 || b.Value() != "" {
-		t.Errorf("empty body: one blank row and an empty value, got %d rows %q", len(b.fields), b.Value())
+	if len(b.grid.rows) != 1 || b.Value() != "" {
+		t.Errorf("empty body: one blank row and an empty value, got %d rows %q", len(b.grid.rows), b.Value())
 	}
 }
 

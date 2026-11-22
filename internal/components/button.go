@@ -17,8 +17,8 @@ type Button struct {
 
 	Clicked bool
 
-	Style   lipgloss.Style
-	zoneID  string
+	Style  lipgloss.Style
+	zoneID string
 }
 
 func (b Button) Init() tea.Cmd {

@@ -1,11 +1,8 @@
 package requests
 
 import (
-	"fmt"
-	"github.com/charmbracelet/x/ansi"
-	"strings"
-
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/model"
 )
@@ -35,20 +32,13 @@ var (
 			Foreground(lipgloss.Color(config.Crust))
 )
 
-type RequestItem struct {
-	Method      model.Method
-	URI         string
-	About       model.About
-	FileName    string
-	Tags        []string
-	RequestTime float64
-	DraftPath   string
+// RequestItem is the list entry (data lives in model so store does not
+// depend on this UI package).
+type RequestItem = model.RequestItem
 
-	OpenAPIRef *model.OpenAPIRef
-}
-
-func (ri RequestItem) methodStyle() lipgloss.Style {
-	switch ri.Method {
+// methodStyle is the badge style of an HTTP method.
+func methodStyle(m model.Method) lipgloss.Style {
+	switch m {
 	case model.GET:
 		return getStyle
 	case model.POST:
@@ -70,13 +60,14 @@ var (
 	sumStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0))
 )
 
-func (ri RequestItem) RenderCompact(width int, selected bool) string {
+// RenderCompact renders an item as one list line.
+func RenderCompact(ri RequestItem, width int, selected bool) string {
 	methodLabel := ri.Method.Label()
 	if methodLabel == "" {
 		methodLabel = "ANY"
 	}
 
-	badge := ri.methodStyle().Render(methodLabel)
+	badge := methodStyle(ri.Method).Render(methodLabel)
 	uriText := ri.URI
 	if ri.DraftPath != "" {
 		uriText = draftPre.String() + uriText
@@ -99,8 +90,4 @@ func (ri RequestItem) RenderCompact(width int, selected bool) string {
 		line = selItemBg.Render(line)
 	}
 	return line
-}
-
-func (ri RequestItem) FilterValue() string {
-	return fmt.Sprintf("%s %s %s %s", ri.Method.Label(), ri.URI, ri.About.Summary, strings.Join(ri.Tags, " "))
 }

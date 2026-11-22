@@ -88,19 +88,19 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 
 - `formdata` (arquivos) no `pm.sendRequest`; runner de collection com iterações/data files (`pm.iterationData`).
 
-## Contínuo — qualidade de código
+## Fase 11 / Contínuo — qualidade de código
 
 Fazer junto com as fases, quando tocar no código em questão:
 
-- [ ] **Tirar a dependência `store` → `app/pane/requests`** (mover o tipo de dados de `RequestItem` para `model`). Hoje ela força o preview a ficar sem o componente de resposta e cria risco de import cycle.
+- [x] Tirar a dependência `store` → `app/pane/requests` (`model.RequestItem`; `internal/archtest` impede que volte).
 - [x] Testes de TUI com `teatest` (Fase 9).
-- [ ] Coverage no CI (o `-race` já roda).
-- [ ] `gofmt -w` nos 9 arquivos antigos fora do padrão (num commit só de formatação).
-- [ ] Estilo de param/header recriado a cada frame (o foco fica frágil).
-- [ ] Criação duplicada de parameter refs (`AddOperationToSpec`/`ApplyRequestToOperation`).
-- [ ] Parsing duplicado entre `env.Load()` e `mergeDotenv()`.
-- [ ] Mapeamento método→string ainda em 3 lugares.
-- [ ] `scrollable.go` usando a API de mouse depreciada.
+- [x] Coverage no CI (resumo por pacote, piso de 55%; hoje ~61%) e checagem de `gofmt`.
+- [x] `gofmt -w` nos arquivos antigos.
+- [x] `kvGrid` único para headers, params e campos de form: o View não altera mais o estado; linhas ordenadas por nome.
+- [x] `syncParameters` único (ordem estável ao salvar; `Accept`/`Content-Type`/`Authorization` não viram parâmetros).
+- [x] `env.Load` e `Store` usam o mesmo parser.
+- [x] Uma tabela de métodos (`ParseMethod`); método desconhecido no YAML é erro.
+- [x] `scrollable.go` (já usava a API nova; clamp unificado e testes).
 - [ ] Highlight de busca: hoje a busca mostra texto sem cores por causa de um bug no viewport do bubbles. Reportar ou corrigir upstream.
 
 ---

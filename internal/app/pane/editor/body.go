@@ -22,7 +22,7 @@ type body struct {
 	editor components.Text
 
 	form     bool
-	fields   []paramField
+	grid     kvGrid
 	focusPos int
 	width    int
 }
@@ -51,7 +51,7 @@ func (b *body) IsActive() bool {
 func BodyTab() *body {
 	editor := components.NewTextarea("Json data", "")
 
-	return &body{editor: editor, focusPos: -1}
+	return &body{editor: editor, focusPos: -1, grid: newGrid()}
 }
 
 // SetForm switches between the text area and form rows. Call it before
@@ -64,8 +64,7 @@ func (b *body) SetForm(form bool) {
 func (b *body) SetValue(s string) {
 	b.editor.SetValue(s)
 	if b.form {
-		b.fields = formRows(s)
-		b.updateFieldWidths()
+		b.grid.setRows(formRows(s))
 	}
 }
 
@@ -73,7 +72,7 @@ func (b *body) Value() string {
 	if !b.form {
 		return b.editor.Value()
 	}
-	return formJSON(b.fields)
+	return formJSON(b.grid.rows)
 }
 
 // formRows reads a JSON object (or an a=1&b=2 string) into rows. Arrays
@@ -107,10 +106,7 @@ func formRows(raw string) []paramField {
 			}
 		}
 	}
-	if len(rows) == 0 {
-		rows = []paramField{createParam()}
-	}
-	return rows
+	return rows // setRows adds a blank row when empty
 }
 
 // orderedKeys returns obj's keys in the order they appear in raw.
@@ -210,18 +206,6 @@ func formJSON(rows []paramField) string {
 	return b.String()
 }
 
-func (b *body) updateFieldWidths() {
-	total := b.width - 2
-	nameWidth := total / 2
-	valueWidth := total - nameWidth
-	for i := range b.fields {
-		b.fields[i].name.Style = lipgloss.NewStyle().Width(nameWidth)
-		b.fields[i].name.TextInput.SetWidth(max(0, nameWidth-2))
-		b.fields[i].value.Style = lipgloss.NewStyle().Width(valueWidth)
-		b.fields[i].value.TextInput.SetWidth(max(0, valueWidth-2))
-	}
-}
-
 func (b body) HelpBindings() []key.Binding {
 	if b.form {
 		return []key.Binding{
@@ -252,24 +236,11 @@ func (b body) View() tea.View {
 }
 
 func (b body) formView() string {
-	out := titleStyle.Width(b.width).Render("Form fields")
-	active := config.DefaultConfig.PrimaryColor()
-	for i := range b.fields {
-		b.fields[i].name.Style = b.fields[i].name.Style.UnsetBorderForeground()
-		b.fields[i].value.Style = b.fields[i].value.Style.UnsetBorderForeground()
+	focus := -1
+	if b.active {
+		focus = b.focusPos
 	}
-	if b.active && b.focusPos >= 0 && b.focusPos/2 < len(b.fields) {
-		row, col := b.focusPos/2, b.focusPos%2
-		if col == 0 {
-			b.fields[row].name.Style = b.fields[row].name.Style.BorderForeground(active)
-		} else {
-			b.fields[row].value.Style = b.fields[row].value.Style.BorderForeground(active)
-		}
-	}
-	for i := range b.fields {
-		out = lipgloss.JoinVertical(lipgloss.Top, out, b.fields[i].View().Content)
-	}
-	return out
+	return lipgloss.JoinVertical(lipgloss.Top, titleStyle.Width(b.width).Render("Form fields"), b.grid.view(focus))
 }
 
 func (b body) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -282,7 +253,7 @@ func (b body) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		b.editor.TextArea.SetWidth(max(0, msg.Width-3))
 		b.editor.TextArea.SetHeight(bodyHeight)
 		b.width = msg.Width
-		b.updateFieldWidths()
+		b.grid.setWidth(msg.Width)
 
 	case tabs.SetActiveTabMsg:
 		b.SetActive(msg.Active)
@@ -305,34 +276,16 @@ func (b body) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return &b, nil
 	}
-	total := len(b.fields) * 2
+	total := b.grid.cells()
 	switch {
 	case key.Matches(k, config.DefaultKeyMap.AddHeader):
-		b.fields = append(b.fields, createParam())
-		b.updateFieldWidths()
-		b.focusPos = len(b.fields)*2 - 2
-		return &b, nil
+		b.focusPos = b.grid.add()
 	case key.Matches(k, config.DefaultKeyMap.Next):
-		if total > 0 {
-			b.focusPos = (b.focusPos + 1) % total
-		}
-		return &b, nil
+		b.focusPos = (b.focusPos + 1) % total
 	case key.Matches(k, config.DefaultKeyMap.Prev):
-		if total > 0 {
-			b.focusPos = (b.focusPos - 1 + total) % total
-		}
-		return &b, nil
+		b.focusPos = (b.focusPos - 1 + total) % total
+	default:
+		return &b, b.grid.update(b.focusPos, k)
 	}
-	if total == 0 || b.focusPos < 0 {
-		return &b, nil
-	}
-	row, col := b.focusPos/2, b.focusPos%2
-	if col == 0 {
-		m, cmd := b.fields[row].name.Update(k)
-		b.fields[row].name = m.(components.Field)
-		return &b, cmd
-	}
-	m, cmd := b.fields[row].value.Update(k)
-	b.fields[row].value = m.(components.Field)
-	return &b, cmd
+	return &b, nil
 }

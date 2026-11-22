@@ -74,46 +74,18 @@ func (m Model) IsActive() bool {
 	return false
 }
 
+// maxOffset is the largest useful YOffset for the current content.
+func (m Model) maxOffset() int {
+	return max(0, strings.Count(m.Content.View().Content, "\n")+1-m.Height)
+}
+
 func (m *Model) clampOffset() {
-	content := m.Content.View().Content
-	lines := strings.Split(content, "\n")
-	contentHeight := len(lines)
-	maxOffset := contentHeight - m.Height
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.YOffset > maxOffset {
-		m.YOffset = maxOffset
-	}
-	if m.YOffset < 0 {
-		m.YOffset = 0
-	}
+	m.YOffset = max(0, min(m.YOffset, m.maxOffset()))
 }
 
 func (m Model) View() tea.View {
-	content := m.Content.View().Content
-	lines := strings.Split(content, "\n")
-	contentHeight := len(lines)
-
-	yOffset := m.YOffset
-	maxOffset := contentHeight - m.Height
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if yOffset > maxOffset {
-		yOffset = maxOffset
-	}
-	if yOffset < 0 {
-		yOffset = 0
-	}
-
-	end := yOffset + m.Height
-	if end > len(lines) {
-		end = len(lines)
-	}
-	if yOffset >= len(lines) {
-		return tea.NewView("")
-	}
-
-	return tea.NewView(strings.Join(lines[yOffset:end], "\n"))
+	lines := strings.Split(m.Content.View().Content, "\n")
+	start := max(0, min(m.YOffset, m.maxOffset()))
+	end := min(len(lines), start+m.Height)
+	return tea.NewView(strings.Join(lines[start:end], "\n"))
 }

@@ -93,7 +93,7 @@ func (m *Model) SetCursor(n int) {
 	m.updateSize()
 }
 
-func (m Model) Width() int    { return m.width }
+func (m Model) Width() int { return m.width }
 func (m *Model) SetWidth(w int) {
 	m.width = w
 	m.updateSize()

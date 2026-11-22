@@ -330,7 +330,7 @@ func write(path string, entries []Entry) error {
 func (e Entry) Replay(base model.Request) model.Request {
 	req := base
 	r := e.Request
-	if m, ok := methodOf(r.Method); ok {
+	if m, ok := model.ParseMethod(r.Method); ok {
 		req.Method = m
 	}
 	req.URI = r.URI
@@ -366,13 +366,4 @@ func merge(base, over map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
-}
-
-func methodOf(label string) (model.Method, bool) {
-	for m := model.POST; m <= model.HEAD; m++ {
-		if m.Label() == strings.ToUpper(label) {
-			return m, true
-		}
-	}
-	return 0, false
 }

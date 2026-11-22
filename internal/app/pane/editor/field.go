@@ -28,14 +28,6 @@ func createParamWith(name, value string) paramField {
 	}
 }
 
-func mapToParamFields(m map[string]string) []paramField {
-	result := make([]paramField, 0, len(m))
-	for k, v := range m {
-		result = append(result, createParamWith(k, v))
-	}
-	return result
-}
-
 func paramFieldsToMap(fields []paramField) map[string]string {
 	result := make(map[string]string, len(fields))
 	for _, pf := range fields {

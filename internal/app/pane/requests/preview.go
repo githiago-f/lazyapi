@@ -104,7 +104,7 @@ var (
 
 func (p PreviewModel) header() string {
 	var b strings.Builder
-	badge := p.item.methodStyle().Render(p.item.Method.Label())
+	badge := methodStyle(p.item.Method).Render(p.item.Method.Label())
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Left, badge, " ", previewURIStyle.Render(p.item.URI)))
 	b.WriteString("\n")
 
