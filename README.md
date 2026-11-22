@@ -131,7 +131,7 @@ Full reference: [docs/cli/](docs/cli/index.md).
 claude mcp add lazyapi -- lazyapi mcp --root /path/to/project
 ```
 
-The MCP server exposes these tools: `list_specs`, `list_operations`, `describe_operation`, `send_request`, `run_tests`, `read_test`, `write_test`, `validate_spec` and `script_api`. Paths are confined to `--root`, and failures come back as readable tool results. See [docs/agents.md](docs/agents.md).
+The MCP server exposes these tools: `list_specs`, `list_operations`, `describe_operation`, `send_request` (with an optional `jq` filter), `run_tests`, `run_flow`, `write_flow`, `read_test`, `write_test`, `validate_spec`, `script_api`, `import_curl` and `export_curl`. Paths are confined to `--root`, and failures come back as readable tool results. See [docs/agents.md](docs/agents.md).
 
 ## TUI
 
@@ -142,8 +142,12 @@ lazyapi api.yml --env .env    # one spec, one env file
 
 - Request list grouped by tag, with a filter (`/`) and a response preview (`s` sends; writes ask for confirmation).
 - Editor with params, auth, headers, body and tests. `alt+enter` sends; `F5` runs the tests; `ctrl+x` edits in `$EDITOR`.
-- Response view: status, time and size; Body (highlighted, `r` for raw), Headers, Checks and Console tabs; `/` searches.
-- `ctrl+v` switches between `.env*` files; `esc` cancels a request in flight; `?` shows every key.
+- Response view: status, time and size; Body (highlighted, `r` for raw, `f` for a jq filter), Headers, Cookies, Timeline, Checks and Console tabs; `/` searches.
+- `ctrl+k` command palette: open any operation, run the spec, a tag or flows, switch environment.
+- Runner view (`R`): results stream in with a progress bar, failures first, details for each one.
+- History (`H`): replay past requests and diff a response with the previous one or with the spec example. Credentials are never written to disk.
+- `{{env.X}}` completion after `{{`, and a warning for references without a value.
+- `ctrl+v` switches environment; `esc` cancels a request in flight; `?` shows every key.
 
 See [docs/tui/](docs/tui/index.md).
 

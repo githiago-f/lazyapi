@@ -21,6 +21,12 @@ When a check fails, the view opens on **Checks**.
 
 In the editor, the script that runs is the one in the Tests tab, including unsaved edits. In the list it is the operation's saved `x-lazyapi-tests` script.
 
+## jq filter
+
+`f` opens a jq filter for the body (`.items[] | {id, name}`, `.data | length`, `map(select(.active))`). `enter` applies it; the body tab then shows only the filter output, and the filter stays applied when you send the request again. `f` and an empty `enter` remove it. Errors (invalid filter, body that is not JSON) are shown in place of the body. Checks always run on the full body.
+
+The same filter exists for agents and scripts: `lazyapi send ... --jq '.id'` and the `jq` argument of the MCP `send_request` tool.
+
 ## Search
 
 With the response focused, `/` opens a search. `enter` highlights every match (case-insensitive) and `n` / `N` move between them. While a search is active, the content is shown without syntax colors. Search again with an empty query to clear it.

@@ -284,7 +284,7 @@ func (m *Model) diffExample() {
 	status := cur.Result.Response.Status
 	ct, example, ok := store.ResponseExample(store.FindOperation(spec, *cur.Ref), status)
 	if !ok {
-		m.setDiff(dimStyle.Render(fmt.Sprintf("The spec has no example for %s %d.\nctrl+y in the editor saves a response as the example.", cur.Label(), status)), "")
+		m.setDiff(dimStyle.Render(fmt.Sprintf("The spec has no example for %s %d.\nctrl+e in the editor saves a response as the example.", cur.Label(), status)), "")
 		return
 	}
 	_, b := bodyOf(cur.Result.Response)

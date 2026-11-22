@@ -42,7 +42,7 @@ Objetivo: validar APIs que exigem login e sequências de CRUD, que é onde teste
 - [x] **Ambientes nomeados** em `lazyapi.config.yml` (server, env file, vars, credenciais por security scheme) com `--env-name`, `$LAZYAPI_ENV`, `env_name` no MCP e `ctrl+v` no TUI. O ambiente aparece no report.
 - [x] **Credenciais**: bearer, basic, API key (header, query, cookie) e OAuth2 (`accessToken` fixo, ou client credentials/password com token automático e cache até expirar). Credenciais vazias não são mais enviadas (antes saía `Authorization: Bearer ` vazio).
 - [x] Exemplos: `before()` com login no `getUser.js`, fluxo `userLifecycle.js`, `lazyapi.config.yml`; tudo roda no `go test` e no CI.
-- [ ] Fluxos no TUI (lista e execução com progresso — junto da "tela do runner" da Fase 8).
+- [x] Fluxos no TUI (paleta e tela do runner, Fase 8).
 - [ ] `after(res)` para limpeza (ex.: apagar o que um teste criou).
 
 ## Fase 7 — Completude HTTP e migração (P1) ✅
@@ -58,15 +58,23 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 - [ ] Import de environments do Postman (`*.postman_environment.json`) para `lazyapi.config.yml`.
 - [ ] Editor de campos de form no TUI (hoje o body form é editado como objeto JSON).
 
-## Fase 8 — Polimento da UI (P2) ← próxima
+## Fase 8 — Polimento da UI (P2) ✅
 
-- [ ] Paleta de comandos (`ctrl+k`): buscar operação, trocar env, rodar testes, copiar como cURL.
-- [ ] Ver e rodar fluxos no TUI.
-- [ ] Tela do runner no TUI: rodar uma tag ou a spec inteira com progresso e lista navegável de falhas.
-- [ ] Histórico de requests com replay, e diff entre respostas ou contra o example salvo.
-- [ ] Filtro jq (`gojq`) na resposta.
-- [ ] Destacar `{{env.X}}`/`{{var.X}}` não resolvidas, com autocomplete.
-- [ ] Gerar body sintético a partir do schema quando não há example (usar `store.SchemaSample`, já usado pelo mock).
+- [x] Paleta de comandos (`ctrl+k`, busca fuzzy): abrir operação, rodar spec/tag/fluxos, trocar env, histórico, copiar como cURL.
+- [x] Tela do runner (`R` na lista, ou a paleta): resultados em streaming com barra de progresso, cursor na primeira falha, `F` só falhas, `e` abre no editor, `R` roda de novo; detalhes reutilizam a tela de resposta. Escritas e fluxos pedem y/N.
+- [x] Fluxos no TUI (paleta → runner; o detalhe lista os passos).
+- [x] Histórico por spec (`H`), sem credenciais em disco: replay no editor, diff com a resposta anterior (`d`) e com o example do spec (`x`), JSON comparado com chaves ordenadas.
+- [x] Filtro jq (`gojq`): `f` na resposta, `send --jq`, `jq` no MCP `send_request`.
+- [x] `{{env.X}}`/`{{var.X}}` sem valor listadas no rodapé do editor; autocomplete inline após `{{` (`→` aceita).
+- [x] Body sintético a partir do schema no editor quando não há example (`store.SampleBody`; `run` nunca inventa body).
+- [ ] Destacar as referências dentro do próprio campo (cor no texto). Hoje os componentes de input do bubbles não aceitam estilo por trecho.
+- [ ] Limpar o histórico pelo TUI (hoje: apagar o arquivo ou `LAZYAPI_NO_HISTORY`).
+- [ ] Rodar um único passo de um fluxo / ver o request de cada passo no detalhe.
+
+## Próximas ideias
+
+- `after(res)` para limpeza; `pm.sendRequest`; import de environments do Postman; editor de campos de form.
+- Testes de TUI end-to-end com `teatest` (hoje: testes por componente + validação manual no tmux).
 
 ## Contínuo — qualidade de código
 

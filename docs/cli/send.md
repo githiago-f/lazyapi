@@ -28,6 +28,7 @@ lazyapi send request <spec.yml> --op <operationId> [flags]
 | `--save-example` | Save the response as an example in the spec |
 | `--dry-run` | Resolve the request (URL, headers, body) without sending |
 | `--output curl` | Print the exact request (after `before()`) as a curl command instead of sending it |
+| `--jq filter` | Show only this [jq](https://jqlang.org/manual/) slice of the response body (in every output format). Checks still run on the full body |
 | `--insecure` | Skip TLS certificate verification |
 | `--ca-cert <pem>` | Extra trusted CA certificates |
 | `--client-cert <pem>` / `--client-key <pem>` | Mutual TLS |
@@ -47,6 +48,7 @@ lazyapi send request api.yml --op getUser --param id=1 --save-example
 lazyapi send request api.yml --op login --form username=ana --form password=pw
 lazyapi send request api.yml --op uploadAvatar --param id=1 --file avatar=./me.png --form caption=hi
 lazyapi send request api.yml --op getUser --param id=1 --output curl   # share or debug the exact request
+lazyapi send request api.yml --op listUsers --jq '.[] | {id, email}' --output json   # only what you need
 ```
 
 ## Exit status

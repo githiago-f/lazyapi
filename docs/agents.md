@@ -37,6 +37,8 @@ Or with any client that reads an `mcpServers` config:
 | `validate_spec` | OpenAPI and LazyAPI checks (operationIds, responses, scripts compile) |
 | `script_api` | The TypeScript definitions of the script API |
 
+`send_request` accepts `jq` (e.g. `".items[0] | {id, status}"`) to return only part of a large body; checks still see the whole response.
+
 `send_request`, `run_tests` and `run_flow` accept `env_name` to use a named environment from `lazyapi.config.yml` (server, env file, variables and credentials).
 
 Tool failures (network errors, unknown operations) come back as results with `isError: true` and a readable message, so the agent can fix the call and retry.

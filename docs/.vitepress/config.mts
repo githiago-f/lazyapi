@@ -37,6 +37,7 @@ export default defineConfig({
             { text: "Request Editor", link: "/tui/request-editor" },
             { text: "Keyboard Shortcuts", link: "/tui/keyboard-shortcuts" },
             { text: "Response Preview", link: "/tui/response-preview" },
+            { text: "Runner, Flows & History", link: "/tui/runner" },
           ],
         },
       ],
