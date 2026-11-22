@@ -86,6 +86,10 @@
 
   // ---------------------------------------------------------------- lazyapi
   global.lazyapi = {
+    /** 0-based iteration of a data-driven run (run --data). */
+    iteration: native.iteration,
+    /** Number of iterations (1 without --data). */
+    iterations: native.iterations,
     send: function (target, opts) {
       return new LazyResponse(native.send(String(target), opts || {}));
     },

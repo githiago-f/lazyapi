@@ -333,18 +333,16 @@ func (m *Model) setTab(t Tab) {
 	m.refresh()
 }
 
-// refresh re-renders the active tab into the viewport. While a search is
-// active the content is shown without colors: the viewport positions
-// highlights on plain text only.
+// refresh re-renders the active tab into the viewport and re-applies the
+// search.
 func (m *Model) refresh() {
-	content := m.content()
-	if m.query != "" {
-		content = ansi.Strip(content)
-	}
-	m.vp.SetContent(content)
+	m.vp.SetContent(m.content())
 	m.applySearch()
 }
 
+// applySearch highlights every case-insensitive match of the query. It
+// searches the text without colors (so a query never matches inside an
+// escape sequence) and maps the matches back to the colored content.
 func (m *Model) applySearch() {
 	m.vp.ClearHighlights()
 	m.hits = 0
@@ -355,9 +353,56 @@ func (m *Model) applySearch() {
 	if err != nil {
 		return
 	}
-	matches := re.FindAllStringIndex(m.vp.GetContent(), -1)
+	raw := m.vp.GetContent()
+	matches := rawOffsets(raw, re.FindAllStringIndex(ansi.Strip(raw), -1))
 	m.hits = len(matches)
 	m.vp.SetHighlights(matches)
+}
+
+// rawOffsets converts byte ranges of ansi.Strip(raw) into byte ranges of
+// raw. Ranges must be sorted and must not overlap.
+func rawOffsets(raw string, plain [][]int) [][]int {
+	if len(plain) == 0 {
+		return nil
+	}
+	out := make([][]int, len(plain))
+	bounds := make([]int, 0, len(plain)*2) // start, end, start, end, ...
+	for _, m := range plain {
+		bounds = append(bounds, m[0], m[1])
+	}
+	mapped := make([]int, len(bounds))
+	next := 0
+	plainPos, rawPos := 0, 0
+	var state byte
+	for next < len(bounds) {
+		// A start maps to the raw position of the first text byte at or after
+		// it; an end maps to the raw position right after the last text byte.
+		for next < len(bounds) && bounds[next] == plainPos && next%2 == 1 {
+			mapped[next] = rawPos
+			next++
+		}
+		if rawPos >= len(raw) {
+			break
+		}
+		seq, _, n, newState := ansi.DecodeSequence(raw[rawPos:], state, nil)
+		state = newState
+		isText := seq != "" && seq[0] != '\x1b' && seq[0] != 0x9b
+		if isText {
+			for next < len(bounds) && bounds[next] == plainPos && next%2 == 0 {
+				mapped[next] = rawPos
+				next++
+			}
+			plainPos += n
+		}
+		rawPos += n
+	}
+	for ; next < len(bounds); next++ {
+		mapped[next] = len(raw)
+	}
+	for i := range out {
+		out[i] = []int{mapped[2*i], mapped[2*i+1]}
+	}
+	return out
 }
 
 func (m Model) content() string {

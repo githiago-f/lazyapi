@@ -29,7 +29,12 @@ When the spec declares a request body schema but no example, the editor builds o
 
 ## Templates
 
-<code v-pre>{{env.NAME}}</code> and <code v-pre>{{var.NAME}}</code> work in every field. After typing <code v-pre>{{</code>, the field shows a completion from the env file and the active environment's vars; `→` accepts it. References without a value are listed in the bottom bar (<code v-pre>⚠ no value: {{env.TOKEN}}</code>), because they would be sent as empty strings. Vars set by scripts at run time (`vars.set`, `before()`) are not known before sending.
+<code v-pre>{{env.NAME}}</code> and <code v-pre>{{var.NAME}}</code> work in every field and editor, and are colored as you type: teal when the active environment has a value, **red underlined** when it does not.
+
+- Type <code v-pre>{{</code> or the shortcut `$` (`$TOK`) to open the completion menu: the env file's variables and the environment's vars, with values masked when they look like credentials. `↑`/`↓` choose, `tab` (or `enter`) inserts <code v-pre>{{env.TOKEN}}</code>, `esc` closes the menu.
+- References without a value are also listed in the bottom bar (<code v-pre>⚠ no value: {{env.TOKEN}}</code>), because they would be sent as empty strings. Vars set by scripts at run time (`vars.set`, `before()`) are not known before sending.
+- A password field shows its value when it is only references (<code v-pre>{{env.PASSWORD}}</code> holds no secret).
+- The URL field also colors the host, `{path}` parameters and query keys.
 
 ## Tabs
 
@@ -61,14 +66,14 @@ Custom HTTP headers as key/value pairs. Add with `n` + `h`. Common headers like 
 
 The request body, in the operation's media type:
 
-- **JSON, text, XML, …** — a text area (`ctrl+x` opens it in `$EDITOR`).
+- **JSON, text, XML, …** — the code editor (below): JSON is colored, validated as you type (templates count as values) and formatted with `alt+f`. `ctrl+x` opens it in `$EDITOR`.
 - **`application/x-www-form-urlencoded` and `multipart/form-data`** — **Form fields**: one name/value row per field, like the Headers tab. `tab` / `shift+tab` move between cells, `ctrl+g` adds a field, a row without a name is dropped, and a repeated name sends the field several times. The rows are kept as a JSON object, which is encoded as form fields when sending; `ctrl+x` edits that object in `$EDITOR`. File parts are only sent from the CLI (`--file`).
 
 Select the type from the dropdown.
 
 ### Tests
 
-A JavaScript/TypeScript editor for the operation's test script (see [Test Scripts](../scripting.md)). Scripts can use `request`, `response`, `env`, `vars`, `lazyapi.send()`, `test()` and `expect()`, and may import relative files or `https://` modules.
+The code editor, in JavaScript, for the operation's test script (see [Test Scripts](../scripting.md)). Scripts can use `request`, `response`, `env`, `vars`, `lazyapi.send()`, `test()` and `expect()`, and may import relative files or `https://` modules.
 
 Press `F5` to run the script against the last response. Results, failure messages and `console` output appear below the editor. When you save (`ctrl+o`), the script is written to `tests/<operationId>.js` next to the spec and linked through `x-lazyapi-tests`.
 
@@ -77,6 +82,20 @@ test("status is 200", () => expect(response).toHaveStatus(200));
 test("matches the OpenAPI schema", () => expect(response).toMatchSchema());
 test("has an id", () => expect(response.json()).toHaveProperty("id"));
 ```
+
+## Code editor
+
+Body, Tests and the Docs description use the same editor:
+
+- syntax colors (Catppuccin), line numbers with the current line highlighted, and a status line with the language, `Ln, Col` and, for JSON, `✓ valid` or the parse error. The line with the error gets a red `●`;
+- `{`, `[`, `(` and quotes close themselves; typing the closer steps over it; `backspace` between a pair removes both; `enter` keeps the indentation and opens an indented line between brackets;
+- `tab` / `shift+tab` indent and dedent (two spaces);
+- `alt+f` formats JSON (key order kept);
+- `ctrl+z` / `ctrl+y` undo and redo; pasting keeps line breaks;
+- `home` goes to the indentation, then column 0; `ctrl+home` / `ctrl+end`; `alt+←` / `alt+→` move by word; `ctrl+w` deletes the word before the cursor; `ctrl+u` deletes to the line start;
+- in Tests, completions for the script API as you type: `response.` (`status`, `json()`, …), `expect(…).` (every matcher), `lazyapi.`, `env.`, `vars.`, `pm.`, `pm.response.` and the globals. Methods insert `()` with the cursor inside.
+
+`esc` closes an open menu first, then leaves the editor.
 
 ## Field navigation
 

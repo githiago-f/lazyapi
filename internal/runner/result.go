@@ -4,6 +4,7 @@
 package runner
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/githiago-f/lazyapi/internal/script"
@@ -89,6 +90,9 @@ type Step struct {
 	Status      int    `json:"status,omitempty"`
 	DurationMs  int64  `json:"durationMs"`
 	Error       string `json:"error,omitempty"`
+	// Request (credentials redacted) and Response of the step.
+	Request  *RequestInfo  `json:"request,omitempty"`
+	Response *ResponseInfo `json:"response,omitempty"`
 }
 
 // KindFlow marks results produced by a flow script.
@@ -96,7 +100,9 @@ const KindFlow = "flow"
 
 // OpResult is the result of one operation (or one flow, Kind "flow").
 type OpResult struct {
-	Kind        string            `json:"kind,omitempty"`
+	Kind string `json:"kind,omitempty"`
+	// Iteration is the 1-based data row of a data-driven run (0 otherwise).
+	Iteration   int               `json:"iteration,omitempty"`
 	Steps       []Step            `json:"steps,omitempty"`
 	OperationID string            `json:"operationId,omitempty"`
 	Method      string            `json:"method"`
@@ -113,8 +119,13 @@ type OpResult struct {
 	Logs        []script.LogEntry `json:"logs,omitempty"`
 }
 
-// Label is "METHOD /path".
-func (r OpResult) Label() string { return r.Method + " " + r.Path }
+// Label is "METHOD /path", with "[#n]" for iteration n of a data-driven run.
+func (r OpResult) Label() string {
+	if r.Iteration > 0 {
+		return fmt.Sprintf("%s %s [#%d]", r.Method, r.Path, r.Iteration)
+	}
+	return r.Method + " " + r.Path
+}
 
 // Summary aggregates a run.
 type Summary struct {
@@ -133,6 +144,7 @@ type Summary struct {
 type Report struct {
 	Spec        string     `json:"spec"`
 	Environment string     `json:"environment,omitempty"`
+	Iterations  int        `json:"iterations,omitempty"` // data rows of a data-driven run
 	StartedAt   time.Time  `json:"startedAt"`
 	Summary     Summary    `json:"summary"`
 	Operations  []OpResult `json:"operations"`

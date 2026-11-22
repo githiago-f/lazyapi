@@ -26,6 +26,9 @@ import (
 type (
 	CloseMsg  struct{}
 	ReplayMsg struct{ Entry history.Entry }
+	// ClearMsg asks the TUI to delete the history of these specs ("" is the
+	// history of requests without a spec).
+	ClearMsg struct{ Specs []string }
 )
 
 // Keys of the history view.
@@ -37,6 +40,7 @@ var (
 	ExampleKey = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "diff with example"))
 	DetailKey  = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "list/details"))
 	BackKey    = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back"))
+	ClearKey   = key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "clear history"))
 )
 
 var (
@@ -58,6 +62,8 @@ type Model struct {
 
 	detail      responses.Model
 	detailFocus bool
+
+	confirmClear bool
 
 	diffing  bool
 	diffVP   viewport.Model
@@ -120,7 +126,13 @@ func (m Model) HelpBindings() []key.Binding {
 	if m.detailFocus && !m.diffing {
 		return append(m.detail.HelpBindings(), DetailKey, BackKey)
 	}
-	return []key.Binding{DownKey, UpKey, ReplayKey, DiffKey, ExampleKey, DetailKey, BackKey}
+	if m.confirmClear {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "delete")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("any other key", "keep")),
+		}
+	}
+	return []key.Binding{DownKey, UpKey, ReplayKey, DiffKey, ExampleKey, DetailKey, ClearKey, BackKey}
 }
 
 // Update handles keys.
@@ -156,7 +168,21 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.confirmClear {
+		m.confirmClear = false
+		if k.String() == "y" || k.String() == "Y" {
+			specs := m.specs()
+			return m, func() tea.Msg { return ClearMsg{Specs: specs} }
+		}
+		return m, nil
+	}
+
 	switch {
+	case key.Matches(k, ClearKey):
+		if len(m.entries) > 0 {
+			m.confirmClear = true
+		}
+		return m, nil
 	case key.Matches(k, BackKey):
 		if m.diffing {
 			m.diffing = false
@@ -206,6 +232,19 @@ func (m *Model) move(d int) {
 		m.offset = m.cursor - m.rows() + 1
 	}
 	m.showSelected()
+}
+
+// specs lists the specs that have entries in the view.
+func (m Model) specs() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, e := range m.entries {
+		if !seen[e.Spec] {
+			seen[e.Spec] = true
+			out = append(out, e.Spec)
+		}
+	}
+	return out
 }
 
 // previous is the next older entry of the same operation.
@@ -367,6 +406,9 @@ func (m Model) row(e history.Entry, width int, selected bool) string {
 // View renders the list and the selected entry (or a diff).
 func (m Model) View() string {
 	head := titleSty.Render("History") + dimStyle.Render(fmt.Sprintf("  %d %s · newest first", len(m.entries), plural(len(m.entries), "request")))
+	if m.confirmClear {
+		head = titleSty.Render("History") + "  " + failStyle.Render(fmt.Sprintf("Delete all %d saved %s? y deletes, any other key keeps them", len(m.entries), plural(len(m.entries), "request")))
+	}
 	w := m.listWidth() - 2
 	var lines []string
 	if len(m.entries) == 0 {

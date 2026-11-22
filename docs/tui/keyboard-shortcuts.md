@@ -43,7 +43,9 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `ctrl+e` | Save the last response as an example in the spec |
 | `ctrl+x` | Open the Body or Tests tab in `$VISUAL` / `$EDITOR` |
 | `alt+c` | Copy the request as cURL (with the active environment's server and credentials) |
-| `→` | Accept the <code v-pre>{{env.X}}</code> / <code v-pre>{{var.X}}</code> completion shown after typing <code v-pre>{{</code> |
+| <code v-pre>{{</code> or `$name` | Open the variable menu; `↑`/`↓` choose, `tab` inserts, `esc` closes |
+| `alt+f` | Format the JSON body |
+| `ctrl+z` / `ctrl+y` | Undo / redo in Body, Tests and the description |
 | `esc` | Leave tab content, then back to the list |
 
 ### Tabs
@@ -75,7 +77,8 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | Key | Action |
 |-----|--------|
 | `↑`/`k`, `↓`/`j`, `g` / `G` | Move through the results |
-| `enter` / `tab` | Focus the result details (response tabs, search, jq); `tab`/`esc` back to the list |
+| `enter` | On a flow: expand / collapse its steps. Otherwise: focus the details |
+| `tab` | Focus the result details (response tabs, search, jq); `tab`/`esc` back to the list |
 | `F` | Show only failures |
 | `e` | Open the operation in the editor |
 | `R` | Run again |
@@ -89,6 +92,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `enter` | Replay: open the request in the editor with the values it was sent with |
 | `d` | Diff the response with the previous response of the same operation |
 | `x` | Diff the response with the example saved in the spec |
+| `X` | Delete the history shown (asks `y`/`N`) |
 | `tab` | Focus the response details |
 | `esc` | Close the diff, then back |
 

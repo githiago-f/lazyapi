@@ -18,6 +18,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
 )
 
@@ -71,6 +72,10 @@ type ExecData struct {
 
 	Send     SendFunc     // optional: enables lazyapi.send()
 	Contract ContractFunc // optional: enables expect(response).toMatchSchema()
+
+	// Iteration (0-based) and Iterations of a data-driven run (lazyapi
+	// .iteration, pm.info.iteration). Iterations 0 means a single run.
+	Iteration, Iterations int
 }
 
 // Options control how a script is bundled and executed.
@@ -449,6 +454,8 @@ func (b *bridge) object() map[string]any {
 		"varHas":           func(k string) bool { _, ok := b.data.Vars[k]; return ok },
 		"varAll":           func() map[string]string { return copyMap(b.data.Vars) },
 		"send":             b.send,
+		"iteration":        b.data.Iteration,
+		"iterations":       max(1, b.data.Iterations),
 		"validateContract": b.validateContract,
 		"validateSchema":   validateSchema,
 	}
@@ -477,16 +484,26 @@ func copyMap(m map[string]string) map[string]string {
 	return out
 }
 
+// requestData is the script's request object: the request as sent, with
+// templates resolved.
 func (b *bridge) requestData() map[string]any {
 	r := b.data.Request
+	ctx := env.Context{Env: r.Env, Vars: r.Vars}
+	resolved := func(m map[string]string) map[string]string {
+		out := make(map[string]string, len(m))
+		for k, v := range m {
+			out[k] = env.Resolve(v, ctx)
+		}
+		return out
+	}
 	return map[string]any{
 		"method":  r.Method.Label(),
 		"url":     r.ResolvedURL(),
 		"path":    r.URI,
-		"headers": lowerKeys(r.Headers),
-		"query":   copyMap(r.Query),
-		"params":  copyMap(r.Params),
-		"body":    r.Body.Raw,
+		"headers": lowerKeys(resolved(r.Headers)),
+		"query":   resolved(r.Query),
+		"params":  resolved(r.Params),
+		"body":    env.Resolve(r.Body.Raw, ctx),
 	}
 }
 

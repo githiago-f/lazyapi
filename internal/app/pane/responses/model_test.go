@@ -1,6 +1,7 @@
 package responses
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -190,5 +191,50 @@ func TestModelJQFilter(t *testing.T) {
 	m.SetFilter("")
 	if strings.Contains(view(m), "jq ") {
 		t.Error("empty filter clears it")
+	}
+}
+
+func TestRawOffsets(t *testing.T) {
+	red := "\x1b[31m"
+	reset := "\x1b[0m"
+	raw := `{"` + red + `name` + reset + `": "` + red + `ana` + reset + `", "x": "anA"}`
+	plain := ansi.Strip(raw)
+	re := regexp.MustCompile("(?i)ana")
+	got := rawOffsets(raw, re.FindAllStringIndex(plain, -1))
+	if len(got) != 2 {
+		t.Fatalf("matches = %v", got)
+	}
+	for _, m := range got {
+		if s := ansi.Strip(raw[m[0]:m[1]]); !strings.EqualFold(s, "ana") {
+			t.Errorf("raw[%d:%d] = %q, want ana", m[0], m[1], raw[m[0]:m[1]])
+		}
+	}
+	// A query never matches inside an escape sequence.
+	if got := rawOffsets(raw, regexp.MustCompile("31").FindAllStringIndex(plain, -1)); len(got) != 0 {
+		t.Errorf("matched inside an escape code: %v", got)
+	}
+	// Adjacent matches and a match at the very end.
+	raw2 := red + "abab" + reset
+	got = rawOffsets(raw2, regexp.MustCompile("ab").FindAllStringIndex(ansi.Strip(raw2), -1))
+	if len(got) != 2 || raw2[got[0][0]:got[0][1]] != "ab" || raw2[got[1][0]:got[1][1]] != "ab" || got[0][1] != got[1][0] {
+		t.Errorf("adjacent = %v", got)
+	}
+}
+
+func TestModelSearchKeepsColors(t *testing.T) {
+	m := New("")
+	m.SetSize(80, 20)
+	m.SetResult(sample(runner.Passed))
+	m.Focus()
+	m, _ = m.Update(press("/"))
+	for _, r := range "ana" {
+		m, _ = m.Update(press(string(r)))
+	}
+	m, _ = m.Update(press("enter"))
+	if m.hits != 1 {
+		t.Fatalf("hits = %d", m.hits)
+	}
+	if !strings.Contains(m.vp.GetContent(), "\x1b[") {
+		t.Error("the body must stay syntax-highlighted while searching")
 	}
 }

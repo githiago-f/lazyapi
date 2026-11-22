@@ -67,9 +67,9 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 - [x] Filtro jq (`gojq`): `f` na resposta, `send --jq`, `jq` no MCP `send_request`.
 - [x] `{{env.X}}`/`{{var.X}}` sem valor listadas no rodapé do editor; autocomplete inline após `{{` (`→` aceita).
 - [x] Body sintético a partir do schema no editor quando não há example (`store.SampleBody`; `run` nunca inventa body).
-- [ ] Destacar as referências dentro do próprio campo (cor no texto). Hoje os componentes de input do bubbles não aceitam estilo por trecho.
-- [ ] Limpar o histórico pelo TUI (hoje: apagar o arquivo ou `LAZYAPI_NO_HISTORY`).
-- [ ] Rodar um único passo de um fluxo / ver o request de cada passo no detalhe.
+- [x] Destacar as referências dentro do próprio campo: campos e editores próprios com cores (Fase 13).
+- [x] Limpar o histórico pelo TUI (`X` com confirmação).
+- [x] Ver o request e a resposta de cada passo de um fluxo (runner: `enter` expande; JSON: `steps[].request/response`).
 
 ## Fase 9 — Testes repetíveis e TUI testado ✅
 
@@ -86,7 +86,18 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 
 ## Próximas ideias
 
-- `formdata` (arquivos) no `pm.sendRequest`; runner de collection com iterações/data files (`pm.iterationData`).
+- [x] Runs com data files: `run --data rows.csv|json` (uma iteração por linha, linha no env, `lazyapi.iteration`, `pm.iterationData`, `[#n]` nos relatórios), MCP `data_file`.
+- [ ] `formdata` (arquivos) no `pm.sendRequest`.
+- [ ] Runner no TUI com data file (escolher o arquivo pela paleta).
+
+## Fase 13 — Editores de verdade
+
+- [x] Editor de código para Body, Tests e Description: syntax highlight (chroma, Catppuccin), números de linha, pares automáticos, auto-indent, `tab`/`shift+tab`, `alt+f` formata JSON, validação de JSON ao vivo (erro na linha), desfazer/refazer, colar com várias linhas. Buffer próprio (o `textarea` redesenhava tudo a cada tecla e cortava conteúdo em 99 linhas).
+- [x] Campos de uma linha com cores: templates (resolvido/faltando), host, `{params}`, query.
+- [x] Menu de autocomplete: variáveis após `{{` ou `$nome` (valores mascarados), API dos scripts no editor de Tests (`response.`, `expect(…).`, `lazyapi.`, `pm.`…).
+- [x] Visual: bordas arredondadas e apagadas, destaque só no foco, aba ativa com sublinhado grosso.
+- [ ] Hover/assinatura das funções da API no editor de Tests; diagnóstico de TypeScript (esbuild) ao vivo.
+- [ ] Seleção de texto (shift+setas) e copiar/recortar no editor.
 
 ## Fase 11 / Contínuo — qualidade de código
 
@@ -101,7 +112,7 @@ Fazer junto com as fases, quando tocar no código em questão:
 - [x] `env.Load` e `Store` usam o mesmo parser.
 - [x] Uma tabela de métodos (`ParseMethod`); método desconhecido no YAML é erro.
 - [x] `scrollable.go` (já usava a API nova; clamp unificado e testes).
-- [ ] Highlight de busca: hoje a busca mostra texto sem cores por causa de um bug no viewport do bubbles. Reportar ou corrigir upstream.
+- [x] Highlight de busca com cores: corrigido no bubbles v2.2 (atualizado junto com bubbletea v2.1 e lipgloss v2.1); a busca roda no texto sem cores e os offsets são convertidos.
 
 ---
 

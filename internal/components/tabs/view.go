@@ -37,13 +37,16 @@ func DefaultStyles() Styles {
 	return Styles{
 		Tab: lipgloss.NewStyle().
 			Padding(0, 2).
+			Foreground(lipgloss.Color(config.Overlay1)).
 			BorderBottom(true).
 			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color(config.Overlay1)),
+			BorderForeground(lipgloss.Color(config.Surface1)),
 		ActiveTab: lipgloss.NewStyle().
 			Padding(0, 2).
+			Bold(true).
+			Foreground(lipgloss.Color(config.Peach)).
 			BorderBottom(true).
-			BorderStyle(lipgloss.NormalBorder()).
+			BorderStyle(lipgloss.ThickBorder()).
 			BorderForeground(lipgloss.Color(config.Peach)),
 		OverflowIndicator: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(config.Overlay2)).
@@ -225,7 +228,7 @@ func (m Model) View() tea.View {
 }
 
 var style = lipgloss.NewStyle().
-	Border(lipgloss.NormalBorder())
+	Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2))
 
 func (m Model) Init() tea.Cmd {
 	return nil
@@ -256,6 +259,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			activeMsg := SetActiveTabMsg{Active: true}
 			m.Tabs[m.cursor].Content, cmd = m.Tabs[m.cursor].Content.Update(activeMsg)
 			return m, cmd
+		case key.Matches(msg, config.DefaultKeyMap.Back) && completing(m.Tabs[m.cursor].Content):
+			// esc closes the content's completion menu first.
 		case key.Matches(msg, config.DefaultKeyMap.Back):
 			m.selected = false
 			activeMsg := SetActiveTabMsg{Active: false}
@@ -273,4 +278,10 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// completing reports whether a tab's content has a completion menu open.
+func completing(content tea.Model) bool {
+	c, ok := content.(interface{ Completing() bool })
+	return ok && c.Completing()
 }

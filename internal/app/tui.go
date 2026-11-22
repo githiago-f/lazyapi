@@ -23,6 +23,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
+	"github.com/githiago-f/lazyapi/internal/history"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/project"
 	"github.com/githiago-f/lazyapi/internal/runner"
@@ -131,7 +132,7 @@ func NewTui(defaultFile string, envFile string) Tui {
 	}
 
 	tui.templates = &templateSource{store: tui.envStore}
-	components.TemplateNames = tui.templates.names
+	components.TemplateSource = tui.templates
 
 	tui.editor = editor.New(tui.currentRequest)
 	tui.editor.SetEnvStore(tui.envStore)
@@ -602,6 +603,15 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case historyview.ReplayMsg:
 		return t.replay(msg.Entry)
+
+	case historyview.ClearMsg:
+		for _, spec := range msg.Specs {
+			if err := history.Clear(spec); err != nil {
+				return t, notify("History: "+err.Error(), components.Error)
+			}
+		}
+		t.history.SetEntries(nil)
+		return t, notify("History cleared", components.Info)
 
 	case runview.OpenOperationMsg:
 		ref := msg.Ref

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/githiago-f/lazyapi/internal/store"
@@ -345,5 +346,34 @@ func TestTools_Curl(t *testing.T) {
 	}
 	if _, text, isErr := c.tool("import_curl", map[string]any{"spec": "../x.yml", "command": "curl https://a.b"}); !isErr || !strings.Contains(text, "outside the server root") {
 		t.Errorf("import_curl confinement: %s", text)
+	}
+}
+
+func TestTools_RunTestsWithData(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":1}`))
+	}))
+	defer srv.Close()
+	root := setupRoot(t, srv.URL)
+	if err := os.WriteFile(filepath.Join(root, "api", "ids.csv"), []byte("uid\n5\n6\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := startServer(t, root)
+	res, text, isErr := c.tool("run_tests", map[string]any{"spec": "api/spec.yml", "operations": []string{"getUser"},
+		"params": map[string]any{"id": "{{env.uid}}"}, "data_file": "api/ids.csv"})
+	if isErr || res["iterations"] != float64(2) {
+		t.Fatalf("run_tests = %s", text)
+	}
+	if strings.Join(paths, ",") != "/users/5,/users/6" {
+		t.Errorf("paths = %v", paths)
+	}
+	if _, text, isErr := c.tool("run_tests", map[string]any{"spec": "api/spec.yml", "data_file": "../x.csv"}); !isErr || !strings.Contains(text, "outside the server root") {
+		t.Errorf("data_file must stay inside the root: %s", text)
 	}
 }

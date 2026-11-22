@@ -34,7 +34,28 @@ Operations run in spec order within four groups: reads (`GET`/`HEAD`/`OPTIONS`),
 | `--flow <file>` | Run only this flow (repeatable); no operations are run |
 | `--flow-timeout <d>` | Maximum run time of one flow (default `5m`) |
 
-Flow results appear in the report with `"kind": "flow"`, `"method": "FLOW"`, the flow path, its `steps` and its checks.
+Flow results appear in the report with `"kind": "flow"`, `"method": "FLOW"`, the flow path, its `steps` (each with `request` and `response`, bodies following `--bodies`) and its checks.
+
+## Data-driven runs
+
+`--data users.csv` (or `.json`) runs the whole selection, operations and flows, **once per row**, like Postman's collection runner with a data file:
+
+```csv
+email,name
+ana@example.com,Ana
+bia@example.com,Bia
+```
+
+```bash
+lazyapi run api.yml --op createUser --methods POST --data users.csv
+lazyapi run api.yml --flow flows/signup.js --data users.json
+```
+
+- CSV needs a header row. JSON is an array of objects; numbers and booleans become text, nested values JSON text.
+- In each iteration the row's values are added to the env: use <code v-pre>{{env.email}}</code> in params, headers and bodies (<code v-pre>--param id={{env.id}}</code>), `env.get("email")` in scripts, and `pm.iterationData.get("email")` in Postman scripts. Imported Postman <code v-pre>{{email}}</code> placeholders already read the env.
+- Every iteration starts from the same env and vars: what a script sets in one row does not leak into the next.
+- Scripts see `lazyapi.iteration` (0-based) and `lazyapi.iterations` (`pm.info.iteration` / `iterationCount`).
+- Results carry `"iteration"` (1-based) and labels end with `[#n]` in every output format; the report has `"iterations"`. `--bail` stops after the iteration with the first failure. At most 10 000 rows.
 
 ## Execution
 

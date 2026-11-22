@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/history"
 )
 
 const tuiSpec = `openapi: 3.0.0
@@ -64,6 +65,8 @@ func newTUI(t *testing.T) (*teatest.TestModel, *httptest.Server) {
 func start(t *testing.T, spec string) *teatest.TestModel {
 	t.Helper()
 	t.Setenv("LAZYAPI_HISTORY_DIR", filepath.Join(filepath.Dir(spec), "history"))
+	// Drafts and unsaved edits live under os.TempDir(): keep them in the test dir.
+	t.Setenv("TMPDIR", t.TempDir())
 	config.DefaultConfig.Active = config.RequestList
 	components.Z.NewGlobal()
 	tm := teatest.NewTestModel(t, NewTui(spec, ""), teatest.WithInitialTermSize(140, 40))
@@ -196,6 +199,23 @@ func TestTUI_HistoryAfterSend(t *testing.T) {
 	waitFor(t, tm, "Send", "Docs")
 }
 
+func TestTUI_ClearHistory(t *testing.T) {
+	tm, _ := newTUI(t)
+	waitFor(t, tm, "/orders")
+	tm.Send(press("down"))
+	tm.Send(press("s"))
+	waitFor(t, tm, "200 OK")
+	tm.Send(press("H"))
+	waitFor(t, tm, "1 request")
+	tm.Send(press("X"))
+	waitFor(t, tm, "Delete all 1 saved request?")
+	tm.Send(press("y"))
+	waitFor(t, tm, "History cleared", "Nothing sent yet.")
+	if files, _ := filepath.Glob(filepath.Join(history.Dir(), "*.jsonl")); len(files) != 0 {
+		t.Errorf("history files left: %v", files)
+	}
+}
+
 func TestTUI_EditorSendAndEscBack(t *testing.T) {
 	tm, _ := newTUI(t)
 	waitFor(t, tm, "/orders")
@@ -310,4 +330,72 @@ paths:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the form was not sent")
 	}
+}
+
+func TestTUI_CompletionAndCodeEditor(t *testing.T) {
+	got := make(chan string, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- r.URL.RequestURI()
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "api.yml")
+	if err := os.WriteFile(spec, []byte(fmt.Sprintf(`openapi: 3.0.0
+info: {title: API, version: "1"}
+servers: [{url: %s}]
+paths:
+  /items:
+    post:
+      operationId: createItem
+      requestBody:
+        content:
+          application/json:
+            example: {name: a}
+      responses: {"200": {description: ok}}
+`, srv.URL)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=abc123\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "lazyapi.config.yml"), []byte("default: dev\nenvironments:\n  dev:\n    env: .env\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm := start(t, spec)
+	waitFor(t, tm, "/items")
+	tm.Send(press("enter"))
+	waitFor(t, tm, "No response yet")
+
+	// URI: "$TO" opens the variable menu; tab inserts {{env.TOKEN}}.
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnd})
+	tm.Type("?t=$TO")
+	waitFor(t, tm, "env.TOKEN", "tab accept")
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModAlt})
+	select {
+	case uri := <-got:
+		if uri != "/items?t=abc123" {
+			t.Errorf("sent %q", uri)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("request not sent")
+	}
+
+	// Body: the JSON editor flags invalid JSON in its status line. The
+	// response took the focus: tab ×5 wraps around to the request tabs.
+	waitFor(t, tm, "200")
+	for i := 0; i < 5; i++ {
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	}
+	for i := 0; i < 4; i++ {
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyRight})
+	}
+	tm.Send(press("enter"))
+	waitFor(t, tm, "JSON", "✓ valid")
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl})
+	tm.Type(",")
+	waitFor(t, tm, "✗ invalid")
 }

@@ -1,7 +1,6 @@
 package env
 
 import (
-	"sort"
 	"strings"
 )
 
@@ -40,45 +39,6 @@ func Missing(ctx Context, inputs ...string) []string {
 			if !ok && !seen[ref] {
 				seen[ref] = true
 				out = append(out, ref)
-			}
-		}
-	}
-	return out
-}
-
-// Names lists the template names ctx can resolve ("env.X", "var.Y"), sorted.
-func Names(ctx Context) []string {
-	out := make([]string, 0, len(ctx.Env)+len(ctx.Vars))
-	for k := range ctx.Env {
-		out = append(out, "env."+k)
-	}
-	for k := range ctx.Vars {
-		out = append(out, "var."+k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// Completions returns full-value suggestions for an input whose text ends
-// inside an open template ("/users/{{env.U" → "/users/{{env.USER_ID}}").
-// names are the candidates ("env.USER_ID"); scopes are offered while no
-// scope has been typed yet.
-func Completions(value string, names []string) []string {
-	open := strings.LastIndex(value, "{{")
-	if open < 0 || strings.Contains(value[open:], "}}") {
-		return nil
-	}
-	prefix, typed := value[:open], strings.ToLower(value[open+2:])
-	var out []string
-	for _, n := range names {
-		if strings.HasPrefix(strings.ToLower(n), typed) {
-			out = append(out, prefix+"{{"+n+"}}")
-		}
-	}
-	if !strings.Contains(typed, ".") {
-		for _, scope := range []string{"env.", "var."} {
-			if strings.HasPrefix(scope, typed) {
-				out = append(out, prefix+"{{"+scope)
 			}
 		}
 	}

@@ -68,6 +68,18 @@ func (g *kvGrid) setWidth(w int) {
 	}
 }
 
+// completing reports whether the cell's field has its completion menu
+// open (then tab/esc/arrows go to the field, not to navigation).
+func (g kvGrid) completing(cell int) bool {
+	if cell < 0 || cell >= g.cells() {
+		return false
+	}
+	if cell%2 == 0 {
+		return g.rows[cell/2].name.Completing()
+	}
+	return g.rows[cell/2].value.Completing()
+}
+
 // update sends msg to a cell.
 func (g *kvGrid) update(cell int, msg tea.Msg) tea.Cmd {
 	if cell < 0 || cell >= g.cells() {
@@ -95,6 +107,15 @@ func (g kvGrid) view(focus int) string {
 			r.value.Style = r.value.Style.BorderForeground(active)
 		}
 		lines = append(lines, r.View().Content)
+		if focus == i*2 || focus == i*2+1 {
+			f, indent := r.name, 0
+			if focus == i*2+1 {
+				f, indent = r.value, lipgloss.Width(r.name.View().Content)
+			}
+			if menu := f.MenuView(max(24, g.width-indent)); menu != "" {
+				lines = append(lines, lipgloss.NewStyle().PaddingLeft(indent).Render(menu))
+			}
+		}
 	}
 	return strings.Join(lines, "\n")
 }

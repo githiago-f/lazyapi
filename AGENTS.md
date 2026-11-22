@@ -31,7 +31,7 @@ internal/
         preview.go         #     PreviewModel — request header only (the TUI renders the response below it)
         tags.go            #     TagsOverlay — cursor-positioned tag editor (add/delete/change)
       responses/           #   Response view shared by editor and list preview
-        model.go           #     Model — status line, tabs (Body/Headers/Cookies/Timeline/Checks/Console), raw toggle, search, jq filter (f), flow steps, spinner
+        model.go           #     Model — status line, tabs (Body/Headers/Cookies/Timeline/Checks/Console), raw toggle, search (matches found on ansi.Strip text, mapped back with rawOffsets), jq filter (f), flow steps, spinner
         format.go          #     Pretty (json.Indent, no HTML escaping), Highlight (chroma catppuccin-mocha), HumanSize
         exchange.go        #     SendMsg / ResultMsg, Exchange(ctx, SendMsg) → runner.Exchange with the spec as context
   cli/                     # CLI commands — thin wrappers over runner/inspect/report/mcp
@@ -75,6 +75,11 @@ internal/
     text.go                #   Text wraps textarea.Model
     title_bar.go           #   TitleBar — top bar with config.Name()
     view.go                #   View — generic bordered content (unused)
+    field.go               #   Field — one-line input: textinput state, own rendering (syntax.Template/URL), completion menu (Completing())
+    code.go                #   CodeEditor — own line buffer (no textarea): highlight, gutter, pairs, indent, undo, JSON validate/format, completions
+    menu.go                #   Completion — menu state (Move/Apply) and rendering
+    syntax/                #   Line = runes + Kind per rune: Code (chroma), MarkTemplates, URL, Render(window, cursor)
+    complete/              #   Pure completion: Templates ({{ and $name), Script (response., expect()., lazyapi., pm.)
     scrollable/            #   Scrollable model wrapper with pgup/pgdown/mouse
       scrollable.go
     tabs/                  #   Tabbed container
@@ -150,6 +155,7 @@ internal/
 - **Exit codes** — 0 ok, 1 a check failed, 2 usage, 3 could not run (errors win over failures). Return `*cli.ExitError` (`usageErr`, `runtimeErr`) instead of plain errors from commands.
 - **before(req)** — `script.Before` evaluates the module once with side effects suppressed (test/console/vars/send are no-ops, top-level errors swallowed), then calls the exported `before` with the full API. The runner applies it before the request check and the send; if it throws, the request is not sent (failed `script` check).
 - **after(res)** — `script.Run` calls the exported `after` with `response` once the top level finished (also when tests failed or it threw; not after a timeout). `Result.AfterRan/AfterError` → `runner.afterChecks` adds a `script` check "after() ran without errors". `Before` never calls it.
+- **Data-driven** — `Options.Data` (`runner.LoadData` for CSV/JSON): `Run` calls `runOnce` per row with the row merged into a copy of Env; results get `Iteration` (labels `[#n]`), scripts get `lazyapi.iteration` via `ExecData.Iteration` (threaded through `ExchangeInput`).
 - **Flows** — `run --flow f.js` (only flows) or `--flows` (operations, then `flows/*.js`); MCP `run_flow`/`write_flow`. Results have `kind: "flow"` and `steps`.
 - **HTTP** — one client per run from `model.HTTPOptions` (flags merged over the environment's `http:`), set on every request incl. `lazyapi.send`, flows and OAuth2 token calls. `SendTimed` returns DNS/connect/TLS/TTFB timing; results carry `timing` and `cookies`.
 - **Import** — never copy credentials into specs (Authorization/API-key headers become security schemes plus a note). Credentials that are only `{{env.X}}` references go to `Result.Auth` → the environment's `auth:` in lazyapi.config.yml (edited with yaml.Node via `project.AddEnvironment`, never overwriting). Multipart files must never be read from request bodies (scripts/MCP could exfiltrate files).
@@ -163,7 +169,8 @@ internal/
 - `ctrl+k` palette: `Tui.paletteCommands()` (internal/app/commands.go) builds the commands; their `Msg` goes back through `Tui.Update`. Add new actions there.
 - Runs with writes (every method) and flows go through `Tui.confirmRun` (y/N), like destructive sends through `Tui.confirm`.
 - History is recorded on every `responses.ResultMsg` (`ResultMsg.Request` is the unresolved request). Never store `Request.Env`, auth secrets or resolved bodies.
-- `components.TemplateNames` feeds `{{` completions in every `components.Field` (→ accepts); `Tui.missingRefs()` lists references without a value for the editor help bar.
+- `components.TemplateSource` (the TUI's `templateSource`: env file keys + environment vars to offer, the whole env to resolve) feeds completions and template colors in every Field and CodeEditor. While a menu is open (`Completing()`), tab/esc/arrows belong to it: containers (grid, auth, docs, editor URI, tabs) must check `Completing()` before using those keys (`menuKey`). `Tui.missingRefs()` lists references without a value for the editor help bar.
+- Do not use `textarea` for code: it re-renders the whole content on every key (slow past a few hundred lines) and its legacy `MaxHeight` (99) truncates content. Use `components.CodeEditor`.
 - `store.SampleBody`/`FillSampleBody` (schema → body) are for the editor only; `run` must never invent bodies.
 
 ## TUI Request Flow
@@ -196,14 +203,13 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 
 ## Known Issues
 
-- bubbles viewport mispositions highlights on ANSI-colored content (`parseMatches` mixes stripped and raw offsets); the response view strips colors while a search is active.
 - `config.DefaultConfig.Active` (current page) is package-level state: only one TUI program may run at a time (tests use `start`, which waits for the program to stop).
 
 ## Testing
 
 - **CI** fails on unformatted files (`gofmt -l`) and when total coverage drops below 55% (per-package table in the job summary). `internal/archtest` fails if a core package imports `internal/app`/`internal/components`.
 
-- **TUI end-to-end**: `internal/app/tui_test.go` runs the whole program with `teatest` against an `httptest` server. Use `start(t, spec)` (it waits for the program to stop: the active page is a package-level variable, so two programs must never overlap), `waitFor` for text that appears, and `finalScreen` for text that changes in place (the renderer redraws only changed cells, e.g. counters).
+- **TUI end-to-end**: `internal/app/tui_test.go` runs the whole program with `teatest` against an `httptest` server. Use `start(t, spec)` (it waits for the program to stop: the active page is a package-level variable, so two programs must never overlap; it also points TMPDIR at the test dir, where drafts are written), `waitFor` for text that appears, and `finalScreen` for text that changes in place (the renderer redraws only changed cells, e.g. counters).
 
 - **Examples are tests**: `internal/cli/examples_test.go` runs `examples/openapi.yml` + `examples/tests/*.js` against `mock.New` — keep them passing when changing the runner, script API or mock. CI also runs them against `lazyapi mock` and uploads a JUnit report.
 
