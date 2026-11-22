@@ -24,6 +24,9 @@ import (
 //go:embed prelude.js
 var prelude string
 
+//go:embed postman.js
+var postmanCompat string
+
 //go:embed lazyapi.d.ts
 var Types string
 
@@ -155,6 +158,10 @@ func newRuntime(b *bridge, opts Options) (*goja.Runtime, func(), error) {
 	if _, err := vm.RunScript("lazyapi:prelude", prelude); err != nil {
 		stop()
 		return nil, nil, fmt.Errorf("internal prelude error: %s", jsError(err))
+	}
+	if _, err := vm.RunScript("lazyapi:postman", postmanCompat); err != nil {
+		stop()
+		return nil, nil, fmt.Errorf("internal postman layer error: %s", jsError(err))
 	}
 	if _, err := vm.RunString("var __lazyapi_module = { exports: {} };"); err != nil {
 		stop()

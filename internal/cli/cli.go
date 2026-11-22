@@ -8,7 +8,7 @@ import (
 )
 
 // Commands lists the first words that select CLI mode instead of the TUI.
-var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "mcp", "mock", "help"}
+var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "mcp", "mock", "import", "help"}
 
 // Run executes a CLI command and exits with its status code
 // (0 ok, 1 a check failed, 2 usage error, 3 something could not run).
@@ -100,6 +100,9 @@ func run(args []string) error {
 	case "mock":
 		return ServeMock(args[1:])
 
+	case "import":
+		return Import(args[1:])
+
 	default:
 		printUsage()
 		return usageErr("unknown command: %s", args[0])
@@ -128,6 +131,7 @@ Usage:
   lazyapi mock <spec.yml> [--port 4010]             Fake API from the spec's examples (validates requests)
 
   Editing
+  lazyapi import curl|postman|har <source> --into <spec.yml>   Add operations from curl, Postman or a HAR capture
   lazyapi create file [name] [urls...]              Create a new OpenAPI template file
   lazyapi add request <file> <path> <method>        Add a new request to a spec file
   lazyapi add server <file> <url>                   Add a server URL to a spec file
