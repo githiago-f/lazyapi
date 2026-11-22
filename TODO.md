@@ -101,7 +101,7 @@ Fazer junto com as fases, quando tocar no código em questão:
 - [x] `env.Load` e `Store` usam o mesmo parser.
 - [x] Uma tabela de métodos (`ParseMethod`); método desconhecido no YAML é erro.
 - [x] `scrollable.go` (já usava a API nova; clamp unificado e testes).
-- [ ] Highlight de busca: hoje a busca mostra texto sem cores por causa de um bug no viewport do bubbles. Reportar ou corrigir upstream.
+- [x] Highlight de busca com cores: corrigido no bubbles v2.2 (atualizado junto com bubbletea v2.1 e lipgloss v2.1); a busca roda no texto sem cores e os offsets são convertidos.
 
 ---
 

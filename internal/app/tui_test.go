@@ -64,6 +64,8 @@ func newTUI(t *testing.T) (*teatest.TestModel, *httptest.Server) {
 func start(t *testing.T, spec string) *teatest.TestModel {
 	t.Helper()
 	t.Setenv("LAZYAPI_HISTORY_DIR", filepath.Join(filepath.Dir(spec), "history"))
+	// Drafts and unsaved edits live under os.TempDir(): keep them in the test dir.
+	t.Setenv("TMPDIR", t.TempDir())
 	config.DefaultConfig.Active = config.RequestList
 	components.Z.NewGlobal()
 	tm := teatest.NewTestModel(t, NewTui(spec, ""), teatest.WithInitialTermSize(140, 40))

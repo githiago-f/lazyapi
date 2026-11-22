@@ -31,7 +31,7 @@ internal/
         preview.go         #     PreviewModel — request header only (the TUI renders the response below it)
         tags.go            #     TagsOverlay — cursor-positioned tag editor (add/delete/change)
       responses/           #   Response view shared by editor and list preview
-        model.go           #     Model — status line, tabs (Body/Headers/Cookies/Timeline/Checks/Console), raw toggle, search, jq filter (f), flow steps, spinner
+        model.go           #     Model — status line, tabs (Body/Headers/Cookies/Timeline/Checks/Console), raw toggle, search (matches found on ansi.Strip text, mapped back with rawOffsets), jq filter (f), flow steps, spinner
         format.go          #     Pretty (json.Indent, no HTML escaping), Highlight (chroma catppuccin-mocha), HumanSize
         exchange.go        #     SendMsg / ResultMsg, Exchange(ctx, SendMsg) → runner.Exchange with the spec as context
   cli/                     # CLI commands — thin wrappers over runner/inspect/report/mcp
@@ -196,14 +196,13 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 
 ## Known Issues
 
-- bubbles viewport mispositions highlights on ANSI-colored content (`parseMatches` mixes stripped and raw offsets); the response view strips colors while a search is active.
 - `config.DefaultConfig.Active` (current page) is package-level state: only one TUI program may run at a time (tests use `start`, which waits for the program to stop).
 
 ## Testing
 
 - **CI** fails on unformatted files (`gofmt -l`) and when total coverage drops below 55% (per-package table in the job summary). `internal/archtest` fails if a core package imports `internal/app`/`internal/components`.
 
-- **TUI end-to-end**: `internal/app/tui_test.go` runs the whole program with `teatest` against an `httptest` server. Use `start(t, spec)` (it waits for the program to stop: the active page is a package-level variable, so two programs must never overlap), `waitFor` for text that appears, and `finalScreen` for text that changes in place (the renderer redraws only changed cells, e.g. counters).
+- **TUI end-to-end**: `internal/app/tui_test.go` runs the whole program with `teatest` against an `httptest` server. Use `start(t, spec)` (it waits for the program to stop: the active page is a package-level variable, so two programs must never overlap; it also points TMPDIR at the test dir, where drafts are written), `waitFor` for text that appears, and `finalScreen` for text that changes in place (the renderer redraws only changed cells, e.g. counters).
 
 - **Examples are tests**: `internal/cli/examples_test.go` runs `examples/openapi.yml` + `examples/tests/*.js` against `mock.New` — keep them passing when changing the runner, script API or mock. CI also runs them against `lazyapi mock` and uploads a JUnit report.
 
