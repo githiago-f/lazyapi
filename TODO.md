@@ -1,107 +1,84 @@
 # TODO — LazyAPI para agents e humanos
 
-Prioridades: **P0** bloqueia uso por agents/CI · **P1** alto valor · **P2** polimento.
+Prioridades: **P0** bloqueia uso real · **P1** alto valor · **P2** polimento.
 
-Ordem de execução:
-1. **Fase 1** — Bugs P0 + persistência dos testes em arquivos versionados.
-2. **Fase 2** — Engine JS (goja + esbuild) com imports por URL, lockfile e validação de schema.
-3. **Fase 3** — `lazyapi run` com `--output json` + exit codes, depois servidor MCP.
-4. **Fase 4** — UI: abas de resposta, highlight, `$EDITOR`, cancelamento, seletor de ambiente.
+## Onde estamos (branch `feat/agent-ready`)
+
+| Fase | Commit | Entregou |
+|------|--------|----------|
+| 1 | `ba62cc7` | Testes versionados (`x-lazyapi-tests`), erros sem derrubar o TUI, timeout HTTP, flags com stdlib, smoke seguro |
+| 2 | `1ad8ead` | Engine JS/TS (goja + esbuild), imports `https://` com `lazyapi.lock`, `expect`, `lazyapi.send`, contrato automático; Lua removido |
+| 3 | `a45e115` | `runner` estruturado, `run` com json/junit/tap, exit codes 0/1/2/3, `list`/`describe`/`validate`, servidor MCP |
+| 4 | `8131547` | UI: tela de resposta com abas e checks, highlight, busca, cancelamento, confirmação, envs, `$EDITOR`, rodapé de atalhos |
+
+**O que já funciona hoje:** um agent consegue descobrir, chamar, testar e validar uma API via MCP ou CLI JSON. Um humano consegue fazer o mesmo no TUI, vendo os mesmos checks.
+
+**O que ainda impede o uso real:** a documentação de entrada está errada, não existe nada executável "de fábrica" e cenários com autenticação ou várias etapas dão trabalho. Por isso a próxima fase é a 5.
 
 ---
 
-## 1. Bugs e problemas (P0) — Fase 1 ✅
+## Fase 5 — Fechar o ciclo de entrada (P0) ← próxima
 
-- [x] **Test scripts não são persistidos de forma versionada** — vivem só em `os.TempDir()/lazyapi/...`; o CLI lê o temp da máquina local (não reproduzível em CI).
-- [x] **Erros no TUI derrubam o app** — `store` retorna `tea.Batch(tea.Println, tea.Quit)` como `tea.Msg` e faz `panic` em `defer Close`. Mostrar notificação de erro.
-- [x] **Sem timeout HTTP** — `http.DefaultClient` sem `context`; request pode travar para sempre.
-- [x] **Basic auth não resolve variáveis** (`Username`/`Password` sem `env.Resolve`).
-- [x] **Testes com mesmo nome se sobrescrevem** e a ordem dos resultados é não-determinística.
-- [x] **`test("x", fn)` descarta a mensagem do erro** — o agent não sabe o motivo do FAIL.
-- [x] **Smoke perigoso** — dispara POST/PUT/DELETE em tudo; path params vazios viram `"1"`. Adicionar `--methods`, `--dry-run`, `--tag`, `--op`; usar `example`/`default` do spec.
-- [x] **Smoke trata todo status ≥400 como erro** — critério deve vir das `responses` declaradas no spec.
-- [x] **Parse de flags frágil** — flag desconhecida vira posicional; `--server` sem valor é ignorado. Migrar para `flag` da stdlib.
-- [x] **`os.Remove` do temp falha quando ele não existe** ao salvar/deletar operação.
-- [x] **AGENTS.md desatualizado** — não cita `internal/lua`, smoke descrito como stub, known issues já corrigidos.
+Objetivo: alguém (pessoa ou agent) clona o repositório e em 2 minutos roda testes de verdade, sem servidor externo.
 
-## 2. Scripting JavaScript com import por URL (P0) — Fase 2 ✅ (faltam pre-request e validação de request)
+- [ ] **README reescrito.** Hoje diz que o smoke "não foi implementado" e não cita `run`, MCP nem JS. Incluir quickstart, `run --output json`, setup do MCP e link para `docs/scripting.md`.
+- [ ] **`lazyapi mock <spec>`**: servidor HTTP que responde com os examples do spec (status, headers, body) e valida o request recebido. Dá um alvo local para os examples, para o CI e para os próprios testes.
+- [ ] **`examples/` executável.** O spec atual aponta para `api.example.com`. Trocar por um spec com `tests/*.js`, `lazyapi.lock` e `.env.example` que passe contra o `lazyapi mock`, e adicionar esse cenário ao CI.
+- [ ] **Validação do request contra o spec** (params obrigatórios, body schema) antes de enviar, como check `request`. Pega o erro do lado do cliente, que é o caso mais comum quando um agent monta a chamada.
+- [ ] **`llms.txt`** no site de docs e uma **skill `.agents/skills/api-testing/`** com o fluxo list → describe → send → write_test → run.
+- [ ] Corrigir no AGENTS.md o item de código morto (`modal.go`/`view.go` já não existem).
 
-- [x] Engine: `goja` (JS puro Go) + `esbuild` (lib Go) para transpilar ESM/TS → bundle.
-- [x] `import x from "https://..."`:
-  - [x] resolver esbuild (`onResolve`/`onLoad`) baixando via HTTPS
-  - [x] cache em `~/.cache/lazyapi/modules` por hash
-  - [x] `lazyapi.lock` com integrity sha256 por URL (runs reproduzíveis)
-  - [x] `--offline` / `--reload`
-  - [x] allowlist de hosts; rejeitar `http://`
-  - [x] imports relativos (`./helpers.js`)
-- [x] Sandbox: sem fs/processo, timeout via `vm.Interrupt`, limites configuráveis.
-- [x] API: `test()`, `expect()` (`toBe`, `toEqual`, `toContain`, `toMatch`, `toHaveHeader`, `toMatchSchema`), `res.json()`, `vars`, `env`.
-- [ ] Pre-request script além do post-response. *(adiado: definir formato — arquivo separado `x-lazyapi-pre-request` ou hook no mesmo arquivo)*
-- [x] `lazyapi.send()` para encadear chamadas (login → criar → buscar → deletar).
-- [x] `console.log` capturado no report.
-- [x] Validação automática de contrato da **response** com `openapi3filter` (`--no-contract` desliga).
-- [ ] Validação do **request** enviado contra o spec (params obrigatórios, body schema).
-- [x] `lazyapi.d.ts` com tipos da API de script (`lazyapi types`).
-- [x] Remover Lua (`.lua` referenciado gera erro explícito; salvar no TUI migra para `.js`).
+## Fase 6 — Cenários reais: auth e fluxos (P1)
 
-## 3. Persistência pensada para agents (P0)
+Objetivo: validar APIs que exigem login e sequências de CRUD, que é onde testes por operação isolada não bastam.
 
-- [x] Scripts em arquivos versionados ao lado do spec, referenciados via `x-lazyapi-tests: tests/<op>.js`.
-- [ ] Ambientes nomeados em `lazyapi.config.yml` + `.env.<nome>`; `--env-name staging`.
-- [ ] Fluxos multi-operação em `flows/*.js`.
+- [ ] **Pre-request script**, por exemplo `x-lazyapi-pre-request` ou `export function before(req)` no mesmo arquivo. Serve para gerar token, assinar o request ou montar o body. Precisa decidir o formato primeiro.
+- [ ] **Fluxos `flows/*.js`**: cenários com várias operações (`login → create → get → delete`) usando `lazyapi.send` e `vars`. Comando `lazyapi run --flow <file>`, ferramenta MCP `run_flow`, e reports no mesmo formato do `run`.
+- [ ] **Ambientes nomeados** em `lazyapi.config.yml` (`environments: {local, staging}` → server + arquivo env) com `--env-name staging`. O `ctrl+v` do TUI passa a usar essa lista.
+- [ ] **OAuth2 client-credentials/password automático**: buscar e cachear o token pelo `tokenUrl` do security scheme.
 
-## 4. CLI para agents/CI (P0/P1) — Fase 3 ✅ (faltam mock, import/export e opções HTTP)
+## Fase 7 — Completude HTTP e migração (P1)
 
-- [x] `--output json|junit|tap|pretty` + `--output-file` (pretty no stdout) + `--bodies failed|all|none`.
-- [x] Exit codes documentados: 0 ok · 1 check falhou · 2 uso · 3 não executou (rede/spec/config).
-- [x] `lazyapi run`: `--tag`, `--op`, `--grep`, `--bail`, `--parallel N`, `--timeout`, `--retries` (`smoke tests` virou alias).
-- [x] Introspecção: `list ops --json`, `describe <op> --json` (com schemas referenciados), `validate spec` (inclui compilar scripts).
-- [x] Request ad-hoc: `send --op createUser --param id=1 --header ... --body @file.json|@-` + `--output json` + `--dry-run`.
-- [x] `lazyapi mcp --root` — servidor MCP stdio com 9 tools (`list_specs`, `list_operations`, `describe_operation`, `send_request`, `run_tests`, `read_test`, `write_test`, `validate_spec`, `script_api`), caminhos confinados ao root.
-- [ ] `lazyapi mock` — mock server a partir dos examples do spec.
-- [ ] Import/export: cURL ↔ request, Postman collection → spec + testes JS, HAR.
-- [ ] HTTP: `--insecure`, CA/client cert, proxy, redirects, limite de body, `form-urlencoded`, `multipart`, upload.
+Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de quem usa Postman ou cURL.
 
-## 5. UI para humanos — nível Postman (P1) — Fase 4 ✅ (parcial — ver itens abertos)
+- [ ] `--insecure`, CA e certificado de cliente, proxy, política de redirects, limite de tamanho de body.
+- [ ] Bodies `application/x-www-form-urlencoded`, `multipart/form-data` e upload de arquivo (CLI, MCP e TUI).
+- [ ] **cURL ↔ request**: `lazyapi import curl`, e no TUI um "copy as cURL" (`ctrl+y` no request).
+- [ ] **Import de Postman collection e HAR** → operações no spec + testes JS (convertendo `pm.test` / `pm.expect` para `test` / `expect`).
+- [ ] Abas **Cookies** e **Timeline** (DNS/TLS/TTFB via `httptrace`) na tela de resposta.
 
-- [x] Abas de resposta: Body (pretty/raw) · Headers (request + response) · Checks · Console; status colorido, tempo, tamanho e resumo de checks. *(Cookies e Timeline ainda não)*
-- [x] Syntax highlight (`chroma`, catppuccin-mocha) para JSON/YAML/XML/HTML/JS/CSS.
-- [x] Busca na resposta (`/`, `n`/`N`).
+## Fase 8 — Polimento da UI (P2)
+
+- [ ] Paleta de comandos (`ctrl+k`): buscar operação, trocar env, rodar testes, copiar como cURL.
+- [ ] Tela do runner no TUI: rodar uma tag ou a spec inteira com progresso e lista navegável de falhas.
+- [ ] Histórico de requests com replay, e diff entre respostas ou contra o example salvo.
 - [ ] Filtro jq (`gojq`) na resposta.
-- [x] Seletor de ambiente (`ctrl+v`) + título com spec e env.
-- [ ] Command palette (`ctrl+k`).
-- [ ] Histórico de requests com replay e diff.
-- [x] Abrir body/script no `$EDITOR` (`ctrl+x`).
-- [x] Cancelar request em andamento (`esc`) + spinner.
-- [x] Confirmação antes de enviar métodos destrutivos pelo preview.
-- [ ] Highlight/autocomplete de `{{env.X}}` (não resolvidas em vermelho).
-- [x] Pré-preencher body com o example do spec (media/named/schema example).
+- [ ] Destacar `{{env.X}}`/`{{var.X}}` não resolvidas, com autocomplete.
 - [ ] Gerar body sintético a partir do schema quando não há example.
-- [x] Violação de schema visível (aba Checks, mensagem por campo).
-- [ ] Diff da resposta contra o example salvo.
-- [ ] Runner view com progresso.
-- [x] Auto-save só quando o request muda de verdade (fingerprint).
-- [ ] Corrigir styling de param/header recriado a cada frame.
-- [x] Barra de atalhos fixa no rodapé; `?`/`q` não disparam enquanto se digita.
-- [x] TUI envia pelo runner: mesmos checks (status/contract/script) do CLI; F5 envia ou re-roda testes.
-- [x] Bugs: aba Tests não carregava o script salvo; `Content-Type` do body não era enviado; filtro mostrava placeholder truncado; linha extra empurrava o rodapé para fora da tela.
 
-## 6. Qualidade de código (P1/P2)
+## Contínuo — qualidade de código
 
-- [ ] Centralizar mapeamento método→string.
-- [ ] Extrair criação de parameter refs duplicada (`AddOperationToSpec`/`ApplyRequestToOperation`).
-- [ ] Unificar parsing de `env.Load()`/`mergeDotenv()`.
-- [ ] Rodar `gofmt -w` nos 14 arquivos com import order fora do padrão (pré-existente).
-- [ ] Remover código morto: `modal.go`, `view.go`, `responses/`, `model/response.go`.
-- [ ] Migrar `scrollable.go` para a API de mouse atual.
-- [x] `sanitizePath`/temp path duplicados entre `cli` e `store` (CLI não lê mais temp files).
-- [ ] Testes de TUI com `teatest` e e2e de CLI contra `httptest`.
-- [ ] `go test -race` + coverage no CI.
+Fazer junto com as fases, quando tocar no código em questão:
 
-## 7. Documentação para agents (P1)
+- [ ] **Tirar a dependência `store` → `app/pane/requests`** (mover o tipo de dados de `RequestItem` para `model`). Hoje ela força o preview a ficar sem o componente de resposta e cria risco de import cycle.
+- [ ] Testes de TUI com `teatest` (os fluxos validados manualmente no tmux: envio, confirmação, busca, env).
+- [ ] Coverage no CI (o `-race` já roda).
+- [ ] `gofmt -w` nos 9 arquivos antigos fora do padrão (num commit só de formatação).
+- [ ] Estilo de param/header recriado a cada frame (o foco fica frágil).
+- [ ] Criação duplicada de parameter refs (`AddOperationToSpec`/`ApplyRequestToOperation`).
+- [ ] Parsing duplicado entre `env.Load()` e `mergeDotenv()`.
+- [ ] Mapeamento método→string ainda em 3 lugares.
+- [ ] `scrollable.go` usando a API de mouse depreciada.
+- [ ] Highlight de busca: hoje a busca mostra texto sem cores por causa de um bug no viewport do bubbles. Reportar ou corrigir upstream.
 
-- [x] AGENTS.md atualizado + `docs/agents.md` ("validar uma API em 5 passos", setup MCP).
-- [ ] `llms.txt` na raiz do site de docs.
-- [x] `lazyapi types` (referência da API de script) + `docs/scripting.md`.
-- [ ] Skill `.agents/skills/api-testing/`.
-- [ ] `examples/` com spec + testes JS + flow + mock server (o spec atual aponta para `api.example.com`, não é executável).
+---
+
+<details>
+<summary>Itens concluídos nas fases 1–4 (histórico)</summary>
+
+- Fase 1: testes versionados · notificações de erro no lugar de quit/panic · timeout + context · Basic auth com templates · resultados ordenados com mensagem · smoke com `--methods/--tag/--op/--dry-run` e exemplos do spec · status validado contra `responses` · flags stdlib · `os.Remove` tolerante · AGENTS.md.
+- Fase 2: goja + esbuild · imports https com cache, lockfile, `--offline/--reload/--frozen-lockfile/--allow-import` · imports relativos confinados · sandbox com timeout · `test/expect` (18 matchers) · `lazyapi.send` · console · contrato da response · `lazyapi types` · Lua removido.
+- Fase 3: `run` com `--grep/--bail/--parallel/--retries` · `--output pretty|json|junit|tap` · `--output-file` · `--bodies` · headers sensíveis ocultos · exit codes · `send --op/--body/--dry-run` · `list/describe/validate` · MCP com 9 ferramentas.
+- Fase 4: tela de resposta (status, tempo, tamanho, Body/Headers/Checks/Console, raw, busca) · highlight chroma · TUI envia pelo runner · `esc` cancela · confirmação de métodos destrutivos · `ctrl+v` env · `alt+enter`/F5 · `$EDITOR` · rodapé de atalhos · body pré-preenchido · bugs (script não carregava, Content-Type, auto-save, layout).
+
+</details>
