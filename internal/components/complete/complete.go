@@ -179,8 +179,8 @@ func Script(text []rune, cursor int) (Result, bool) {
 	var cands []member
 	if start > 0 && text[start-1] == '.' {
 		obj := objectBefore(text, start-1)
-		switch {
-		case obj == "expect()" || obj == "expect().not":
+		switch obj {
+		case "expect()", "expect().not":
 			cands = matchers
 		default:
 			cands = api[obj]
@@ -255,17 +255,21 @@ func inStringOrComment(text []rune, pos int) bool {
 	var quote rune
 	for i := lineStart; i < pos; i++ {
 		r := text[i]
-		switch {
-		case quote != 0:
+		if quote != 0 {
 			if r == '\\' {
 				i++
 			} else if r == quote {
 				quote = 0
 			}
-		case r == '"' || r == '\'' || r == '`':
+			continue
+		}
+		switch r {
+		case '"', '\'', '`':
 			quote = r
-		case r == '/' && i+1 < pos && text[i+1] == '/':
-			return true
+		case '/':
+			if i+1 < pos && text[i+1] == '/' {
+				return true
+			}
 		}
 	}
 	return quote != 0

@@ -381,7 +381,9 @@ func (c *CodeEditor) edit(k tea.KeyPressMsg) bool {
 		}
 		if closer, ok := pairs[ch]; ok {
 			quote := ch == '"' || ch == '\'' || ch == '`'
-			if !(quote && (isWordRune(prev) || isWordRune(next))) && !(!quote && isWordRune(next)) {
+			// No pair next to a word: quotes inside words (don't), brackets before one.
+			nextToWord := isWordRune(next) || quote && isWordRune(prev)
+			if !nextToWord {
 				c.insert(string(ch) + string(closer))
 				c.col--
 				return true
