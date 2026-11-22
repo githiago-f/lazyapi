@@ -186,50 +186,7 @@ func ApplyRequestToOperation(spec *openapi3.T, ref model.OpenAPIRef, data model.
 	op.Summary = data.About.Summary
 	op.Description = data.About.Description
 
-	existing := make(map[string]*openapi3.Parameter)
-	for _, pref := range op.Parameters {
-		if pref.Value != nil {
-			key := pref.Value.In + ":" + pref.Value.Name
-			existing[key] = pref.Value
-		}
-	}
-
-	keep := make(map[string]bool)
-
-	for name := range data.Params {
-		key := "path:" + name
-		keep[key] = true
-		if _, ok := existing[key]; !ok {
-			op.Parameters = append(op.Parameters, makeParamRef(name, "path", true))
-		}
-	}
-
-	for name := range data.Query {
-		key := "query:" + name
-		keep[key] = true
-		if _, ok := existing[key]; !ok {
-			op.Parameters = append(op.Parameters, makeParamRef(name, "query", false))
-		}
-	}
-
-	for name := range data.Headers {
-		key := "header:" + name
-		keep[key] = true
-		if _, ok := existing[key]; !ok {
-			op.Parameters = append(op.Parameters, makeParamRef(name, "header", false))
-		}
-	}
-
-	filtered := make([]*openapi3.ParameterRef, 0, len(op.Parameters))
-	for _, pref := range op.Parameters {
-		if pref.Value != nil {
-			key := pref.Value.In + ":" + pref.Value.Name
-			if keep[key] {
-				filtered = append(filtered, pref)
-			}
-		}
-	}
-	op.Parameters = filtered
+	syncParameters(op, data)
 
 	if data.Body.Type != "" {
 		if op.RequestBody == nil || op.RequestBody.Value == nil {
@@ -294,15 +251,7 @@ func AddOperationToSpec(spec *openapi3.T, path, method string, data model.Reques
 	op.Summary = data.About.Summary
 	op.Description = data.About.Description
 
-	for name := range data.Params {
-		op.Parameters = append(op.Parameters, makeParamRef(name, "path", true))
-	}
-	for name := range data.Query {
-		op.Parameters = append(op.Parameters, makeParamRef(name, "query", false))
-	}
-	for name := range data.Headers {
-		op.Parameters = append(op.Parameters, makeParamRef(name, "header", false))
-	}
+	syncParameters(op, data)
 
 	if data.Body.Raw != "" {
 		op.RequestBody = &openapi3.RequestBodyRef{
@@ -330,6 +279,59 @@ func AddOperationToSpec(spec *openapi3.T, path, method string, data model.Reques
 
 	ref := model.OpenAPIRef{Path: path, Method: method}
 	return applyAuthSchemes(spec, ref, data.Auth)
+}
+
+// ignoredHeaders are not described as header parameters: OpenAPI says
+// Accept, Content-Type and Authorization parameters are ignored (they come
+// from the media types and security schemes).
+var ignoredHeaders = map[string]bool{"accept": true, "content-type": true, "authorization": true}
+
+// syncParameters makes op's path, query and header parameters match the
+// request's names: existing definitions are kept (with their schema and
+// docs), new names are added in sorted order, names no longer used are
+// removed. Parameters of other locations (cookie) and unresolved refs are
+// left alone.
+func syncParameters(op *openapi3.Operation, data model.Request) {
+	want := map[string]bool{}
+	var added []*openapi3.ParameterRef
+	add := func(in string, names map[string]string, required bool) {
+		keys := make([]string, 0, len(names))
+		for k := range names {
+			if in == "header" && ignoredHeaders[strings.ToLower(k)] {
+				continue
+			}
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, name := range keys {
+			want[in+":"+name] = true
+			if op.Parameters.GetByInAndName(in, name) == nil {
+				added = append(added, makeParamRef(name, in, required))
+			}
+		}
+	}
+	add("path", data.Params, true)
+	add("query", data.Query, false)
+	add("header", data.Headers, false)
+
+	kept := make(openapi3.Parameters, 0, len(op.Parameters)+len(added))
+	for _, p := range op.Parameters {
+		if p == nil || p.Value == nil {
+			kept = append(kept, p)
+			continue
+		}
+		switch p.Value.In {
+		case "path", "query", "header":
+			if p.Value.In == "header" && ignoredHeaders[strings.ToLower(p.Value.Name)] {
+				break // declared by the spec author: never removed
+			}
+			if !want[p.Value.In+":"+p.Value.Name] {
+				continue
+			}
+		}
+		kept = append(kept, p)
+	}
+	op.Parameters = append(kept, added...)
 }
 
 func makeParamRef(name, in string, required bool) *openapi3.ParameterRef {
