@@ -10,7 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/githiago-f/lazyapi/internal/mock"
 	"github.com/githiago-f/lazyapi/internal/runner"
+	"github.com/githiago-f/lazyapi/internal/store"
 )
 
 const httpSpec = `openapi: "3.0.0"
@@ -119,5 +121,74 @@ func TestParseSize(t *testing.T) {
 	}
 	if _, err := parseSize("-1MB"); err == nil {
 		t.Error("negative size")
+	}
+}
+
+const formSpec = `openapi: "3.0.0"
+info: {title: t, version: "1"}
+paths:
+  /login:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [username, password]
+              properties: {username: {type: string}, password: {type: string}}
+            example: {username: ana, password: secret}
+      responses:
+        "200": {description: OK}
+        "422": {description: Invalid}
+  /avatar:
+    post:
+      operationId: upload
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+                caption: {type: string}
+      responses:
+        "201": {description: Created}
+        "422": {description: Invalid}
+`
+
+func TestForms_AgainstMock(t *testing.T) {
+	spec := writeSpec(t, formSpec)
+	parsed, err := store.ParseSpec(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(mock.New(parsed, spec))
+	defer srv.Close()
+
+	// The spec example (a JSON object) is sent as form fields.
+	if res, err := sendJSON(t, spec, "--op", "login", "--server", srv.URL); err != nil || res.Response.Status != 200 {
+		t.Errorf("example form body: %v %+v", err, res.Response)
+	}
+	// --form replaces it; a missing required field is reported by the request check and the mock (422).
+	res, err := sendJSON(t, spec, "--op", "login", "--server", srv.URL, "--form", "username=ana")
+	if ExitCode(err) != 1 || res.Response.Status != 422 || !strings.Contains(res.Checks[0].Message, "password") {
+		t.Errorf("missing field: %v %+v %+v", err, res.Response, res.Checks)
+	}
+
+	file := filepath.Join(t.TempDir(), "me.png")
+	if err := os.WriteFile(file, []byte("PNG"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := sendJSON(t, spec, "--op", "upload", "--server", srv.URL, "--file", "file="+file, "--form", "caption=hi"); err != nil || res.Response.Status != 201 {
+		t.Errorf("multipart upload: %v %+v %+v", err, res.Response, res.Checks)
+	}
+	if err := SendRequest([]string{spec, "--op", "upload", "--file", "file=/nope.png"}); ExitCode(err) != 2 {
+		t.Errorf("missing file should be a usage error: %v", err)
+	}
+	if err := SendRequest([]string{spec, "--op", "login", "--form", "a=b", "--body", "{}"}); ExitCode(err) != 2 {
+		t.Errorf("--body with --form should be a usage error: %v", err)
 	}
 }

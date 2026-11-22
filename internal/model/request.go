@@ -164,10 +164,9 @@ func (r *Request) SendTimed(parent context.Context) (*http.Response, string, Tim
 // auth applied. Optional query parameters without a value are omitted.
 func (r *Request) HTTPRequest(ctx context.Context) (*http.Request, error) {
 	tctx := r.templateContext()
-	resolvedBody := env.Resolve(r.Body.Raw, tctx)
-	var bodyReader io.Reader
-	if resolvedBody != "" {
-		bodyReader = strings.NewReader(resolvedBody)
+	bodyReader, contentType, err := r.Body.encode(env.Resolve(r.Body.Raw, tctx))
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, r.Method.Label(), r.ResolvedURL(), bodyReader)
@@ -184,8 +183,12 @@ func (r *Request) HTTPRequest(ctx context.Context) (*http.Request, error) {
 	for name, value := range r.Headers {
 		req.Header.Set(name, env.Resolve(value, tctx))
 	}
-	if bodyReader != nil && req.Header.Get("Content-Type") == "" && r.Body.Type != "" {
-		req.Header.Set("Content-Type", string(r.Body.Type))
+	switch {
+	case bodyReader == nil || contentType == "":
+	case strings.HasPrefix(contentType, string(MultipartForm)):
+		req.Header.Set("Content-Type", contentType) // carries the boundary
+	case req.Header.Get("Content-Type") == "":
+		req.Header.Set("Content-Type", contentType)
 	}
 
 	// Credentials are only applied when they have a value, so an empty scheme

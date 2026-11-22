@@ -58,6 +58,9 @@ type Options struct {
 	Query   map[string]string // query params added to every request
 	Headers map[string]string // headers added to every request
 	Body    *string           // request body override (RunOne)
+	// BodyType overrides the media type; Files adds multipart file parts.
+	BodyType model.MimeType
+	Files    map[string]string
 	// EnvName is the named environment in use (reported only).
 	EnvName string
 	// Vars are the initial run variables ({{var.X}}).
@@ -292,6 +295,12 @@ func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, o
 	}
 	if opts.Body != nil {
 		req.Body.Raw = *opts.Body
+	}
+	if opts.BodyType != "" {
+		req.Body.Type = opts.BodyType
+	}
+	if len(opts.Files) > 0 {
+		req.Body.Files = opts.Files
 	}
 	req.Env, req.Vars, req.Timeout = envMap, vars, opts.Timeout
 	req.HTTPClient, req.MaxBody = opts.HTTPClient, opts.MaxBody
