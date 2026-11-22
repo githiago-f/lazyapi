@@ -18,7 +18,8 @@ internal/
         editor.go          #     RequestPane — top-level Update/View, cursor field cycle
         documentation.go   #     Summary + Description fields
         body.go            #     Body textarea
-        header.go          #     Header key/value pairs (n+a to add)
+        grid.go            #     kvGrid — name/value rows shared by headers, params and form fields; view renders focus on copies
+        header.go          #     Header key/value pairs (ctrl+g to add)
         params.go          #     Query + Path params (n+q / n+p to add)
         auth.go            #     Auth schemes (n+a / x+a to add/remove)
         tests.go           #     Tests tab — JS/TS script editor, F5 runs it via internal/script; default template is not persisted
@@ -193,21 +194,14 @@ go test ./...                        # Tests
 golangci-lint run                    # Lint (config: .golangci.yml)
 ```
 
-## Known Issues (from code review)
+## Known Issues
 
-### Errors (will cause bugs)
-- **param/header styling** in `View()` resets `lipgloss.Style` each frame, making focus highlighting fragile.
-
-### Warnings (design debt)
-- HTTP-method→string mapping repeated in 5 places (Method.Label, Method.UnmarshalYAML, methodFromLabel, RemoveOperationFromSpec, hardcoded strings).
-- Parameter-ref creation blocks duplicated between `AddOperationToSpec` and `ApplyRequestToOperation`.
-- `env.Load()` and `mergeDotenv()` share identical line-parsing logic.
 - bubbles viewport mispositions highlights on ANSI-colored content (`parseMatches` mixes stripped and raw offsets); the response view strips colors while a search is active.
-
-### Linter (3 deprecations)
-- `scrollable.go` uses deprecated `msg.Type`, `tea.MouseWheelUp`, `tea.MouseWheelDown` — should migrate to `MouseAction`/`MouseButton`.
+- `config.DefaultConfig.Active` (current page) is package-level state: only one TUI program may run at a time (tests use `start`, which waits for the program to stop).
 
 ## Testing
+
+- **CI** fails on unformatted files (`gofmt -l`) and when total coverage drops below 55% (per-package table in the job summary). `internal/archtest` fails if a core package imports `internal/app`/`internal/components`.
 
 - **TUI end-to-end**: `internal/app/tui_test.go` runs the whole program with `teatest` against an `httptest` server. Use `start(t, spec)` (it waits for the program to stop: the active page is a package-level variable, so two programs must never overlap), `waitFor` for text that appears, and `finalScreen` for text that changes in place (the renderer redraws only changed cells, e.g. counters).
 
