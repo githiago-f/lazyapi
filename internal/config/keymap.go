@@ -50,6 +50,7 @@ type KeyMap struct {
 	CopyCurl   key.Binding
 	Palette    key.Binding
 	RunAll     key.Binding
+	History    key.Binding
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
@@ -68,7 +69,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Select, k.Up, k.Down, k.Filter, k.CreateNew},
 		{k.Duplicate, k.Delete, k.Quit, k.Kill},
-		{k.SendRequest, k.EditTags, k.CycleServer, k.SwitchEnv, k.RunAll, k.Palette},
+		{k.SendRequest, k.EditTags, k.CycleServer, k.SwitchEnv, k.RunAll, k.History, k.Palette},
 	}
 }
 
@@ -208,5 +209,9 @@ var DefaultKeyMap = KeyMap{
 	RunAll: key.NewBinding(
 		key.WithKeys("R"),
 		key.WithHelp("R", "run tests"),
+	),
+	History: key.NewBinding(
+		key.WithKeys("H"),
+		key.WithHelp("H", "history"),
 	),
 }

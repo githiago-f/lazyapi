@@ -647,6 +647,10 @@ func selectServer(req *model.Request, value string) error {
 
 var sensitiveHeader = regexp.MustCompile(`(?i)(authorization|cookie|token|secret|password|api[-_]?key)`)
 
+// IsSensitive reports whether a header or parameter name usually carries a
+// credential (its value is redacted in results and history).
+func IsSensitive(name string) bool { return sensitiveHeader.MatchString(name) }
+
 func requestInfo(req model.Request) *RequestInfo {
 	ctx := env.Context{Env: req.Env, Vars: req.Vars}
 	info := &RequestInfo{Method: req.Method.Label(), URL: req.ResolvedURL(), Body: env.Resolve(req.Body.Raw, ctx)}

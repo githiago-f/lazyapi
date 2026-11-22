@@ -14,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
 	"github.com/githiago-f/lazyapi/internal/app/pane/editor"
+	"github.com/githiago-f/lazyapi/internal/app/pane/historyview"
 	"github.com/githiago-f/lazyapi/internal/app/pane/palette"
 	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
@@ -60,9 +61,11 @@ type Tui struct {
 	// confirmRun is a run with writes waiting for y/N.
 	confirmRun *runview.Run
 
-	palette    *palette.Model
-	runner     runview.Model
-	runnerFrom config.PageIndex // page to return to when the runner closes
+	palette     *palette.Model
+	runner      runview.Model
+	runnerFrom  config.PageIndex // page to return to when the runner closes
+	history     historyview.Model
+	historyFrom config.PageIndex
 
 	// project is lazyapi.config.yml (nil when absent); activeEnv is the
 	// selected named environment (nil: none).
@@ -118,6 +121,7 @@ func NewTui(defaultFile string, envFile string) Tui {
 		envStore:    env.NewStore(envFile),
 		notes:       components.NewNotifications(),
 		runner:      runview.New(),
+		history:     historyview.New(),
 	}
 
 	tui.editor = editor.New(tui.currentRequest)
@@ -196,6 +200,8 @@ func (t Tui) keyMap() viewKeyMap {
 		}
 	case config.Runner:
 		vkm.short = t.runner.HelpBindings()
+	case config.History:
+		vkm.short = t.history.HelpBindings()
 	case config.RequestEditor:
 		vkm.short = t.editor.HelpBindings()
 		if !t.editor.CapturesKeys() {
@@ -236,6 +242,9 @@ func (t Tui) View() tea.View {
 
 	case config.Runner:
 		currentView = t.runner.View()
+
+	case config.History:
+		currentView = t.history.View()
 	}
 
 	helpBar := helpBarStyle.Width(t.width).Render(t.help.ShortHelpView(vkm.ShortHelp()))
@@ -477,6 +486,8 @@ func (t Tui) capturesKeys() bool {
 		return t.editor.CapturesKeys()
 	case config.Runner:
 		return t.runner.CapturesKeys()
+	case config.History:
+		return t.history.CapturesKeys()
 	}
 	return false
 }
@@ -566,6 +577,16 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case runview.CloseMsg:
 		config.DefaultConfig.Active = t.runnerFrom
 		return t, nil
+
+	case showHistoryMsg:
+		return t.showHistory()
+
+	case historyview.CloseMsg:
+		config.DefaultConfig.Active = t.historyFrom
+		return t, nil
+
+	case historyview.ReplayMsg:
+		return t.replay(msg.Entry)
 
 	case runview.OpenOperationMsg:
 		ref := msg.Ref
@@ -687,6 +708,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case responses.ResultMsg:
 		t.cancelSend = nil
+		cmd = t.recordHistory(msg)
 		switch msg.Source {
 		case responses.FromEditor:
 			rp := t.editor.SetResult(msg)
@@ -697,7 +719,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case responses.FromPreview:
 			t.previewResp.SetResult(msg.Result)
 		}
-		return t, resultNotification(msg.Result)
+		return t, tea.Batch(cmd, resultNotification(msg.Result))
 
 	case requests.EditTagsMsg:
 		item, ok := t.requestList.SelectedItem()
@@ -811,6 +833,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.previewResp.SetSize(previewWidth-2, contentHeight-t.preview.HeaderHeight())
 
 		t.runner.SetSize(msg.Width, contentHeight)
+		t.history.SetSize(msg.Width, contentHeight)
 
 		subModel, _ = t.editor.Update(tea.WindowSizeMsg{Width: msg.Width, Height: contentHeight})
 		ptr := subModel.(editor.RequestPane)
@@ -853,6 +876,8 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return t.startRun(runTestsMsg{spec: specs[0], methods: runner.SafeMethods, title: filepath.Base(specs[0])})
 			}
 			return t, notify("No OpenAPI spec loaded", components.Error)
+		case !capture && config.DefaultConfig.Active == config.RequestList && key.Matches(msg, config.DefaultKeyMap.History):
+			return t.showHistory()
 		case !capture && config.DefaultConfig.Active == config.RequestList && key.Matches(msg, config.DefaultKeyMap.Quit):
 			return t, tea.Quit
 		case !capture && key.Matches(msg, config.DefaultKeyMap.SwitchEnv):
@@ -937,6 +962,12 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ptr, _ := subModel.(editor.RequestPane)
 		t.editor = &ptr
 		cmd = tea.Batch(cmd, ecmd)
+	}
+
+	if config.DefaultConfig.Active == config.History {
+		var hcmd tea.Cmd
+		t.history, hcmd = t.history.Update(msg)
+		cmd = tea.Batch(cmd, hcmd)
 	}
 
 	// The runner keeps receiving its results while another page is shown.

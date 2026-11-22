@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -65,5 +66,39 @@ func TestSampleBody(t *testing.T) {
 	FillSampleBody(spec, &req, post)
 	if req.Body.Raw != "kept" {
 		t.Fatal("FillSampleBody overwrote an existing body")
+	}
+}
+
+func TestResponseExample(t *testing.T) {
+	spec, err := openapi3.NewLoader().LoadFromData([]byte(`openapi: 3.0.0
+info: {title: t, version: "1"}
+paths:
+  /pets:
+    get:
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              example: {id: 1}
+        "4XX":
+          description: bad
+          content:
+            application/json:
+              examples:
+                b: {value: {error: nope}}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := FindOperation(spec, model.OpenAPIRef{Path: "/pets", Method: "GET"})
+	if _, body, ok := ResponseExample(op, 200); !ok || body != "{\n  \"id\": 1\n}" {
+		t.Errorf("200 example %q", body)
+	}
+	if _, body, ok := ResponseExample(op, 404); !ok || !strings.Contains(body, "nope") {
+		t.Errorf("4XX example %q", body)
+	}
+	if _, _, ok := ResponseExample(op, 500); ok {
+		t.Error("no example for 500")
 	}
 }

@@ -9,10 +9,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/app/pane/palette"
 	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
+	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
 	"github.com/githiago-f/lazyapi/internal/app/pane/runview"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
+	"github.com/githiago-f/lazyapi/internal/history"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/runner"
 	"github.com/githiago-f/lazyapi/internal/script"
@@ -30,11 +32,12 @@ type (
 		onlyFlows bool
 		title     string
 	}
-	useEnvMsg     struct{ name string } // named environment ("" = none)
-	useEnvFileMsg struct{ path string } // env file when there is no config
-	copyCurlMsg   struct{}
-	showRunnerMsg struct{}
-	toggleHelpMsg struct{}
+	useEnvMsg      struct{ name string } // named environment ("" = none)
+	useEnvFileMsg  struct{ path string } // env file when there is no config
+	copyCurlMsg    struct{}
+	showRunnerMsg  struct{}
+	showHistoryMsg struct{}
+	toggleHelpMsg  struct{}
 )
 
 // specs lists the loaded specs (the default one first).
@@ -134,7 +137,8 @@ func (t Tui) paletteCommands() []palette.Command {
 		}
 	}
 
-	add("Request", "New request", "n", requests.CreateNewRequestMsg{})
+	add("Request", "History", "H", showHistoryMsg{})
+	add("Request", "New request", "ctrl+n", requests.CreateNewRequestMsg{})
 	add("App", "Keyboard shortcuts", "?", toggleHelpMsg{})
 	add("App", "Quit", "ctrl+c", tea.QuitMsg{})
 	return cmds
@@ -216,4 +220,66 @@ func plural(n int, word string) string {
 		return "1 " + word
 	}
 	return fmt.Sprintf("%d %ss", n, word)
+}
+
+// recordHistory stores a finished request (in the background).
+func (t Tui) recordHistory(msg responses.ResultMsg) tea.Cmd {
+	entry := history.New(msg.Request, msg.Result, t.envLabel())
+	return func() tea.Msg {
+		if err := history.Append(entry); err != nil {
+			return components.ShowNotificationMsg{Message: "History not saved: " + err.Error(), Type: components.Error}
+		}
+		return nil
+	}
+}
+
+// envLabel is the active environment's name for the history ("" if none).
+func (t Tui) envLabel() string {
+	if t.activeEnv != nil {
+		return t.activeEnv.Name
+	}
+	if p := t.envStore.Path(); p != "" {
+		return env.Label(p)
+	}
+	return ""
+}
+
+// showHistory loads every spec's history (newest first) into the view.
+func (t Tui) showHistory() (Tui, tea.Cmd) {
+	var all []history.Entry
+	for _, spec := range append(t.specs(), "") {
+		entries, err := history.Load(spec)
+		if err != nil {
+			return t, notify("History: "+err.Error(), components.Error)
+		}
+		all = append(all, entries...)
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].Time.After(all[j].Time) })
+	t.history.SetEntries(all)
+	if config.DefaultConfig.Active != config.History {
+		t.historyFrom = config.DefaultConfig.Active
+	}
+	config.DefaultConfig.Active = config.History
+	if history.Dir() == "" {
+		return t, notify("History is disabled (LAZYAPI_NO_HISTORY)", components.Info)
+	}
+	return t, nil
+}
+
+// replay opens a history entry in the editor: the operation as the spec
+// defines it (auth schemes, tests), with the entry's values on top.
+func (t Tui) replay(e history.Entry) (Tui, tea.Cmd) {
+	var base model.Request
+	if e.Ref != nil {
+		req, err := store.LoadRequest(*e.Ref)
+		if err != nil {
+			return t, notify("Cannot load the operation: "+err.Error(), components.Error)
+		}
+		base = req
+	} else if e.Spec != "" {
+		servers, serverURL := store.LoadServers(e.Spec)
+		base = model.Request{FileName: e.Spec, Servers: servers, ServerURL: serverURL, DraftPath: store.NewDraftPath(e.Spec)}
+	}
+	req := e.Replay(base)
+	return t, func() tea.Msg { return store.LoadedFile{Data: req} }
 }
