@@ -3,6 +3,7 @@ package editor
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -12,20 +13,24 @@ import (
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
-	"github.com/githiago-f/lazyapi/internal/lua"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/script"
+	"github.com/githiago-f/lazyapi/internal/store"
 )
 
-const defaultTestScript = `-- Write Lua test scripts here.
--- Available globals: request, response, env, tests
+const defaultTestScript = `// JavaScript/TypeScript test script. F5 runs it against the last response.
+// Globals: request, response, env, vars, lazyapi, test, expect
+// (run "lazyapi types" for the full API). URL imports are allowed:
+//   import { z } from "https://esm.sh/zod@3.23.8";
 
-tests["Status is 200"] = response.status() == 200
-tests["Content-Type is JSON"] = response.header("Content-Type"):find("json") ~= nil
+test("status is 2xx", () => {
+  expect(response.status).toBeGreaterThanOrEqual(200);
+  expect(response.status).toBeLessThan(300);
+});
 
--- Helper functions:
--- json_decode(str)    — decode JSON string to table
--- json_encode(table)  — encode table to JSON string
--- test("name", fn)    — run fn in protected mode, record result
+test("matches the OpenAPI schema", () => {
+  expect(response).toMatchSchema();
+});
 `
 
 var testResultStyle = lipgloss.NewStyle().
@@ -54,7 +59,7 @@ type testsPane struct {
 
 func TestsTab() *testsPane {
 	return &testsPane{
-		script:  components.NewTextarea("Lua test script", defaultTestScript),
+		script:  components.NewTextarea("Test script (JavaScript)", defaultTestScript),
 		results: "",
 	}
 }
@@ -114,7 +119,7 @@ func (tp *testsPane) Value() string {
 	return v
 }
 
-func (tp *testsPane) SetResults(result lua.ScriptResult) {
+func (tp *testsPane) SetResults(result script.Result) {
 	tp.results = formatTestResults(result)
 }
 
@@ -196,10 +201,8 @@ func (tp *testsPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return tp, nil
 }
 
-func (tp testsPane) buildExecData() lua.ExecData {
-	data := lua.ExecData{
-		Request: tp.reqData,
-	}
+func (tp testsPane) buildExecData() script.ExecData {
+	data := script.ExecData{Request: tp.reqData}
 
 	if tp.envStore != nil {
 		envMap, _ := tp.envStore.Load()
@@ -209,27 +212,69 @@ func (tp testsPane) buildExecData() lua.ExecData {
 	}
 
 	if tp.hasResponse {
-		data.HasResponse = true
-		data.RespStatus = tp.respStatus
-		data.RespStatusText = tp.respStatusText
-		data.RespHeaders = tp.respHeaders
-		data.RespBody = tp.respBody
+		data.Response = &script.Response{
+			Status:     tp.respStatus,
+			StatusText: tp.respStatusText,
+			Header:     tp.respHeaders,
+			Body:       tp.respBody,
+			Ref:        tp.reqData.OpenAPIRef,
+		}
 	}
 
 	return data
 }
 
 func (tp testsPane) runTestsCmd() tea.Cmd {
-	script := tp.script.Value()
+	source := tp.script.Value()
 	data := tp.buildExecData()
+	req := tp.reqData
 
 	return func() tea.Msg {
-		result := lua.RunScript(script, data)
-		return TestsResultMsg{Result: result}
+		return TestsResultMsg{Result: runScript(source, data, req)}
 	}
 }
 
-func formatTestResults(result lua.ScriptResult) string {
+// runScript runs source with the request's spec as context, so
+// lazyapi.send(), toMatchSchema() and imports relative to the script work.
+func runScript(source string, data script.ExecData, req model.Request) script.Result {
+	opts := script.Options{Filename: "tests.js"}
+	if req.FileName == "" {
+		return script.Run(source, data, opts)
+	}
+
+	spec, err := store.ParseSpec(req.FileName)
+	if err != nil {
+		return script.Result{ScriptError: err.Error()}
+	}
+	specDir := filepath.Dir(req.FileName)
+	opts.ResolveDir = filepath.Join(specDir, store.TestsDir)
+	opts.Root = specDir
+	if req.OpenAPIRef != nil {
+		if op := store.FindOperation(spec, *req.OpenAPIRef); op != nil {
+			if o, err := script.OperationOptions(req.FileName, op, *req.OpenAPIRef); err == nil {
+				opts = o
+			}
+		}
+	}
+	opts.Modules = script.NewModuleLoader(specDir)
+
+	ctx := &script.SpecContext{
+		Spec:      spec,
+		SpecPath:  req.FileName,
+		ServerURL: req.ServerURL,
+		Env:       data.Env,
+		Vars:      map[string]string{},
+	}
+	ctx.Bind(&data)
+
+	result := script.Run(source, data, opts)
+	if err := opts.Modules.SaveLock(); err != nil && result.ScriptError == "" {
+		result.ScriptError = err.Error()
+	}
+	return result
+}
+
+func formatTestResults(result script.Result) string {
 	var b strings.Builder
 
 	if result.ScriptError != "" {
@@ -238,8 +283,7 @@ func formatTestResults(result lua.ScriptResult) string {
 
 	if len(result.Results) == 0 && result.ScriptError == "" {
 		b.WriteString("No tests defined.\n")
-		b.WriteString("Use:  tests[\"description\"] = true/false\n")
-		return b.String()
+		b.WriteString("Use:  test(\"name\", () => expect(response.status).toBe(200))\n")
 	}
 
 	for _, tr := range result.Results {
@@ -258,6 +302,13 @@ func formatTestResults(result lua.ScriptResult) string {
 	if len(result.Results) > 0 {
 		b.WriteString("\n")
 		fmt.Fprintf(&b, "%d passed, %d failed\n", result.PassCount, result.FailCount)
+	}
+
+	if len(result.Logs) > 0 {
+		b.WriteString("\nConsole:\n")
+		for _, l := range result.Logs {
+			fmt.Fprintf(&b, "  %s %s\n", testInfoStyle.Render("["+l.Level+"]"), l.Message)
+		}
 	}
 
 	return b.String()

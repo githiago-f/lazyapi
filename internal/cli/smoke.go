@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/githiago-f/lazyapi/internal/env"
@@ -12,7 +13,8 @@ import (
 )
 
 const smokeUsage = "usage: lazyapi smoke tests <file> [--server url|index] [--env file] [--script file] " +
-	"[--methods GET,HEAD|all] [--tag t1,t2] [--op id|\"METHOD /path\"] [--param k=v]... [--timeout 30s] [--dry-run]"
+	"[--methods GET,HEAD|all] [--tag t1,t2] [--op id|\"METHOD /path\"] [--param k=v]... [--timeout 30s] [--dry-run] " +
+	"[--no-contract] [--offline] [--reload] [--frozen-lockfile] [--allow-import hosts]"
 
 // defaultSmokeMethods are the methods smoke runs unless --methods says
 // otherwise: safe, read-only verbs that do not mutate server state.
@@ -64,7 +66,7 @@ func SmokeTests(args []string) error {
 	fs := newFlagSet("smoke tests")
 	serverFlag := fs.String("server", "", "server URL or index into the spec's servers")
 	envFile := fs.String("env", "", "environment file")
-	scriptFile := fs.String("script", "", "test script applied to every operation (overrides x-lazyapi-tests)")
+	sflags := registerScriptFlags(fs, "test script applied to every operation (overrides x-lazyapi-tests)")
 	methods := fs.String("methods", "", "comma-separated methods to run (default GET,HEAD,OPTIONS; 'all' for every method)")
 	tags := fs.String("tag", "", "only run operations with one of these tags (comma-separated)")
 	ops := fs.String("op", "", "only run these operations: operationId or \"METHOD /path\" (comma-separated)")
@@ -93,7 +95,7 @@ func SmokeTests(args []string) error {
 		return fmt.Errorf("error loading env file: %w", err)
 	}
 
-	sharedScript, err := readScriptFile(*scriptFile)
+	runner, err := newOpRunner(spec, file, sflags, envMap, *timeout)
 	if err != nil {
 		return err
 	}
@@ -104,7 +106,7 @@ func SmokeTests(args []string) error {
 		return nil
 	}
 
-	var totalPass, totalFail, totalErrors, totalSkipped int
+	var totalErrors, totalSkipped int
 
 	for _, item := range items {
 		method := item.Method.Label()
@@ -121,8 +123,6 @@ func SmokeTests(args []string) error {
 		}
 
 		req := store.OperationToRequest(spec, ref)
-		req.Timeout = *timeout
-		req.Env = envMap
 		applyOverrides(req.Params, params, true)
 
 		if missing := req.MissingPathParams(); len(missing) > 0 {
@@ -141,7 +141,8 @@ func SmokeTests(args []string) error {
 			continue
 		}
 
-		testScript, err := operationScript(sharedScript, file, op)
+		runner.prepare(&req)
+		source, scriptOpts, err := runner.scriptFor(op, ref)
 		if err != nil {
 			totalErrors++
 			fmt.Printf("ERR   %s — %s\n\n", label, err)
@@ -153,13 +154,15 @@ func SmokeTests(args []string) error {
 			continue
 		}
 
+		start := time.Now()
 		response, body, err := req.Send()
+		elapsed := time.Since(start)
 		if err != nil {
 			totalErrors++
 			fmt.Printf("ERR   %s — %s\n\n", label, err)
 			continue
 		}
-		fmt.Printf("%s — Status %d\n", label, response.StatusCode)
+		fmt.Printf("%s — Status %d (%dms)\n", label, response.StatusCode, elapsed.Milliseconds())
 
 		declared := store.DeclaredStatuses(spec, ref)
 		if !store.StatusDeclared(declared, response.StatusCode) {
@@ -172,25 +175,22 @@ func SmokeTests(args []string) error {
 			}
 		}
 
-		if testScript == "" {
+		runner.check(req, ref, response, body, elapsed, source, scriptOpts, "  ")
+		if source == "" {
 			fmt.Println("  (no test script — use --script or x-lazyapi-tests)")
-			fmt.Println()
-			continue
 		}
-
-		result := runTests(testScript, req, envMap, response, body, "  ")
-		totalPass += result.PassCount
-		totalFail += result.FailCount
-		if result.ScriptError != "" {
-			totalErrors++
-		}
-		fmt.Printf("  %d passed, %d failed\n\n", result.PassCount, result.FailCount)
+		fmt.Println()
 	}
 
+	if err := runner.finish(); err != nil {
+		return err
+	}
+	totalErrors += runner.scriptErrors
+
 	fmt.Println("========================================")
-	fmt.Printf("Total: %d passed, %d failed, %d errors, %d skipped\n", totalPass, totalFail, totalErrors, totalSkipped)
-	if totalFail > 0 || totalErrors > 0 {
-		return fmt.Errorf("smoke tests failed: %d failed, %d errors", totalFail, totalErrors)
+	fmt.Printf("Total: %d passed, %d failed, %d errors, %d skipped\n", runner.pass, runner.fail, totalErrors, totalSkipped)
+	if runner.fail > 0 || totalErrors > 0 {
+		return fmt.Errorf("smoke tests failed: %d failed, %d errors", runner.fail, totalErrors)
 	}
 
 	return nil

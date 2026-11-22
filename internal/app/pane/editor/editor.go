@@ -17,7 +17,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/inmath"
-	"github.com/githiago-f/lazyapi/internal/lua"
+	"github.com/githiago-f/lazyapi/internal/script"
 	"github.com/githiago-f/lazyapi/internal/model"
 	resp "github.com/githiago-f/lazyapi/internal/response"
 	"github.com/githiago-f/lazyapi/internal/store"
@@ -29,7 +29,7 @@ type CloseRequestPaneMsg struct {
 }
 
 type TestsResultMsg struct {
-	Result lua.ScriptResult
+	Result script.Result
 }
 
 func closePane(save bool) tea.Cmd {
@@ -347,7 +347,7 @@ func (rp RequestPane) LastStatusText() string {
 	return rp.lastStatus
 }
 
-func (rp RequestPane) SetTestResults(result lua.ScriptResult) RequestPane {
+func (rp RequestPane) SetTestResults(result script.Result) RequestPane {
 	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
 	tp.SetResults(result)
 	return rp

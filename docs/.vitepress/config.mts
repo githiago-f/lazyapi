@@ -69,6 +69,7 @@ export default defineConfig({
             { text: "Authentication", link: "/authentication" },
             { text: "Environment Variables", link: "/environment-variables" },
             { text: "Configuration", link: "/configuration" },
+            { text: "Test Scripts", link: "/scripting" },
           ],
         },
         {

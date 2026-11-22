@@ -24,28 +24,29 @@ Ordem de execução:
 - [x] **`os.Remove` do temp falha quando ele não existe** ao salvar/deletar operação.
 - [x] **AGENTS.md desatualizado** — não cita `internal/lua`, smoke descrito como stub, known issues já corrigidos.
 
-## 2. Scripting JavaScript com import por URL (P0) — Fase 2
+## 2. Scripting JavaScript com import por URL (P0) — Fase 2 ✅ (faltam pre-request e validação de request)
 
-- [ ] Engine: `goja` (JS puro Go) + `esbuild` (lib Go) para transpilar ESM/TS → bundle.
-- [ ] `import x from "https://..."`:
-  - [ ] resolver esbuild (`onResolve`/`onLoad`) baixando via HTTPS
-  - [ ] cache em `~/.cache/lazyapi/modules` por hash
-  - [ ] `lazyapi.lock` com integrity sha256 por URL (runs reproduzíveis)
-  - [ ] `--offline` / `--reload`
-  - [ ] allowlist de hosts; rejeitar `http://`
-  - [ ] imports relativos (`./helpers.js`)
-- [ ] Sandbox: sem fs/processo, timeout via `vm.Interrupt`, limites configuráveis.
-- [ ] API: `test()`, `expect()` (`toBe`, `toEqual`, `toContain`, `toMatch`, `toHaveHeader`, `toMatchSchema`), `res.json()`, `vars`, `env`.
-- [ ] Pre-request script além do post-response.
-- [ ] `lazyapi.send()` para encadear chamadas (login → criar → buscar → deletar).
-- [ ] `console.log` capturado no report.
-- [ ] Validação automática de contrato com `openapi3filter` (request + response vs spec).
-- [ ] `lazyapi.d.ts` com tipos da API de script.
-- [ ] Migrar/remover Lua.
+- [x] Engine: `goja` (JS puro Go) + `esbuild` (lib Go) para transpilar ESM/TS → bundle.
+- [x] `import x from "https://..."`:
+  - [x] resolver esbuild (`onResolve`/`onLoad`) baixando via HTTPS
+  - [x] cache em `~/.cache/lazyapi/modules` por hash
+  - [x] `lazyapi.lock` com integrity sha256 por URL (runs reproduzíveis)
+  - [x] `--offline` / `--reload`
+  - [x] allowlist de hosts; rejeitar `http://`
+  - [x] imports relativos (`./helpers.js`)
+- [x] Sandbox: sem fs/processo, timeout via `vm.Interrupt`, limites configuráveis.
+- [x] API: `test()`, `expect()` (`toBe`, `toEqual`, `toContain`, `toMatch`, `toHaveHeader`, `toMatchSchema`), `res.json()`, `vars`, `env`.
+- [ ] Pre-request script além do post-response. *(adiado: definir formato — arquivo separado `x-lazyapi-pre-request` ou hook no mesmo arquivo)*
+- [x] `lazyapi.send()` para encadear chamadas (login → criar → buscar → deletar).
+- [x] `console.log` capturado no report.
+- [x] Validação automática de contrato da **response** com `openapi3filter` (`--no-contract` desliga).
+- [ ] Validação do **request** enviado contra o spec (params obrigatórios, body schema).
+- [x] `lazyapi.d.ts` com tipos da API de script (`lazyapi types`).
+- [x] Remover Lua (`.lua` referenciado gera erro explícito; salvar no TUI migra para `.js`).
 
 ## 3. Persistência pensada para agents (P0)
 
-- [x] Scripts em arquivos versionados ao lado do spec, referenciados via `x-lazyapi-tests: tests/<op>.lua`. *(Fase 1 — trocar extensão para `.js` na Fase 2)*
+- [x] Scripts em arquivos versionados ao lado do spec, referenciados via `x-lazyapi-tests: tests/<op>.js`.
 - [ ] Ambientes nomeados em `lazyapi.config.yml` + `.env.<nome>`; `--env-name staging`.
 - [ ] Fluxos multi-operação em `flows/*.js`.
 
@@ -94,6 +95,6 @@ Ordem de execução:
 ## 7. Documentação para agents (P1)
 
 - [ ] Reescrever AGENTS.md + `llms.txt` ("validar uma API em 5 comandos").
-- [ ] `lazyapi help scripting`.
+- [x] `lazyapi types` (referência da API de script) + `docs/scripting.md`.
 - [ ] Skill `.agents/skills/api-testing/`.
-- [ ] `examples/` com spec + testes + flow + mock server.
+- [ ] `examples/` com spec + testes JS + flow + mock server (o spec atual aponta para `api.example.com`, não é executável).

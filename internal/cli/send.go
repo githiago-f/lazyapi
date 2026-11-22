@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
@@ -10,13 +11,14 @@ import (
 )
 
 const sendUsage = "usage: lazyapi send request <file> <path> <method> [--server url|index] [--env file] " +
-	"[--param k=v]... [--query k=v]... [--header k=v]... [--script file] [--timeout 30s] [--save-example]"
+	"[--param k=v]... [--query k=v]... [--header k=v]... [--script file] [--timeout 30s] [--save-example] " +
+	"[--no-contract] [--offline] [--reload] [--frozen-lockfile] [--allow-import hosts]"
 
 func SendRequest(args []string) error {
 	fs := newFlagSet("send request")
 	serverFlag := fs.String("server", "", "server URL or index into the spec's servers")
 	envFile := fs.String("env", "", "environment file")
-	scriptFile := fs.String("script", "", "test script (overrides x-lazyapi-tests)")
+	sflags := registerScriptFlags(fs, "test script (overrides x-lazyapi-tests)")
 	saveExample := fs.Bool("save-example", false, "save the response as an example in the spec")
 	timeout := fs.Duration("timeout", model.DefaultTimeout, "request timeout")
 	params, query, headers := kvFlag{}, kvFlag{}, kvFlag{}
@@ -66,24 +68,25 @@ func SendRequest(args []string) error {
 	if err != nil {
 		return fmt.Errorf("error loading env file: %w", err)
 	}
-	req.Env = envMap
-
-	override, err := readScriptFile(*scriptFile)
+	runner, err := newOpRunner(spec, file, sflags, envMap, *timeout)
 	if err != nil {
 		return err
 	}
-	testScript, err := operationScript(override, file, op)
+	runner.prepare(&req)
+	source, scriptOpts, err := runner.scriptFor(op, ref)
 	if err != nil {
 		return err
 	}
 
+	start := time.Now()
 	response, body, err := req.Send()
+	elapsed := time.Since(start)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 
-	fmt.Printf("Status: %s\n", response.Status)
+	fmt.Printf("Status: %s (%dms)\n", response.Status, elapsed.Milliseconds())
 	declared := store.DeclaredStatuses(spec, ref)
 	if !store.StatusDeclared(declared, response.StatusCode) {
 		fmt.Printf("Warning: status %d is not declared for this operation (declared: %s)\n",
@@ -100,17 +103,15 @@ func SendRequest(args []string) error {
 	fmt.Println("\n--- Body ---")
 	fmt.Println(body)
 
+	fmt.Println("\n--- Tests ---")
+	passed := runner.check(req, ref, response, body, elapsed, source, scriptOpts, "  ")
+	fmt.Printf("\n%d passed, %d failed\n", runner.pass, runner.fail)
+	if err := runner.finish(); err != nil {
+		return err
+	}
 	var testFailure error
-	if testScript != "" {
-		fmt.Println("\n--- Tests ---")
-		result := runTests(testScript, req, envMap, response, body, "  ")
-		fmt.Printf("\n%d passed, %d failed\n", result.PassCount, result.FailCount)
-		if result.FailCount > 0 || result.ScriptError != "" {
-			testFailure = fmt.Errorf("request tests failed: %d failed", result.FailCount)
-			if result.ScriptError != "" {
-				testFailure = fmt.Errorf("%w; script error: %s", testFailure, result.ScriptError)
-			}
-		}
+	if !passed {
+		testFailure = fmt.Errorf("request checks failed: %d failed, %d script errors", runner.fail, runner.scriptErrors)
 	}
 
 	if *saveExample {

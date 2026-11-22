@@ -30,6 +30,9 @@ Flags may appear before, between, or after the positional arguments.
 | `--script <file>` | Test script; overrides the operation's `x-lazyapi-tests` file |
 | `--timeout <duration>` | Request timeout (default `30s`) |
 | `--save-example` | Save the response as an OpenAPI example in the spec |
+| `--no-contract` | Skip validating the response against the OpenAPI schema |
+| `--script-timeout <duration>` | Maximum script run time (default `30s`) |
+| `--offline` / `--reload` / `--frozen-lockfile` / `--allow-import <hosts>` | URL import behavior, see [Test Scripts](../scripting.md#imports) |
 
 If a path parameter has neither a `--param` value nor an example in the spec, the command fails and does not send anything.
 
@@ -39,10 +42,10 @@ If a path parameter has neither a `--param` value nor an example in the spec, th
 lazyapi send request my-api.yml /users GET
 lazyapi send request my-api.yml /users GET --server http://localhost:3000
 lazyapi send request my-api.yml /users/{id} GET --param id=42 --header "X-Trace=abc"
-lazyapi send request my-api.yml /users POST --env .env --script tests/create_user.lua
+lazyapi send request my-api.yml /users POST --env .env --script tests/create_user.js
 lazyapi send request my-api.yml /users/{id} GET --param id=1 --save-example
 ```
 
 ## Output and exit code
 
-The status, headers and body are printed to stdout, followed by test results. A warning is printed if the status code is not declared in the spec. The command exits with status 1 if the request fails or any test fails.
+The status (with round-trip time), headers and body are printed to stdout. Then come the contract check (when the response has a declared schema) and the script results. A warning is printed if the status code is not declared in the spec. The command exits with status 1 if the request fails, the contract check fails, or a test fails.
