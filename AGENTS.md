@@ -29,16 +29,21 @@ internal/
       responses/           #   Response preview (stub — not used; editor uses viewport.Model directly)
   response/                # Shared response formatting
     formatter.go           #   BuildContent, FormatContent — status/headers/body formatting
-  cli/                     # CLI commands (create, remove, add, send, smoke)
-    cli.go                 #   Run() dispatcher + printUsage
+  cli/                     # CLI commands — thin wrappers over runner/inspect/report/mcp
+    cli.go                 #   Commands list, run() dispatcher, printUsage
+    options.go             #   ExitError + ExitCode (0/1/2/3), runFlags shared by run/send, writeReport
     flags.go               #   stdlib flag helpers: parseInterleaved, kvFlag (--param k=v), splitList
-    runner.go              #   shared send/smoke helpers: selectServer, operationScript, runTests
-    add.go                 #   AddRequest, AddServer
-    create.go              #   CreateFile
-    remove.go              #   RemoveRequest
-    send.go                #   SendRequest (--server, --env, --param/--query/--header, --script, --timeout, --save-example)
-    server.go              #   AddServer
-    smoke.go               #   SmokeTests (--methods, --tag, --op, --param, --dry-run; status checked vs spec)
+    run.go                 #   RunTests (`run`; `smoke tests` is an alias): selection, --parallel, --retries, --bail
+    send.go                #   SendRequest: <path> <method> | --op, --body @file, --output json, --save-example
+    inspect.go             #   ListOps, Describe, ValidateSpec
+    mcp.go                 #   ServeMCP (`lazyapi mcp --root`), Version (set by goreleaser ldflags)
+    add.go / create.go / remove.go / server.go  # spec editing commands
+  runner/                  # Executes operations → structured results (no printing)
+    result.go              #   Outcome, Check (status|contract|test|script), OpResult, Report, Summarize, exit codes
+    runner.go              #   Filter, ParseMethods, Run (ordered OnResult, parallel, bail, retries), RunOne
+  report/                  # Renders runner results: pretty (FormatOp/WriteSummary), json, junit, tap; body policy
+  inspect/                 # ListOperations, Describe (with referenced schemas), Validate (OpenAPI + scripts compile)
+  mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled) + Tools confined to a root dir
   script/                  # JS/TS test engine: esbuild bundling + goja sandbox
     script.go              #   Run(source, ExecData, Options) → Result; native bridge; Format
     prelude.js             #   JS side of the API: test, expect matchers, console, LazyResponse
@@ -119,12 +124,13 @@ internal/
 ## TUI vs CLI
 
 - **TUI** (`lazyapi` with no subcommand) — interactive bubbletea UI. Default mode.
-- **CLI** (`lazyapi create|remove|add|send|smoke ...`) — headless commands. Dispatch: `cmd/lazyapi/main.go` checks `os.Args[1]`; known verbs → `cli.Run()`, else → `tea.NewProgram(app.NewTui(...))`.
-- **Flag parsing** — `send`/`smoke` use the stdlib `flag` package via `newFlagSet` + `parseInterleaved` (flags allowed before/after positionals; unknown flags are errors). `main.go` still parses `--env` ad-hoc.
-- **CLI subcommands**: `create file [name] [servers...]`, `add request <file> <path> <method>`, `add server <file> <url>`, `remove request <file> <method> <path>`, `send request <file> <path> <method> [flags]`, `smoke tests <file> [flags]`, `types`. See `docs/cli/` and `docs/scripting.md`.
-- **Smoke safety** — runs only `GET,HEAD,OPTIONS` unless `--methods` is given; skips operations whose path params have no value (never invents one); a status not declared in the operation's `responses` counts as an error.
-- **Exit status** — `cli.Run` exits 1 on any error, including failed tests and undeclared statuses.
-- **Scripts** — `send`/`smoke` share `opRunner` (`cli/runner.go`): automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
+- **CLI** (`lazyapi run|send|list|describe|validate|types|mcp|create|add|remove ...`) — headless commands. Dispatch: `cmd/lazyapi/main.go` sends anything in `cli.Commands` to `cli.Run()`, else starts `tea.NewProgram(app.NewTui(...))`.
+- **Flag parsing** — every command uses the stdlib `flag` package via `newFlagSet` + `parseInterleaved` (flags allowed before/after positionals; unknown flags are errors). `main.go` still parses `--env` ad-hoc.
+- **CLI subcommands**: `run <file>`, `send request <file> (<path> <method> | --op id)`, `smoke tests` (alias of run), `list ops`, `describe`, `validate spec`, `types`, `mcp`, plus `create file`, `add request|server`, `remove request`. `main.go` dispatches anything in `cli.Commands`. See `docs/cli/`, `docs/scripting.md`, `docs/agents.md`.
+- **Run safety** — runs only `GET,HEAD,OPTIONS` unless `--methods` is given; skips operations whose path params have no value (never invents one); a status not declared in the operation's `responses` is a failed `status` check (exit 1).
+- **Execution** — all checks live in `internal/runner`: status declared → contract (`store.ValidateResponse`) → script. CLI and MCP only render `runner.Report`/`OpResult`. Never print from runner.
+- **Exit codes** — 0 ok, 1 a check failed, 2 usage, 3 could not run (errors win over failures). Return `*cli.ExitError` (`usageErr`, `runtimeErr`) instead of plain errors from commands.
+- **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
 
 ## Editor Field Cycle

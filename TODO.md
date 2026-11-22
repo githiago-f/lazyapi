@@ -50,14 +50,14 @@ Ordem de execução:
 - [ ] Ambientes nomeados em `lazyapi.config.yml` + `.env.<nome>`; `--env-name staging`.
 - [ ] Fluxos multi-operação em `flows/*.js`.
 
-## 4. CLI para agents/CI (P0/P1) — Fase 3
+## 4. CLI para agents/CI (P0/P1) — Fase 3 ✅ (faltam mock, import/export e opções HTTP)
 
-- [ ] `--output json|junit|tap|pretty` (pretty só em TTY).
-- [ ] Exit codes documentados: 0 ok · 1 teste falhou · 2 uso · 3 rede/spec.
-- [ ] `lazyapi run`: `--tag`, `--op`, `--grep`, `--bail`, `--parallel N`, `--timeout`, `--retries`.
-- [ ] Introspecção: `list ops --json`, `describe <op> --json`, `validate spec`.
-- [ ] Request ad-hoc: `send --op createUser --param id=1 --header ... --body @file.json`.
-- [ ] `lazyapi mcp` — servidor MCP stdio (`list_operations`, `describe_operation`, `send_request`, `run_tests`, `write_test`).
+- [x] `--output json|junit|tap|pretty` + `--output-file` (pretty no stdout) + `--bodies failed|all|none`.
+- [x] Exit codes documentados: 0 ok · 1 check falhou · 2 uso · 3 não executou (rede/spec/config).
+- [x] `lazyapi run`: `--tag`, `--op`, `--grep`, `--bail`, `--parallel N`, `--timeout`, `--retries` (`smoke tests` virou alias).
+- [x] Introspecção: `list ops --json`, `describe <op> --json` (com schemas referenciados), `validate spec` (inclui compilar scripts).
+- [x] Request ad-hoc: `send --op createUser --param id=1 --header ... --body @file.json|@-` + `--output json` + `--dry-run`.
+- [x] `lazyapi mcp --root` — servidor MCP stdio com 9 tools (`list_specs`, `list_operations`, `describe_operation`, `send_request`, `run_tests`, `read_test`, `write_test`, `validate_spec`, `script_api`), caminhos confinados ao root.
 - [ ] `lazyapi mock` — mock server a partir dos examples do spec.
 - [ ] Import/export: cURL ↔ request, Postman collection → spec + testes JS, HAR.
 - [ ] HTTP: `--insecure`, CA/client cert, proxy, redirects, limite de body, `form-urlencoded`, `multipart`, upload.
@@ -94,7 +94,8 @@ Ordem de execução:
 
 ## 7. Documentação para agents (P1)
 
-- [ ] Reescrever AGENTS.md + `llms.txt` ("validar uma API em 5 comandos").
+- [x] AGENTS.md atualizado + `docs/agents.md` ("validar uma API em 5 passos", setup MCP).
+- [ ] `llms.txt` na raiz do site de docs.
 - [x] `lazyapi types` (referência da API de script) + `docs/scripting.md`.
 - [ ] Skill `.agents/skills/api-testing/`.
 - [ ] `examples/` com spec + testes JS + flow + mock server (o spec atual aponta para `api.example.com`, não é executável).

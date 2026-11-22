@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/app"
@@ -10,12 +11,9 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "create", "remove", "add", "send", "smoke", "types":
-			cli.Run(os.Args[1:])
-			return
-		}
+	if len(os.Args) > 1 && (slices.Contains(cli.Commands, os.Args[1]) || os.Args[1] == "-h" || os.Args[1] == "--help") {
+		cli.Run(os.Args[1:])
+		return
 	}
 
 	var defaultFile, envFile string

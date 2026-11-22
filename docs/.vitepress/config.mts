@@ -45,11 +45,13 @@ export default defineConfig({
           text: "CLI",
           items: [
             { text: "Overview", link: "/cli/" },
+            { text: "run", link: "/cli/run" },
             { text: "create", link: "/cli/create" },
             { text: "add", link: "/cli/add" },
             { text: "remove", link: "/cli/remove" },
             { text: "send", link: "/cli/send" },
             { text: "smoke", link: "/cli/smoke" },
+            { text: "list / describe / validate", link: "/cli/inspect" },
           ],
         },
       ],
@@ -70,6 +72,7 @@ export default defineConfig({
             { text: "Environment Variables", link: "/environment-variables" },
             { text: "Configuration", link: "/configuration" },
             { text: "Test Scripts", link: "/scripting" },
+            { text: "AI Agents (MCP)", link: "/agents" },
           ],
         },
         {
