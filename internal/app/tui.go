@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/githiago-f/lazyapi/internal/app/pane/editor"
 	"github.com/githiago-f/lazyapi/internal/app/pane/historyview"
 	"github.com/githiago-f/lazyapi/internal/app/pane/palette"
@@ -66,6 +67,10 @@ type Tui struct {
 	runnerFrom  config.PageIndex // page to return to when the runner closes
 	history     historyview.Model
 	historyFrom config.PageIndex
+	// templates feeds field completions; missing are the editor's
+	// references without a value.
+	templates *templateSource
+	missing   []string
 
 	// project is lazyapi.config.yml (nil when absent); activeEnv is the
 	// selected named environment (nil: none).
@@ -91,6 +96,7 @@ var (
 	titleInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Subtext0))
 	titleEnvStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Crust)).Background(lipgloss.Color(config.Teal)).Padding(0, 1)
 	titleNoEnv     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1)).Background(lipgloss.Color(config.Surface0)).Padding(0, 1)
+	missingStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Yellow))
 	confirmTitle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Red))
 	confirmKey     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender))
 	confirmStyle   = lipgloss.NewStyle().
@@ -123,6 +129,9 @@ func NewTui(defaultFile string, envFile string) Tui {
 		runner:      runview.New(),
 		history:     historyview.New(),
 	}
+
+	tui.templates = &templateSource{store: tui.envStore}
+	components.TemplateNames = tui.templates.names
 
 	tui.editor = editor.New(tui.currentRequest)
 	tui.editor.SetEnvStore(tui.envStore)
@@ -247,7 +256,11 @@ func (t Tui) View() tea.View {
 		currentView = t.history.View()
 	}
 
-	helpBar := helpBarStyle.Width(t.width).Render(t.help.ShortHelpView(vkm.ShortHelp()))
+	helpText := t.help.ShortHelpView(vkm.ShortHelp())
+	if config.DefaultConfig.Active == config.RequestEditor && len(t.missing) > 0 {
+		helpText = missingStyle.Render("⚠ no value: {{"+strings.Join(t.missing, "}} {{")+"}}") + "  " + helpText
+	}
+	helpBar := helpBarStyle.Width(t.width).MaxHeight(1).Render(ansi.Truncate(helpText, max(0, t.width-2), "…"))
 	_, contentHeight := t.contentSize()
 	currentView = lipgloss.NewStyle().Height(contentHeight).MaxHeight(contentHeight).Render(currentView)
 
@@ -435,8 +448,10 @@ func serverFor(v string, servers []string) string {
 func (t *Tui) useEnv(e *project.Environment) {
 	t.activeEnv = e
 	path := ""
+	t.templates.vars = nil
 	if e != nil {
 		path = e.Env
+		t.templates.vars = e.Vars
 	}
 	t.envStore.SetPath(path)
 	t.titleBar.Title = t.title()
@@ -803,6 +818,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rp := t.editor.SetValue(msg.Data)
 		t.editor = &rp
 		config.DefaultConfig.Active = config.RequestEditor
+		t.missing = t.missingRefs()
 		return t, nil
 
 	case editor.CloseRequestPaneMsg:
@@ -962,6 +978,9 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ptr, _ := subModel.(editor.RequestPane)
 		t.editor = &ptr
 		cmd = tea.Batch(cmd, ecmd)
+		if isKey(msg) {
+			t.missing = t.missingRefs()
+		}
 	}
 
 	if config.DefaultConfig.Active == config.History {

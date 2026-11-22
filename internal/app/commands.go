@@ -283,3 +283,45 @@ func (t Tui) replay(e history.Entry) (Tui, tea.Cmd) {
 	req := e.Replay(base)
 	return t, func() tea.Msg { return store.LoadedFile{Data: req} }
 }
+
+// templateSource lists the names {{...}} completions offer: the env file's
+// keys and the active environment's vars.
+type templateSource struct {
+	store *env.Store
+	vars  map[string]string
+}
+
+func (s *templateSource) names() []string {
+	envMap, _ := s.store.Load()
+	return env.Names(env.Context{Env: envMap, Vars: s.vars})
+}
+
+// missingRefs lists the editor request's {{env.X}}/{{var.X}} references
+// without a value (they would be sent empty). Vars set by scripts at run
+// time are not known here, so var references are only checked against the
+// environment's vars.
+func (t Tui) missingRefs() []string {
+	req := t.editor.GetAsRequestData()
+	envMap, _ := t.envStore.Load()
+	vars := map[string]string{}
+	if t.activeEnv != nil {
+		for k, v := range t.activeEnv.Vars {
+			vars[k] = v
+		}
+	}
+	for k, v := range req.Vars {
+		vars[k] = v
+	}
+	inputs := []string{req.URI, req.ServerURL, req.Body.Raw}
+	for _, m := range []map[string]string{req.Headers, req.Params, req.Query} {
+		for _, v := range m {
+			inputs = append(inputs, v)
+		}
+	}
+	for _, a := range req.Auth {
+		inputs = append(inputs, a.Username, a.Password, a.Token, a.KeyValue, a.ClientID, a.ClientSecret, a.AccessToken)
+	}
+	missing := env.Missing(env.Context{Env: envMap, Vars: vars}, inputs...)
+	sort.Strings(missing)
+	return missing
+}
