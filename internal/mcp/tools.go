@@ -14,6 +14,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/importer"
 	"github.com/githiago-f/lazyapi/internal/inspect"
+	"github.com/githiago-f/lazyapi/internal/jq"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/project"
 	"github.com/githiago-f/lazyapi/internal/report"
@@ -97,6 +98,7 @@ var toolList = []tool{
 			"insecure":    boolean("Skip TLS certificate verification (self-signed development servers)"),
 			"no_contract": boolean("Skip response schema validation"),
 			"dry_run":     boolean("Resolve the request without sending it"),
+			"jq":          str("jq filter applied to the returned response body, e.g. \".items[0] | {id, status}\" (checks still run on the full body)"),
 		}),
 		call: (*Tools).sendRequest,
 	},
@@ -392,8 +394,12 @@ func (t *Tools) sendRequest(ctx context.Context, args json.RawMessage) (any, err
 		runArgs
 		Operation string `json:"operation"`
 		Body      any    `json:"body"`
+		JQ        string `json:"jq"`
 	}
 	if err := decode(args, &a); err != nil {
+		return nil, err
+	}
+	if err := jq.Check(a.JQ); err != nil {
 		return nil, err
 	}
 	specPath, opts, err := t.options(a.runArgs)
@@ -432,6 +438,15 @@ func (t *Tools) sendRequest(ctx context.Context, args json.RawMessage) (any, err
 	res, lockErr := runner.RunOne(ctx, spec, specPath, ref, opts)
 	if lockErr != nil {
 		return nil, lockErr
+	}
+	if a.JQ != "" && res.Response != nil {
+		out, err := jq.Apply(a.JQ, res.Response.Body)
+		if err != nil {
+			out = err.Error()
+		}
+		r := *res.Response
+		r.Body = out
+		res.Response = &r
 	}
 	return report.FilterBodies(res, report.BodiesAll), nil
 }

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/githiago-f/lazyapi/internal/jq"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/report"
 	"github.com/githiago-f/lazyapi/internal/runner"
@@ -31,6 +32,7 @@ const sendUsage = `usage: lazyapi send request <spec.yml> (<path> <method> | --o
   --no-contract  --script-timeout d  --offline  --reload  --frozen-lockfile  --allow-import hosts
   --output pretty|json|junit|tap  --output-file path  --bodies failed|all|none (default all)
   --output curl       print the request as a curl command instead of sending it
+  --jq filter         show only this jq slice of the response body (checks still see the full body)
   --save-example      save the response as an example in the spec
   --dry-run           show the request without sending it
 
@@ -42,6 +44,7 @@ func SendRequest(args []string) error {
 	opFlag := fs.String("op", "", "operationId (or \"METHOD /path\") to send")
 	body := fs.String("body", "", "request body, @file or @- for stdin")
 	saveExample := fs.Bool("save-example", false, "save the response as an example in the spec")
+	jqFilter := fs.String("jq", "", "jq filter applied to the shown response body")
 	form, files := kvFlag{}, kvFlag{}
 	fs.Var(form, "form", "form field name=value (repeatable); sends form-urlencoded or multipart")
 	fs.Var(files, "file", "multipart file part name=path (repeatable)")
@@ -113,12 +116,26 @@ func SendRequest(args []string) error {
 		return nil
 	}
 
+	if err := jq.Check(*jqFilter); err != nil {
+		return usageErr("--jq: %v", err)
+	}
+
 	res, lockErr := runner.RunOne(context.Background(), spec, file, ref, opts)
 
-	if f.prettyToStdout() {
-		printSendResult(res)
+	shown := res
+	if *jqFilter != "" && res.Response != nil {
+		out, err := jq.Apply(*jqFilter, res.Response.Body)
+		if err != nil {
+			out = err.Error()
+		}
+		r := *res.Response
+		r.Body = out
+		shown.Response = &r
 	}
-	if err := writeSendReport(f, file, res); err != nil {
+	if f.prettyToStdout() {
+		printSendResult(shown)
+	}
+	if err := writeSendReport(f, file, shown); err != nil {
 		return err
 	}
 	if lockErr != nil {
