@@ -1,10 +1,13 @@
 # `lazyapi run`
 
-Runs the selected operations of a spec. Each response is checked three ways:
+Runs the selected operations of a spec. Each exchange is checked four ways:
 
-1. **status**: the status code must be declared in the operation's `responses` (exact code, `2XX`-style range, or `default`).
-2. **contract**: headers and body must match the declared schema. Pass `--no-contract` to skip this check.
-3. **tests**: the operation's script (`x-lazyapi-tests`, or `--script`). See [Test Scripts](/scripting).
+1. **request**: the request sent must match the operation (required parameters, parameter schemas, body schema). It is still sent when it fails, because the server's answer is useful too.
+2. **status**: the status code must be declared in the operation's `responses` (exact code, `2XX`-style range, or `default`).
+3. **contract**: response headers and body must match the declared schema.
+4. **tests**: the operation's script (`x-lazyapi-tests`, or `--script`). See [Test Scripts](/scripting).
+
+`--no-contract` skips both the request and contract checks.
 
 ```bash
 lazyapi run <spec.yml> [flags]
@@ -68,6 +71,7 @@ Sensitive request headers (`Authorization`, `Cookie`, anything containing `token
       "response": { "status": 200, "statusText": "200 OK", "headers": {"Content-Type": "application/json"},
                     "body": "{\"id\":\"1\"}", "durationMs": 41 },
       "checks": [
+        { "kind": "request",  "name": "request matches the OpenAPI spec", "passed": true },
         { "kind": "status",   "name": "status 200 is declared", "passed": true },
         { "kind": "contract", "name": "response matches the OpenAPI schema", "passed": false,
           "message": "id: value must be an integer" },
@@ -79,7 +83,7 @@ Sensitive request headers (`Authorization`, `Cookie`, anything containing `token
 }
 ```
 
-`outcome` is one of `passed`, `failed`, `error` (could not run; see `reason`), `skipped` (see `reason`) or `planned` (`--dry-run`). Check `kind` is `status`, `contract`, `test` or `script` (the script failed to compile or threw outside `test()`).
+`outcome` is one of `passed`, `failed`, `error` (could not run; see `reason`), `skipped` (see `reason`) or `planned` (`--dry-run`). Check `kind` is `request`, `status`, `contract`, `test` or `script` (the script failed to compile or threw outside `test()`).
 
 ## Examples
 

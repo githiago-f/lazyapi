@@ -20,6 +20,7 @@ Flags may appear before or after positional arguments.
 | [`validate spec`](/cli/inspect#validate-spec) | Validate a spec and its test scripts |
 | `types` | Print the test script API ([Test Scripts](/scripting)) |
 | [`mcp`](/agents) | Serve these tools to AI agents over MCP |
+| [`mock`](/cli/mock) | Fake API from the spec's examples, with request validation |
 | [`create file`](/cli/create) | Create a new OpenAPI spec template |
 | [`add request`](/cli/add) / [`add server`](/cli/add) | Add an operation or server |
 | [`remove request`](/cli/remove) | Remove an operation |
@@ -31,7 +32,7 @@ The same codes apply to every command:
 | Code | Meaning |
 |------|---------|
 | 0 | Everything passed |
-| 1 | A check failed: undeclared status, contract violation, test failure, script error, or an invalid spec (`validate`) |
+| 1 | A check failed: invalid request, undeclared status, contract violation, test failure, script error, or an invalid spec (`validate`) |
 | 2 | Usage error (unknown flag, missing argument) |
 | 3 | Something could not run: spec unreadable, network error, missing server, invalid env file |
 

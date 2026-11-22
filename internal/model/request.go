@@ -103,57 +103,10 @@ func (r *Request) SendContext(parent context.Context) (*http.Response, string, e
 	reqCtx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	ctx := r.templateContext()
-	fullURL := r.ResolvedURL()
-
-	resolvedBody := env.Resolve(r.Body.Raw, ctx)
-	var bodyReader io.Reader
-	if resolvedBody != "" {
-		bodyReader = strings.NewReader(resolvedBody)
-	}
-
-	req, err := http.NewRequestWithContext(reqCtx, r.Method.Label(), fullURL, bodyReader)
+	req, err := r.HTTPRequest(reqCtx)
 	if err != nil {
 		return nil, "", err
 	}
-
-	q := req.URL.Query()
-	for name, value := range r.Query {
-		// Optional parameters without a value are not sent.
-		if resolved := env.Resolve(value, ctx); resolved != "" {
-			q.Set(name, resolved)
-		}
-	}
-	for name, value := range r.Headers {
-		req.Header.Set(name, env.Resolve(value, ctx))
-	}
-	if bodyReader != nil && req.Header.Get("Content-Type") == "" && r.Body.Type != "" {
-		req.Header.Set("Content-Type", string(r.Body.Type))
-	}
-
-	for _, scheme := range r.Auth {
-		switch scheme.Type {
-		case AuthBasic:
-			auth := env.Resolve(scheme.Username, ctx) + ":" + env.Resolve(scheme.Password, ctx)
-			encoded := base64.StdEncoding.EncodeToString([]byte(auth))
-			req.Header.Set("Authorization", "Basic "+encoded)
-		case AuthBearer:
-			req.Header.Set("Authorization", "Bearer "+env.Resolve(scheme.Token, ctx))
-		case AuthAPIKey:
-			keyValue := env.Resolve(scheme.KeyValue, ctx)
-			switch scheme.KeyIn {
-			case "header":
-				req.Header.Set(scheme.KeyName, keyValue)
-			case "query":
-				q.Set(scheme.KeyName, keyValue)
-			}
-		case AuthOAuth2:
-			if scheme.AccessToken != "" {
-				req.Header.Set("Authorization", "Bearer "+env.Resolve(scheme.AccessToken, ctx))
-			}
-		}
-	}
-	req.URL.RawQuery = q.Encode()
 
 	client := http.DefaultClient
 	if r.HTTPClient != nil {
@@ -171,4 +124,59 @@ func (r *Request) SendContext(parent context.Context) (*http.Response, string, e
 	}
 
 	return response, string(bodyBytes), nil
+}
+
+// HTTPRequest builds the *http.Request that SendContext would send:
+// templates resolved, path params substituted, query, headers, body and
+// auth applied. Optional query parameters without a value are omitted.
+func (r *Request) HTTPRequest(ctx context.Context) (*http.Request, error) {
+	tctx := r.templateContext()
+	resolvedBody := env.Resolve(r.Body.Raw, tctx)
+	var bodyReader io.Reader
+	if resolvedBody != "" {
+		bodyReader = strings.NewReader(resolvedBody)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, r.Method.Label(), r.ResolvedURL(), bodyReader)
+	if err != nil {
+		return nil, err
+	}
+
+	q := req.URL.Query()
+	for name, value := range r.Query {
+		if resolved := env.Resolve(value, tctx); resolved != "" {
+			q.Set(name, resolved)
+		}
+	}
+	for name, value := range r.Headers {
+		req.Header.Set(name, env.Resolve(value, tctx))
+	}
+	if bodyReader != nil && req.Header.Get("Content-Type") == "" && r.Body.Type != "" {
+		req.Header.Set("Content-Type", string(r.Body.Type))
+	}
+
+	for _, scheme := range r.Auth {
+		switch scheme.Type {
+		case AuthBasic:
+			auth := env.Resolve(scheme.Username, tctx) + ":" + env.Resolve(scheme.Password, tctx)
+			encoded := base64.StdEncoding.EncodeToString([]byte(auth))
+			req.Header.Set("Authorization", "Basic "+encoded)
+		case AuthBearer:
+			req.Header.Set("Authorization", "Bearer "+env.Resolve(scheme.Token, tctx))
+		case AuthAPIKey:
+			keyValue := env.Resolve(scheme.KeyValue, tctx)
+			switch scheme.KeyIn {
+			case "header":
+				req.Header.Set(scheme.KeyName, keyValue)
+			case "query":
+				q.Set(scheme.KeyName, keyValue)
+			}
+		case AuthOAuth2:
+			if scheme.AccessToken != "" {
+				req.Header.Set("Authorization", "Bearer "+env.Resolve(scheme.AccessToken, tctx))
+			}
+		}
+	}
+	req.URL.RawQuery = q.Encode()
+	return req, nil
 }
