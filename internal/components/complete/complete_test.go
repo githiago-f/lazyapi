@@ -1,6 +1,7 @@
 package complete
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -78,5 +79,24 @@ func TestScript(t *testing.T) {
 	r, _ := Script(text, cur)
 	if r.Items[0].Insert != "json()" || r.Items[0].CursorBack != 1 {
 		t.Errorf("methods insert () with the cursor inside: %+v", r.Items[0])
+	}
+}
+
+func TestSignature(t *testing.T) {
+	cases := map[string]string{
+		`lazyapi.send("getUser", |`:                    "lazyapi.send(target",
+		`expect(response.json().id).toBe(|`:            "toBe(expected)",
+		`expect(response.json().id|`:                   "expect(actual",
+		`test("x", () => { expect(a).toHaveProperty(|`: "toHaveProperty(path",
+		`env.get(|`:        "env.get(name",
+		`foo(|`:            "",
+		`response.status|`: "",
+	}
+	for src, want := range cases {
+		text, cur := at(src)
+		got := Signature(text, cur)
+		if want == "" && got != "" || want != "" && !strings.HasPrefix(got, want) {
+			t.Errorf("%q → %q, want prefix %q", src, got, want)
+		}
 	}
 }

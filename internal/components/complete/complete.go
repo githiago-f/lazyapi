@@ -275,3 +275,75 @@ func inStringOrComment(text []rune, pos int) bool {
 	}
 	return quote != 0
 }
+
+// signatures of the script API, by call name.
+var signatures = map[string]string{
+	"test":                   "test(name: string, fn: () => void)",
+	"expect":                 "expect(actual: unknown) → matchers",
+	"lazyapi.send":           "lazyapi.send(target: string, options?: {params, query, headers, body}) → LazyResponse",
+	"env.get":                "env.get(name: string) → string | undefined",
+	"env.set":                "env.set(name: string, value: string)",
+	"env.has":                "env.has(name: string) → boolean",
+	"vars.get":               "vars.get(name: string) → string | undefined",
+	"vars.set":               "vars.set(name: string, value: string)",
+	"vars.has":               "vars.has(name: string) → boolean",
+	"response.json":          "response.json<T>() → T",
+	"response.header":        "response.header(name: string) → string | undefined",
+	"request.json":           "request.json<T>() → T",
+	"console.log":            "console.log(...values)",
+	"pm.test":                "pm.test(name: string, fn: () => void)",
+	"pm.expect":              "pm.expect(value) → chai assertion",
+	"pm.sendRequest":         "pm.sendRequest(url | {url, method, header, body}, callback(err, res))",
+	"toBe":                   "toBe(expected) — strict equality (===)",
+	"toEqual":                "toEqual(expected) — deep equality",
+	"toContain":              "toContain(item) — substring or array element",
+	"toMatch":                "toMatch(pattern: RegExp | string)",
+	"toHaveProperty":         "toHaveProperty(path: string, value?)",
+	"toHaveLength":           "toHaveLength(n: number)",
+	"toHaveStatus":           "toHaveStatus(code: number)",
+	"toHaveHeader":           "toHaveHeader(name: string, value?: string)",
+	"toMatchSchema":          "toMatchSchema(schema?) — the operation's response schema by default",
+	"toBeGreaterThan":        "toBeGreaterThan(n: number)",
+	"toBeGreaterThanOrEqual": "toBeGreaterThanOrEqual(n: number)",
+	"toBeLessThan":           "toBeLessThan(n: number)",
+	"toBeLessThanOrEqual":    "toBeLessThanOrEqual(n: number)",
+	"toThrow":                "toThrow(message?: string | RegExp)",
+	"before":                 "export function before(req) — change the request before it is sent",
+	"after":                  "export function after(res) — clean up after the tests",
+}
+
+// Signature returns the signature of the innermost call the cursor is in
+// ("" when none is known): inside lazyapi.send(|) it is lazyapi.send's.
+func Signature(text []rune, cursor int) string {
+	if cursor > len(text) {
+		return ""
+	}
+	depth := 0
+	for i := cursor - 1; i >= max(0, cursor-2000); i-- {
+		switch text[i] {
+		case ')':
+			depth++
+		case '(':
+			if depth > 0 {
+				depth--
+				continue
+			}
+			j := i
+			for j > 0 && (isWord(text[j-1]) || text[j-1] == '.') && text[j-1] != '-' {
+				j--
+			}
+			name := string(text[j:i])
+			if sig, ok := signatures[name]; ok {
+				return sig
+			}
+			// expect(x).toBe( → the last member
+			if dot := strings.LastIndex(name, "."); dot >= 0 {
+				if sig, ok := signatures[name[dot+1:]]; ok {
+					return sig
+				}
+			}
+			return ""
+		}
+	}
+	return ""
+}

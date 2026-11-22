@@ -312,3 +312,24 @@ func TestCodeEditorSelection(t *testing.T) {
 		t.Error("moving without shift clears the selection")
 	}
 }
+
+func TestCodeEditorScriptDiagnostics(t *testing.T) {
+	c := NewCodeEditor(LangJS, "", "test(\"a\", () => {\n  expect(1).toBe(1);\n}")
+	c.SetSize(80, 12)
+	p := c.Problem()
+	if p == nil || p.Line != 2 {
+		t.Fatalf("missing ) → %+v", p)
+	}
+	c.SetValue("const x: number = 1;\ntest(\"a\", () => expect(x).toBe(1));")
+	if p := c.Problem(); p != nil {
+		t.Errorf("TypeScript is valid: %+v", p)
+	}
+	if out := ansi.Strip(c.View().Content); !strings.Contains(out, "✓ syntax ok") {
+		t.Errorf("status:\n%s", out)
+	}
+	c.SetValue("")
+	c = typeIn(c, "lazyapi.send(")
+	if out := ansi.Strip(c.View().Content); !strings.Contains(out, "ƒ lazyapi.send(target") {
+		t.Errorf("signature:\n%s", out)
+	}
+}

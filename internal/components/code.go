@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/atotto/clipboard"
+	"github.com/evanw/esbuild/pkg/api"
 	"regexp"
 	"strings"
 
@@ -87,14 +88,15 @@ type Problem struct {
 const indentUnit = "  "
 
 var (
-	codeBox       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2))
-	gutterStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Surface2))
-	gutterCurrent = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Bold(true)
-	gutterError   = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red)).Bold(true)
-	statusStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
-	statusOK      = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green))
-	statusBad     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red))
-	langBadge     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Crust)).Background(lipgloss.Color(config.Mauve)).Bold(true).Padding(0, 1)
+	codeBox        = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2))
+	gutterStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Surface2))
+	gutterCurrent  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Bold(true)
+	gutterError    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red)).Bold(true)
+	statusStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
+	statusOK       = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green))
+	statusBad      = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red))
+	signatureStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender))
+	langBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Crust)).Background(lipgloss.Color(config.Mauve)).Bold(true).Padding(0, 1)
 )
 
 // NewCodeEditor returns an editor for lang.
@@ -727,10 +729,29 @@ func (c *CodeEditor) highlight() []syntax.Line {
 	syntax.MarkTemplates(lines, Resolver())
 	c.cacheValue, c.cacheLines = v, lines
 	c.problem = nil
-	if c.Lang == LangJSON && strings.TrimSpace(v) != "" {
+	switch {
+	case strings.TrimSpace(v) == "":
+	case c.Lang == LangJSON:
 		c.problem = jsonProblem(v)
+	case c.Lang == LangJS:
+		c.problem = scriptProblem(v)
 	}
 	return lines
+}
+
+// scriptProblem is the first syntax error esbuild reports for a script
+// (JavaScript or TypeScript; imports are not resolved here).
+func scriptProblem(v string) *Problem {
+	res := api.Transform(v, api.TransformOptions{Loader: api.LoaderTS, Format: api.FormatESModule, LogLevel: api.LogLevelSilent})
+	if len(res.Errors) == 0 {
+		return nil
+	}
+	e := res.Errors[0]
+	line := 0
+	if e.Location != nil {
+		line = e.Location.Line - 1
+	}
+	return &Problem{Line: line, Message: e.Text}
 }
 
 // jsonProblem validates JSON, treating {{templates}} as values.
@@ -812,11 +833,19 @@ func (c CodeEditor) statusLine(n, row, col int) string {
 		lang = strings.ToUpper(c.Lang)
 	}
 	parts := []string{langBadge.Render(lang), statusStyle.Render(fmt.Sprintf("Ln %d, Col %d · %d lines", row+1, col+1, n))}
+	if c.Lang == LangJS && c.focused {
+		if sig := complete.Signature([]rune(c.Value()), offset(c.buf, row, col)); sig != "" {
+			// What the cursor is typing arguments for beats the rest.
+			return ansi.Truncate(strings.Join(append(parts, signatureStyle.Render("ƒ "+sig)), " "), max(1, c.width-2), "…")
+		}
+	}
 	switch {
 	case c.problem != nil:
-		parts = append(parts, statusBad.Render("✗ "+c.problem.Message))
+		parts = append(parts, statusBad.Render(fmt.Sprintf("✗ %d: %s", c.problem.Line+1, c.problem.Message)))
 	case c.Lang == LangJSON && strings.TrimSpace(c.Value()) != "":
 		parts = append(parts, statusOK.Render("✓ valid")+statusStyle.Render(" · alt+f format"))
+	case c.Lang == LangJS && strings.TrimSpace(c.Value()) != "":
+		parts = append(parts, statusOK.Render("✓ syntax ok")+statusStyle.Render(" · F5 run"))
 	}
 	return ansi.Truncate(strings.Join(parts, " "), max(1, c.width-2), "…")
 }
