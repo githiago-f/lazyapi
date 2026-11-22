@@ -48,9 +48,9 @@ var (
 	passStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green))
 	failStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red))
 	hunkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender))
-	titleSty  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Peach))
+	titleSty  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Brand))
 	selStyle  = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface1))
-	borderOn  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Peach))
+	borderOn  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Accent))
 	borderOff = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2))
 )
 

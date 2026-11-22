@@ -56,6 +56,7 @@ func (c Config) Name() string {
 	return ">_ lazyapi"
 }
 
+// PrimaryColor is the focus accent (see Accent).
 func (c Config) PrimaryColor() color.Color {
-	return lipgloss.Color(Peach)
+	return lipgloss.Color(Accent)
 }

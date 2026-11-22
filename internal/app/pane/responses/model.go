@@ -37,7 +37,7 @@ var (
 	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
 	keyStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender))
 	tabStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1)).Padding(0, 1)
-	tabActive     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Peach)).Bold(true).Underline(true).Padding(0, 1)
+	tabActive     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Accent)).Bold(true).Underline(true).Padding(0, 1)
 	passStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green))
 	failStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red))
 	warnStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Yellow))
@@ -88,7 +88,7 @@ func New(placeholder string) Model {
 	vp := viewport.New(viewport.WithWidth(0), viewport.WithHeight(0))
 	vp.SoftWrap = true
 	vp.HighlightStyle = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface2))
-	vp.SelectedHighlightStyle = lipgloss.NewStyle().Background(lipgloss.Color(config.Peach)).Foreground(lipgloss.Color(config.Crust))
+	vp.SelectedHighlightStyle = lipgloss.NewStyle().Background(lipgloss.Color(config.Accent)).Foreground(lipgloss.Color(config.OnAccent))
 
 	ti := textinput.New()
 	ti.Prompt = "/"

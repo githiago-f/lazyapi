@@ -31,7 +31,7 @@ type ChosenMsg struct{ Msg tea.Msg }
 type ClosedMsg struct{}
 
 var (
-	boxStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Peach)).Background(lipgloss.Color(config.Surface0)).Padding(0, 1)
+	boxStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Accent)).Background(lipgloss.Color(config.Surface0)).Padding(0, 1)
 	groupStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender))
 	hintStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
 	selStyle   = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface2))

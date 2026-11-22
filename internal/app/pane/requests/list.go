@@ -200,7 +200,7 @@ func (rl RequestList) Init() tea.Cmd {
 }
 
 var (
-	cursorMark = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Peach)).SetString("▸")
+	cursorMark = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Accent)).SetString("▸")
 	paneBg     = lipgloss.NewStyle().Background(lipgloss.Color(config.Base))
 )
 
@@ -213,7 +213,7 @@ func (rl RequestList) View() tea.View {
 	for _, line := range visible {
 		selected := rl.cursor >= 0 && rl.cursor < len(rl.filtered) && rl.filtered[rl.cursor].URI == line.item.URI && rl.filtered[rl.cursor].Method == line.item.Method
 		if line.isHeader {
-			rendered = append(rendered, "  "+lipgloss.NewStyle().Foreground(lipgloss.Color(config.Peach)).Bold(true).Render(fmt.Sprintf("── %s (%d) ──", line.header, line.count)))
+			rendered = append(rendered, "  "+lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Bold(true).Render(fmt.Sprintf("── %s (%d) ──", line.header, line.count)))
 			continue
 		}
 		prefix := " "

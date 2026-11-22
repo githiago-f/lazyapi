@@ -55,7 +55,7 @@ var (
 )
 
 var (
-	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Peach))
+	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Brand))
 	dimStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
 	passStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green))
 	failStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red))
@@ -64,7 +64,7 @@ var (
 	barDone    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green))
 	barFail    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red))
 	barTodo    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Surface2))
-	borderOn   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Peach))
+	borderOn   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Accent))
 	borderOff  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2))
 )
 

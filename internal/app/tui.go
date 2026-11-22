@@ -93,7 +93,7 @@ func selectedChanged(p requests.PreviewModel, selected requests.RequestItem) boo
 }
 
 var (
-	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Peach))
+	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Brand))
 	titleInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Subtext0))
 	titleEnvStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Crust)).Background(lipgloss.Color(config.Teal)).Padding(0, 1)
 	titleNoEnv     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1)).Background(lipgloss.Color(config.Surface0)).Padding(0, 1)
@@ -118,7 +118,8 @@ func NewTui(defaultFile string, envFile string) Tui {
 		defaultFile: defaultFile,
 		titleBar: components.TitleBar{
 			Style: lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder(), false, false, true, false),
+				Border(lipgloss.NormalBorder(), false, false, true, false).
+				BorderForeground(lipgloss.Color(config.Surface1)),
 		},
 		help:        h,
 		requestList: requests.NewRequestList(),
@@ -304,7 +305,7 @@ func (t Tui) View() tea.View {
 		helpWidth := min(60, t.titleBar.Width-4)
 		helpBox := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(config.Peach)).
+			BorderForeground(lipgloss.Color(config.Accent)).
 			Background(lipgloss.Color(config.Surface0)).
 			Padding(1, 2).
 			Width(helpWidth).
@@ -910,7 +911,9 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t.switchEnv()
 		case config.DefaultConfig.Active == config.RequestEditor && key.Matches(msg, config.DefaultKeyMap.CopyCurl):
 			return t, t.copyCurl()
-		case config.DefaultConfig.Active == config.RequestEditor &&
+		// ctrl+e is also "end of line" in fields and editors: only save the
+		// example when no text input has the keyboard.
+		case config.DefaultConfig.Active == config.RequestEditor && !capture &&
 			key.Matches(msg, config.DefaultKeyMap.SaveExample):
 			statusCode, header, body := t.editor.LastResponse()
 			ref := t.editor.CurrentRef()

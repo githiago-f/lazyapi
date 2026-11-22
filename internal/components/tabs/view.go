@@ -44,10 +44,10 @@ func DefaultStyles() Styles {
 		ActiveTab: lipgloss.NewStyle().
 			Padding(0, 2).
 			Bold(true).
-			Foreground(lipgloss.Color(config.Peach)).
+			Foreground(lipgloss.Color(config.Accent)).
 			BorderBottom(true).
 			BorderStyle(lipgloss.ThickBorder()).
-			BorderForeground(lipgloss.Color(config.Peach)),
+			BorderForeground(lipgloss.Color(config.Accent)),
 		OverflowIndicator: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(config.Overlay2)).
 			Padding(0, 1),

@@ -7,51 +7,20 @@ import (
 	"github.com/githiago-f/lazyapi/internal/model"
 )
 
-var (
-	anyStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(config.Overlay2)).
-			Foreground(lipgloss.Color(config.Crust)).
-			Bold(true).
-			Padding(0, 1).
-			Width(9).
-			Align(lipgloss.Center, lipgloss.Center)
-	getStyle = anyStyle.
-			Background(lipgloss.Color(config.Saphire)).
-			Foreground(lipgloss.Color(config.Crust))
-	postStyle = anyStyle.
-			Background(lipgloss.Color(config.Green)).
-			Foreground(lipgloss.Color(config.Crust))
-	patchStyle = anyStyle.
-			Background(lipgloss.Color(config.Yellow)).
-			Foreground(lipgloss.Color(config.Crust))
-	deleteStyle = anyStyle.
-			Background(lipgloss.Color(config.Red)).
-			Foreground(lipgloss.Color(config.Crust))
-	putStyle = anyStyle.
-			Background(lipgloss.Color(config.Yellow)).
-			Foreground(lipgloss.Color(config.Crust))
-)
+var anyStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color(config.Crust)).
+	Bold(true).
+	Padding(0, 1).
+	Width(9).
+	Align(lipgloss.Center, lipgloss.Center)
 
 // RequestItem is the list entry (data lives in model so store does not
 // depend on this UI package).
 type RequestItem = model.RequestItem
 
-// methodStyle is the badge style of an HTTP method.
+// methodStyle is the badge style of an HTTP method (config.MethodColor).
 func methodStyle(m model.Method) lipgloss.Style {
-	switch m {
-	case model.GET:
-		return getStyle
-	case model.POST:
-		return postStyle
-	case model.PATCH:
-		return patchStyle
-	case model.PUT:
-		return putStyle
-	case model.DELETE:
-		return deleteStyle
-	default:
-		return anyStyle
-	}
+	return anyStyle.Background(lipgloss.Color(config.MethodColor(m.Label())))
 }
 
 var (
