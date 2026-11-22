@@ -142,6 +142,9 @@ func (rl *RequestList) SetSize(w, h int) {
 // Filtering reports whether the filter input is capturing keys.
 func (rl RequestList) Filtering() bool { return rl.filtering }
 
+// Items returns every item in the list (unfiltered).
+func (rl RequestList) Items() []RequestItem { return rl.items }
+
 func (rl RequestList) SetItems(items []RequestItem) RequestList {
 	items = dedupItems(items)
 	rl.items = items

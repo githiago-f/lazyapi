@@ -367,6 +367,9 @@ func (m Model) content() string {
 	}
 	switch m.tab {
 	case BodyTab:
+		if r.Kind == runner.KindFlow {
+			return flowSteps(r)
+		}
 		if r.Response == nil {
 			return errorText(r)
 		}
@@ -483,6 +486,9 @@ func (m Model) content() string {
 }
 
 func errorText(r *runner.OpResult) string {
+	if r.Outcome == runner.Skipped || r.Outcome == runner.Planned {
+		return dimStyle.Render("Not sent: " + r.Reason)
+	}
 	return errorBoxStyle.Render("✗ "+r.Reason) + "\n\n" +
 		dimStyle.Render("Nothing came back. Check the server URL, path parameters and network.")
 }
@@ -521,6 +527,12 @@ func (m Model) statusLine() string {
 	if r == nil {
 		return dimStyle.Render(m.placeholder)
 	}
+	if r.Kind == runner.KindFlow {
+		return m.flowStatusLine()
+	}
+	if r.Response == nil && (r.Outcome == runner.Skipped || r.Outcome == runner.Planned) {
+		return badgeBase.Background(lipgloss.Color(config.Overlay1)).Render(strings.ToUpper(string(r.Outcome))) + " " + dimStyle.Render(r.Reason)
+	}
 	if r.Response == nil {
 		return badgeBase.Background(lipgloss.Color(config.Red)).Render("ERROR") + " " + failStyle.Render(r.Reason)
 	}
@@ -546,6 +558,60 @@ func (m Model) statusLine() string {
 		parts = append(parts, warnStyle.Render(fmt.Sprintf("%d attempts", r.Attempts)))
 	}
 	return strings.Join(parts, dimStyle.Render(" · "))
+}
+
+func (m Model) flowStatusLine() string {
+	r := m.result
+	color := config.Green
+	switch r.Outcome {
+	case runner.Failed, runner.Errored:
+		color = config.Red
+	case runner.Skipped:
+		color = config.Overlay1
+	}
+	parts := []string{
+		badgeBase.Background(lipgloss.Color(color)).Render("FLOW " + strings.ToUpper(string(r.Outcome))),
+		labelStyle.Render(fmt.Sprintf("%d %s", len(r.Steps), plural(len(r.Steps), "step", "steps"))),
+	}
+	failed := 0
+	for _, c := range r.Checks {
+		if !c.Passed {
+			failed++
+		}
+	}
+	if n := len(r.Checks); n > 0 {
+		if failed == 0 {
+			parts = append(parts, passStyle.Render(fmt.Sprintf("✓ %d %s", n, plural(n, "check", "checks"))))
+		} else {
+			parts = append(parts, failStyle.Render(fmt.Sprintf("✗ %d/%d checks failed", failed, n)))
+		}
+	}
+	if r.Reason != "" {
+		parts = append(parts, failStyle.Render(r.Reason))
+	}
+	return strings.Join(parts, dimStyle.Render(" · "))
+}
+
+// flowSteps lists the requests a flow sent.
+func flowSteps(r *runner.OpResult) string {
+	if len(r.Steps) == 0 {
+		if r.Reason != "" {
+			return failStyle.Render("✗ " + r.Reason)
+		}
+		return dimStyle.Render("The flow sent no requests.")
+	}
+	var b strings.Builder
+	for i, st := range r.Steps {
+		status := dimStyle.Render("—")
+		if st.Status > 0 {
+			status = StatusBadge(st.Status, "")
+		}
+		fmt.Fprintf(&b, "%2d. %s %s %s %s\n", i+1, status, keyStyle.Render(st.Method), st.Path, dimStyle.Render(fmt.Sprintf("%d ms", st.DurationMs)))
+		if st.Error != "" {
+			b.WriteString("    " + failStyle.Render(st.Error) + "\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func (m Model) tabBar() string {
