@@ -40,7 +40,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `enter` (on Send) | Send |
 | `F5` | Run the test script on the last response (sends first if there is none) |
 | `ctrl+o` | Save to the spec (definitions, test script) |
-| `ctrl+e` | Save the last response as an example in the spec |
+| `ctrl+e` | Save the last response as an example in the spec (outside text fields and editors, where `ctrl+e` is "end of line") |
 | `ctrl+x` | Open the Body or Tests tab in `$VISUAL` / `$EDITOR` |
 | `alt+c` | Copy the request as cURL (with the active environment's server and credentials) |
 | <code v-pre>{{</code> or `$name` | Open the variable menu; `↑`/`↓` choose, `tab` inserts, `esc` closes |

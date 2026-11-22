@@ -911,7 +911,9 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t.switchEnv()
 		case config.DefaultConfig.Active == config.RequestEditor && key.Matches(msg, config.DefaultKeyMap.CopyCurl):
 			return t, t.copyCurl()
-		case config.DefaultConfig.Active == config.RequestEditor &&
+		// ctrl+e is also "end of line" in fields and editors: only save the
+		// example when no text input has the keyboard.
+		case config.DefaultConfig.Active == config.RequestEditor && !capture &&
 			key.Matches(msg, config.DefaultKeyMap.SaveExample):
 			statusCode, header, body := t.editor.LastResponse()
 			ref := t.editor.CurrentRef()

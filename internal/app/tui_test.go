@@ -399,3 +399,34 @@ paths:
 	tm.Type(",")
 	waitFor(t, tm, "✗ invalid")
 }
+
+func TestTUI_CtrlEInEditorDoesNotSaveExample(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"up":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	spec := filepath.Join(t.TempDir(), "shop.yml")
+	original := fmt.Sprintf(tuiSpec, srv.URL)
+	if err := os.WriteFile(spec, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm := start(t, spec)
+	waitFor(t, tm, "/orders")
+	tm.Send(press("down"))
+	tm.Send(press("enter")) // GET /health in the editor
+	waitFor(t, tm, "No response yet")
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModAlt})
+	waitFor(t, tm, "200 OK")
+	// The focus is on the response; tab ×3 reaches the URI field, which
+	// captures keys: ctrl+e there is "end of line", not "save example".
+	for i := 0; i < 3; i++ {
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	}
+	tm.Send(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	tm.Type("?x=1")
+	_ = finalScreen(t, tm)
+	if data, _ := os.ReadFile(spec); string(data) != original {
+		t.Errorf("ctrl+e in a field changed the spec:\n%s", data)
+	}
+}
