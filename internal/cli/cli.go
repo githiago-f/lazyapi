@@ -64,15 +64,13 @@ func run(args []string) error {
 
 	case "send":
 		if len(args) < 2 || args[1] != "request" {
-			fmt.Println("Usage: lazyapi send request <file> <path> <method> [--server url] [--env file] [--save-example] [--script file]")
-			return fmt.Errorf("invalid send command")
+			return fmt.Errorf("invalid send command\n%s", sendUsage)
 		}
 		return SendRequest(args[2:])
 
 	case "smoke":
 		if len(args) < 3 || args[1] != "tests" {
-			fmt.Println("Usage: lazyapi smoke tests <file> [--server url] [--env file] [--script file]")
-			return fmt.Errorf("invalid smoke command")
+			return fmt.Errorf("invalid smoke command\n%s", smokeUsage)
 		}
 		return SmokeTests(args[2:])
 
@@ -86,17 +84,33 @@ func printUsage() {
 	fmt.Println(`LazyAPI - OpenAPI-driven API exploration and testing
 
 Usage:
-  lazyapi                                Start the TUI (interactive mode)
-  lazyapi create file [name] [urls...]   Create a new OpenAPI template file
-  lazyapi remove request <file> <method> <path>  Remove a request from a spec file
+  lazyapi [spec.yml] [--env file]                Start the TUI (interactive mode)
+  lazyapi create file [name] [urls...]           Create a new OpenAPI template file
   lazyapi add request <file> <path> <method>     Add a new request to a spec file
-  lazyapi add server <file> <url>        Add a server URL to a spec file
-  lazyapi send request <file> <path> <method> [--server url] [--env file] [--save-example] [--script file]  Send an HTTP request
-  lazyapi smoke tests <file> [--server url] [--env file] [--script file]     Run smoke tests across all operations
+  lazyapi add server <file> <url>                Add a server URL to a spec file
+  lazyapi remove request <file> <method> <path>  Remove a request from a spec file
+  lazyapi send request <file> <path> <method>    Send one request and run its tests
+  lazyapi smoke tests <file>                     Run every selected operation and its tests
 
-Flags:
-  --server url   Base server URL for smoke tests and send request
-  --save-example Persist the response as an example in the OpenAPI spec
-  --env file     Environment file for smoke tests and send request
-  --script file  Lua test script to run against the response(s)`)
+Flags (send and smoke):
+  --server url|index  Server URL, or index into the spec's servers (default: first)
+  --env file          Environment file ({{env.NAME}} values)
+  --script file       Test script; overrides the operation's x-lazyapi-tests file
+  --param k=v         Path parameter value (repeatable; default: spec example)
+  --timeout 30s       Per-request timeout
+
+Flags (send only):
+  --query k=v         Query parameter (repeatable)
+  --header k=v        Header (repeatable)
+  --save-example      Persist the response as an example in the spec
+
+Flags (smoke only):
+  --methods list      Methods to run (default GET,HEAD,OPTIONS; "all" for every method)
+  --tag list          Only operations with one of these tags
+  --op list           Only these operations (operationId or "METHOD /path")
+  --dry-run           Print what would be sent without sending
+
+Test scripts are stored next to the spec and referenced per operation via
+x-lazyapi-tests (e.g. tests/listItems.lua). Commands exit with status 1 when
+a request fails, a status code is not declared in the spec, or a test fails.`)
 }

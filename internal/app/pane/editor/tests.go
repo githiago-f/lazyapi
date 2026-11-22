@@ -104,8 +104,14 @@ func (tp *testsPane) SetValue(script string) {
 	}
 }
 
+// Value returns the script to persist. The untouched default template counts
+// as "no tests" so it is never written next to the spec.
 func (tp *testsPane) Value() string {
-	return tp.script.Value()
+	v := tp.script.Value()
+	if strings.TrimSpace(v) == strings.TrimSpace(defaultTestScript) {
+		return ""
+	}
+	return v
 }
 
 func (tp *testsPane) SetResults(result lua.ScriptResult) {
@@ -244,6 +250,9 @@ func formatTestResults(result lua.ScriptResult) string {
 			mark = testFailStyle.Render("FAIL")
 		}
 		fmt.Fprintf(&b, "  %s %s\n", mark, tr.Name)
+		if tr.Message != "" {
+			fmt.Fprintf(&b, "       %s\n", testInfoStyle.Render(tr.Message))
+		}
 	}
 
 	if len(result.Results) > 0 {

@@ -341,6 +341,14 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.tagsOverlay = nil
 		return t, nil
 
+	case store.ErrorMsg:
+		var noteCmd tea.Cmd
+		t.notes, noteCmd = t.notes.Update(components.ShowNotificationMsg{
+			Message: msg.Message,
+			Type:    components.Error,
+		})
+		return t, noteCmd
+
 	case store.TagsUpdatedMsg:
 		if !msg.Success {
 			var noteCmd tea.Cmd

@@ -39,6 +39,20 @@ type ExampleSavedMsg struct {
 	Error   string
 }
 
+// ErrorMsg reports a failed store operation. The TUI shows it as a
+// notification instead of quitting.
+type ErrorMsg struct {
+	Message string
+}
+
+// removeIfExists deletes path, treating a missing file as success.
+func removeIfExists(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 type TagsUpdatedMsg struct {
 	Success bool
 	Error   string
@@ -151,11 +165,11 @@ func FindRequestFiles() tea.Cmd {
 	return func() tea.Msg {
 		yamlFiles, err := Glob("./**/*.yml")
 		if err != nil {
-			return err
+			return ErrorMsg{Message: fmt.Sprintf("Error searching for spec files: %v", err)}
 		}
 		yamlFiles2, err := Glob("./**/*.yaml")
 		if err != nil {
-			return err
+			return ErrorMsg{Message: fmt.Sprintf("Error searching for spec files: %v", err)}
 		}
 
 		var openAPIFiles []string
@@ -177,8 +191,7 @@ func LoadRequestsList(paths []string) tea.Cmd {
 		for _, filePath := range paths {
 			spec, err := ParseSpec(filePath)
 			if err != nil {
-				msg := fmt.Sprintf("Error when trying to parse file %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when trying to parse file %v", err)}
 			}
 			ops := ListOperations(spec, filePath)
 			listItems = append(listItems, ops...)
@@ -199,14 +212,9 @@ func OpenRequestFile(ref model.OpenAPIRef) tea.Cmd {
 		if _, err := os.Stat(tempPath); err == nil {
 			file, err := os.Open(tempPath)
 			if err != nil {
-				msg := fmt.Sprintf("Error when trying to open temp file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when trying to open temp file, %v", err)}
 			}
-			defer func() {
-				if err = file.Close(); err != nil {
-					panic(err)
-				}
-			}()
+			defer func() { _ = file.Close() }()
 
 			var request model.Request
 			decoder := yaml.NewDecoder(file)
@@ -230,8 +238,7 @@ func OpenRequestFile(ref model.OpenAPIRef) tea.Cmd {
 
 		spec, err := ParseSpec(ref.FilePath)
 		if err != nil {
-			msg := fmt.Sprintf("Error when trying to open file, %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
+			return ErrorMsg{Message: fmt.Sprintf("Error when trying to open file, %v", err)}
 		}
 
 		request := OperationToRequest(spec, ref)
@@ -243,15 +250,14 @@ func OpenDraftFile(draftPath, fileName string) tea.Cmd {
 	return func() tea.Msg {
 		file, err := os.Open(draftPath)
 		if err != nil {
-			msg := fmt.Sprintf("Error when trying to open draft file, %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
+			return ErrorMsg{Message: fmt.Sprintf("Error when trying to open draft file, %v", err)}
 		}
 
 		var request model.Request
 		decoder := yaml.NewDecoder(file)
 		if err := decoder.Decode(&request); err != nil {
-			msg := fmt.Sprintf("Error when decoding draft file, %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
+			_ = file.Close()
+			return ErrorMsg{Message: fmt.Sprintf("Error when decoding draft file, %v", err)}
 		}
 		request.DraftPath = draftPath
 		request.FileName = fileName
@@ -263,8 +269,7 @@ func OpenDraftFile(draftPath, fileName string) tea.Cmd {
 
 		err = file.Close()
 		if err != nil {
-			msg := fmt.Sprintf("Error closing file: %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
+			return ErrorMsg{Message: fmt.Sprintf("Error closing file: %v", err)}
 		}
 
 		return LoadedFile{Data: request}
@@ -344,26 +349,23 @@ func SaveTempFile(data model.Request) tea.Cmd {
 			path = TempPath(data.FileName)
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			msg := fmt.Sprintf("Error creating temp directory: %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
+			return ErrorMsg{Message: fmt.Sprintf("Error creating temp directory: %v", err)}
 		}
 		file, err := os.Create(path)
 		if err != nil {
-			msg := fmt.Sprintf("Error when trying to save temp file, %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
+			return ErrorMsg{Message: fmt.Sprintf("Error when trying to save temp file, %v", err)}
 		}
 
 		encoder := yaml.NewEncoder(file)
 		err = encoder.Encode(data)
 		if err != nil {
-			msg := fmt.Sprintf("Error when encoding temp file, %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
+			_ = file.Close()
+			return ErrorMsg{Message: fmt.Sprintf("Error when encoding temp file, %v", err)}
 		}
 
 		err = file.Close()
 		if err != nil {
-			msg := fmt.Sprintf("Error when closing temp file, %v", err)
-			return tea.Batch(tea.Println(msg), tea.Quit)
+			return ErrorMsg{Message: fmt.Sprintf("Error when closing temp file, %v", err)}
 		}
 
 		return nil
@@ -375,20 +377,14 @@ func LoadForDuplicate(item requests.RequestItem) tea.Cmd {
 		if item.DraftPath != "" {
 			file, err := os.Open(item.DraftPath)
 			if err != nil {
-				msg := fmt.Sprintf("Error when opening draft for duplicate, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when opening draft for duplicate, %v", err)}
 			}
-			defer func() {
-				if cerr := file.Close(); cerr != nil {
-					panic(cerr)
-				}
-			}()
+			defer func() { _ = file.Close() }()
 
 			var req model.Request
 			decoder := yaml.NewDecoder(file)
 			if err := decoder.Decode(&req); err != nil {
-				msg := fmt.Sprintf("Error when decoding draft for duplicate, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when decoding draft for duplicate, %v", err)}
 			}
 			req.FileName = item.FileName
 			prevURL := req.ServerURL
@@ -402,14 +398,13 @@ func LoadForDuplicate(item requests.RequestItem) tea.Cmd {
 		if item.OpenAPIRef != nil {
 			spec, err := ParseSpec(item.FileName)
 			if err != nil {
-				msg := fmt.Sprintf("Error when parsing spec for duplicate, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when parsing spec for duplicate, %v", err)}
 			}
 			req := OperationToRequest(spec, *item.OpenAPIRef)
 			return DuplicateData{Data: req}
 		}
 
-		return tea.Batch(tea.Println("Cannot duplicate: no source found"), tea.Quit)
+		return ErrorMsg{Message: "Cannot duplicate: no source found"}
 	}
 }
 
@@ -419,66 +414,58 @@ func SaveFile(data model.Request) tea.Cmd {
 		if data.DraftPath != "" {
 			spec, err := ParseSpec(data.FileName)
 			if err != nil {
-				msg := fmt.Sprintf("Error when trying to save file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when trying to save file, %v", err)}
 			}
 			if err = AddOperationToSpec(spec, data.URI, data.Method.Label(), data); err != nil {
-				msg := fmt.Sprintf("Error when adding operation to spec, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when adding operation to spec, %v", err)}
+			}
+			newRef := model.OpenAPIRef{FilePath: data.FileName, Path: data.URI, Method: data.Method.Label()}
+			if err = SaveOperationTests(spec, data.FileName, newRef, data.Tests); err != nil {
+				return ErrorMsg{Message: fmt.Sprintf("Error when saving test script, %v", err)}
 			}
 			if err = SaveSpec(data.FileName, spec); err != nil {
-				msg := fmt.Sprintf("Error when writing file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when writing file, %v", err)}
 			}
 			savedPath = data.FileName
-			if err = os.Remove(data.DraftPath); err != nil {
-				msg := fmt.Sprintf("Error removing tmp file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+			if err = removeIfExists(data.DraftPath); err != nil {
+				return ErrorMsg{Message: fmt.Sprintf("Error removing tmp file: %v", err)}
 			}
 		} else if data.OpenAPIRef != nil {
 			ref := *data.OpenAPIRef
 			spec, err := ParseSpec(ref.FilePath)
 			if err != nil {
-				msg := fmt.Sprintf("Error when trying to save file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when trying to save file, %v", err)}
 			}
 			if err = ApplyRequestToOperation(spec, ref, data); err != nil {
-				msg := fmt.Sprintf("Error when applying changes to spec, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when applying changes to spec, %v", err)}
+			}
+			if err = SaveOperationTests(spec, ref.FilePath, ref, data.Tests); err != nil {
+				return ErrorMsg{Message: fmt.Sprintf("Error when saving test script, %v", err)}
 			}
 			if err = SaveSpec(ref.FilePath, spec); err != nil {
-				msg := fmt.Sprintf("Error when writing file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when writing file, %v", err)}
 			}
 			savedPath = ref.FilePath
 
-			if err = os.Remove(tempPathForRef(ref)); err != nil {
-				msg := fmt.Sprintf("Error removing tmp file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+			if err = removeIfExists(tempPathForRef(ref)); err != nil {
+				return ErrorMsg{Message: fmt.Sprintf("Error removing tmp file: %v", err)}
 			}
 		} else {
 			file, err := os.Create(data.FileName)
 			if err != nil {
-				msg := fmt.Sprintf("Error when trying to save file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when trying to save file, %v", err)}
 			}
-			defer func() {
-				if cerr := file.Close(); cerr != nil {
-					panic(cerr)
-				}
-			}()
+			defer func() { _ = file.Close() }()
 
 			encoder := yaml.NewEncoder(file)
 			err = encoder.Encode(data)
 			if err != nil {
-				msg := fmt.Sprintf("Error when encoding file, %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when encoding file, %v", err)}
 			}
 
 			savedPath = data.FileName
-			if err = os.Remove(TempPath(data.FileName)); err != nil {
-				msg := fmt.Sprintf("Error removing tmp file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+			if err = removeIfExists(TempPath(data.FileName)); err != nil {
+				return ErrorMsg{Message: fmt.Sprintf("Error removing tmp file: %v", err)}
 			}
 		}
 
@@ -490,8 +477,7 @@ func DeleteRequestFile(item requests.RequestItem) tea.Cmd {
 	return func() tea.Msg {
 		if item.DraftPath != "" {
 			if err := os.Remove(item.DraftPath); err != nil {
-				msg := fmt.Sprintf("Error when deleting draft: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when deleting draft: %v", err)}
 			}
 			return FileSaved{Path: item.DraftPath}
 		}
@@ -500,20 +486,16 @@ func DeleteRequestFile(item requests.RequestItem) tea.Cmd {
 			ref := *item.OpenAPIRef
 			spec, err := ParseSpec(ref.FilePath)
 			if err != nil {
-				msg := fmt.Sprintf("Error when parsing spec: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when parsing spec: %v", err)}
 			}
 			if err = RemoveOperationFromSpec(spec, ref); err != nil {
-				msg := fmt.Sprintf("Error when removing operation: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when removing operation: %v", err)}
 			}
 			if err = SaveSpec(ref.FilePath, spec); err != nil {
-				msg := fmt.Sprintf("Error when writing file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+				return ErrorMsg{Message: fmt.Sprintf("Error when writing file: %v", err)}
 			}
-			if err = os.Remove(tempPathForRef(ref)); err != nil {
-				msg := fmt.Sprintf("Error removing tmp file: %v", err)
-				return tea.Batch(tea.Println(msg), tea.Quit)
+			if err = removeIfExists(tempPathForRef(ref)); err != nil {
+				return ErrorMsg{Message: fmt.Sprintf("Error removing tmp file: %v", err)}
 			}
 			return FileSaved{Path: ref.FilePath}
 		}

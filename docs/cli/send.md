@@ -1,49 +1,48 @@
 # `lazyapi send request`
 
-Execute a request directly from the command line using an OpenAPI spec.
+Send a single operation from an OpenAPI spec and run its tests.
 
 ## Usage
 
 ```bash
-lazyapi send request <file> <path> <method> [--server <url>] [--env <file>] [--save-example] [--script <file>]
+lazyapi send request <file> <path> <method> [flags]
 ```
+
+Flags may appear before, between, or after the positional arguments.
 
 ## Arguments
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to an OpenAPI YAML file |
-| `path` | URI path |
-| `method` | HTTP method |
+| `path` | Path as written in the spec, e.g. `/users/{id}` |
+| `method` | HTTP method (case-insensitive) |
 
 ## Flags
 
 | Flag | Description |
 |------|-------------|
-| `--server <url>` | Override the server URL |
+| `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first server) |
 | `--env <file>` | Path to a `.env` file for `{{env.X}}` resolution |
+| `--param k=v` | Path parameter (repeatable). Defaults to the spec's example |
+| `--query k=v` | Query parameter (repeatable) |
+| `--header k=v` | Header (repeatable) |
+| `--script <file>` | Test script; overrides the operation's `x-lazyapi-tests` file |
+| `--timeout <duration>` | Request timeout (default `30s`) |
 | `--save-example` | Save the response as an OpenAPI example in the spec |
-| `--script <file>` | Path to a Lua test script (see [Lua Test Scripts](../tui/lua-tests.md)) |
+
+If a path parameter has neither a `--param` value nor an example in the spec, the command fails and does not send anything.
 
 ## Examples
 
 ```bash
-# Basic request
 lazyapi send request my-api.yml /users GET
-
-# With server override
 lazyapi send request my-api.yml /users GET --server http://localhost:3000
-
-# With environment variables
-lazyapi send request my-api.yml /users POST --env .env
-
-# Save response as example
-lazyapi send request my-api.yml /users/{id} GET --save-example
-
-# Run Lua test script against response
-lazyapi send request my-api.yml /users GET --script tests.lua
+lazyapi send request my-api.yml /users/{id} GET --param id=42 --header "X-Trace=abc"
+lazyapi send request my-api.yml /users POST --env .env --script tests/create_user.lua
+lazyapi send request my-api.yml /users/{id} GET --param id=1 --save-example
 ```
 
-## Output
+## Output and exit code
 
-The response status, headers, and body are printed to stdout. If `--script` is provided, test results are printed after the response.
+The status, headers and body are printed to stdout, followed by test results. A warning is printed if the status code is not declared in the spec. The command exits with status 1 if the request fails or any test fails.

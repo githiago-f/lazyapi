@@ -5,8 +5,21 @@ LazyAPI supports Lua scripts for writing test assertions against HTTP requests a
 ## Using Test Scripts
 
 - **TUI** — In the Tests tab of the Request Editor, write Lua directly and press `F5` to run.
-- **CLI `send`** — Pass `--script <file.lua>` to run assertions after the request completes.
-- **CLI `smoke`** — Pass `--script <file.lua>` to run assertions against every operation in the spec.
+- **CLI `send` / `smoke`** — Each operation's saved script runs automatically. Pass `--script <file.lua>` to use a different script instead.
+
+## Where scripts are stored
+
+When you save a request in the TUI, its script is written to a file next to the spec and referenced from the operation:
+
+```yaml
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      x-lazyapi-tests: tests/listUsers.lua
+```
+
+The file name is the `operationId`, or `<method>_<path>` when there is none. You can also create these files by hand, or point `x-lazyapi-tests` at any path **inside** the spec's directory (absolute paths and `..` are rejected). Commit them with the spec so CI and other machines run the same tests. Saving an empty script (or the untouched default template) removes the reference but keeps the file.
 
 ## Available Globals
 
@@ -63,13 +76,15 @@ tests["Status is 200"] = response.status() == 200
 tests["Content-Type is JSON"] = response.header("Content-Type"):find("json") ~= nil
 ```
 
+Results are reported in the order they are assigned. Assigning the same name twice records two results; it does not overwrite the first one.
+
 ## Helper Functions
 
 | Function | Description |
 |----------|-------------|
 | `json_decode(str)` | Parse a JSON string into a Lua table |
 | `json_encode(table)` | Serialize a Lua table as a JSON string |
-| `test(name, fn)` | Run `fn()` in protected mode; records pass/fail under `name` |
+| `test(name, fn)` | Run `fn()` in protected mode; records pass/fail under `name`. On failure the error message (e.g. from `assert(cond, "msg")`) is shown next to the result |
 
 ## Example Script
 

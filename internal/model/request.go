@@ -1,11 +1,13 @@
 package model
 
 import (
+	"context"
 	"encoding/base64"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/env"
@@ -30,8 +32,8 @@ type Request struct {
 	Params  map[string]string `yaml:"pathParams"`
 	Query   map[string]string `yaml:"query"`
 
-	Tags []string     `yaml:"tags,omitempty"`
-	Auth []AuthScheme `yaml:"auth,omitempty"`
+	Tags  []string     `yaml:"tags,omitempty"`
+	Auth  []AuthScheme `yaml:"auth,omitempty"`
 	Tests string       `yaml:"tests,omitempty"`
 
 	ServerURL string   `yaml:"serverUrl,omitempty"`
@@ -44,7 +46,14 @@ type Request struct {
 	Vars map[string]string `yaml:"-"`
 
 	HTTPClient *http.Client `yaml:"-"`
+
+	// Timeout bounds the whole request (connect + headers + body). Zero means
+	// DefaultTimeout. Ignored when HTTPClient is set and has its own timeout.
+	Timeout time.Duration `yaml:"-"`
 }
+
+// DefaultTimeout is applied to requests that do not set Request.Timeout.
+const DefaultTimeout = 30 * time.Second
 
 type FailureMsg struct {
 	Message string
@@ -63,26 +72,57 @@ func Failure(msg string) tea.Msg {
 	}
 }
 
-func (r *Request) Send() (*http.Response, string, error) {
-	ctx := env.Context{
-		Env:  r.Env,
-		Vars: r.Vars,
-	}
+func (r *Request) templateContext() env.Context {
+	return env.Context{Env: r.Env, Vars: r.Vars}
+}
 
+// ResolvedURL returns server + URI with templates resolved and path
+// parameters substituted (query string not included).
+func (r *Request) ResolvedURL() string {
+	ctx := r.templateContext()
 	fullURL := env.Resolve(r.ServerURL, ctx) + env.Resolve(r.URI, ctx)
 
-	resolvedParams := make(map[string]string, len(r.Params))
+	names := make([]string, 0, len(r.Params))
+	for name := range r.Params {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		fullURL = strings.ReplaceAll(fullURL, "{"+name+"}", env.Resolve(r.Params[name], ctx))
+	}
+	return fullURL
+}
+
+// MissingPathParams lists (sorted) path parameters that have no value.
+func (r *Request) MissingPathParams() []string {
+	var missing []string
 	for name, value := range r.Params {
-		resolvedParams[name] = env.Resolve(value, ctx)
+		if strings.TrimSpace(value) == "" {
+			missing = append(missing, name)
+		}
 	}
-	paramKeys := make([]string, 0, len(resolvedParams))
-	for name := range resolvedParams {
-		paramKeys = append(paramKeys, name)
+	sort.Strings(missing)
+	return missing
+}
+
+// Send performs the request with a background context. See SendContext.
+func (r *Request) Send() (*http.Response, string, error) {
+	return r.SendContext(context.Background())
+}
+
+// SendContext resolves templates, performs the HTTP request and returns the
+// response together with its fully-read body. The request is bounded by
+// r.Timeout (or DefaultTimeout) and can be cancelled through ctx.
+func (r *Request) SendContext(parent context.Context) (*http.Response, string, error) {
+	timeout := r.Timeout
+	if timeout <= 0 {
+		timeout = DefaultTimeout
 	}
-	sort.Strings(paramKeys)
-	for _, name := range paramKeys {
-		fullURL = strings.ReplaceAll(fullURL, "{"+name+"}", resolvedParams[name])
-	}
+	reqCtx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+
+	ctx := r.templateContext()
+	fullURL := r.ResolvedURL()
 
 	resolvedBody := env.Resolve(r.Body.Raw, ctx)
 	var bodyReader io.Reader
@@ -90,7 +130,7 @@ func (r *Request) Send() (*http.Response, string, error) {
 		bodyReader = strings.NewReader(resolvedBody)
 	}
 
-	req, err := http.NewRequest(r.Method.Label(), fullURL, bodyReader)
+	req, err := http.NewRequestWithContext(reqCtx, r.Method.Label(), fullURL, bodyReader)
 	if err != nil {
 		return nil, "", err
 	}
@@ -99,8 +139,6 @@ func (r *Request) Send() (*http.Response, string, error) {
 	for name, value := range r.Query {
 		q.Set(name, env.Resolve(value, ctx))
 	}
-	req.URL.RawQuery = q.Encode()
-
 	for name, value := range r.Headers {
 		req.Header.Set(name, env.Resolve(value, ctx))
 	}
@@ -108,7 +146,7 @@ func (r *Request) Send() (*http.Response, string, error) {
 	for _, scheme := range r.Auth {
 		switch scheme.Type {
 		case AuthBasic:
-			auth := scheme.Username + ":" + scheme.Password
+			auth := env.Resolve(scheme.Username, ctx) + ":" + env.Resolve(scheme.Password, ctx)
 			encoded := base64.StdEncoding.EncodeToString([]byte(auth))
 			req.Header.Set("Authorization", "Basic "+encoded)
 		case AuthBearer:
@@ -127,6 +165,7 @@ func (r *Request) Send() (*http.Response, string, error) {
 			}
 		}
 	}
+	req.URL.RawQuery = q.Encode()
 
 	client := http.DefaultClient
 	if r.HTTPClient != nil {

@@ -258,10 +258,10 @@ paths:
 		t.Fatal(err)
 	}
 
-	// SmokeTests should not crash; the request will fail (no server) but that's OK
+	// A failed request must propagate to the command exit status for CI use.
 	err := SmokeTests([]string{specPath, "--server", "http://127.0.0.1:1", "--env", envFile})
-	if err != nil {
-		t.Fatalf("SmokeTests: %v", err)
+	if err == nil {
+		t.Fatal("expected SmokeTests to report the failed request")
 	}
 }
 

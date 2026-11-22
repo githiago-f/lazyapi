@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSend_WithMockServer(t *testing.T) {
@@ -231,6 +232,32 @@ func TestSend_AuthAPIKeyHeader(t *testing.T) {
 	}
 }
 
+func TestSend_AuthAPIKeyQuery(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("api_key"); got != "my key" {
+			t.Errorf("api_key = %q, want %q", got, "my key")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	req := &Request{
+		URI:        "/test",
+		Method:     GET,
+		ServerURL:  srv.URL,
+		HTTPClient: srv.Client(),
+		Query:      map[string]string{"existing": "value"},
+		Auth: []AuthScheme{
+			{Type: AuthAPIKey, KeyName: "api_key", KeyIn: "query", KeyValue: "my key"},
+		},
+	}
+
+	_, _, err := req.Send()
+	if err != nil {
+		t.Fatalf("Send failed: %v", err)
+	}
+}
+
 func TestSend_AuthOAuth2(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer mytoken" {
@@ -378,5 +405,59 @@ func TestSend_MultipleAuthSchemes(t *testing.T) {
 	_, _, err := req.Send()
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
+	}
+}
+
+func TestSend_AuthBasicResolvesEnv(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, ok := r.BasicAuth()
+		if !ok || user != "alice" || pass != "s3cret" {
+			t.Errorf("BasicAuth = (%q, %q, %v), want (alice, s3cret, true)", user, pass, ok)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	req := &Request{
+		URI:        "/",
+		Method:     GET,
+		ServerURL:  srv.URL,
+		HTTPClient: srv.Client(),
+		Env:        map[string]string{"USER": "alice", "PASS": "s3cret"},
+		Auth: []AuthScheme{
+			{Type: AuthBasic, Username: "{{env.USER}}", Password: "{{env.PASS}}"},
+		},
+	}
+
+	if _, _, err := req.Send(); err != nil {
+		t.Fatalf("Send failed: %v", err)
+	}
+}
+
+func TestSend_Timeout(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	req := &Request{
+		URI:       "/slow",
+		Method:    GET,
+		ServerURL: srv.URL,
+		Timeout:   50 * time.Millisecond,
+	}
+
+	start := time.Now()
+	_, _, err := req.Send()
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("request took %v, timeout not applied", elapsed)
 	}
 }

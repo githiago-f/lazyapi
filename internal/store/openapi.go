@@ -120,13 +120,19 @@ func OperationToRequest(spec *openapi3.T, ref model.OpenAPIRef) model.Request {
 				continue
 			}
 			p := paramRef.Value
+			// Path params always get their declared example; optional
+			// query/header params stay empty so they are not sent by default.
+			value := ""
+			if p.In == "path" || p.Required {
+				value = ParamExample(p)
+			}
 			switch p.In {
 			case "path":
-				req.Params[p.Name] = ""
+				req.Params[p.Name] = value
 			case "query":
-				req.Query[p.Name] = ""
+				req.Query[p.Name] = value
 			case "header":
-				req.Headers[p.Name] = ""
+				req.Headers[p.Name] = value
 			}
 		}
 	}
@@ -162,6 +168,9 @@ func OperationToRequest(spec *openapi3.T, ref model.OpenAPIRef) model.Request {
 	} else {
 		req.Auth = ExtractGlobalSecurity(spec)
 	}
+
+	// Errors are surfaced by callers that need them (CLI) via LoadOperationTests.
+	req.Tests, _ = LoadOperationTests(ref.FilePath, op)
 
 	return req
 }

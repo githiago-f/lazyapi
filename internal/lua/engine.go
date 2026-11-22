@@ -16,14 +16,15 @@ import (
 	"net/http"
 	"strings"
 
-	lua "github.com/yuin/gopher-lua"
 	"github.com/githiago-f/lazyapi/internal/model"
+	lua "github.com/yuin/gopher-lua"
 )
 
 // TestResult is a single assertion result from a Lua script.
 type TestResult struct {
-	Name   string
-	Passed bool
+	Name    string
+	Passed  bool
+	Message string // failure reason, when known (e.g. the error raised inside test())
 }
 
 // ScriptResult holds the outcome of running a Lua test script.
@@ -56,8 +57,8 @@ func RunScript(script string, data ExecData) ScriptResult {
 
 	L.OpenLibs()
 
-	testsTbl := L.NewTable()
-	L.SetGlobal("tests", testsTbl)
+	rec := &recorder{}
+	L.SetGlobal("tests", newTestsTable(L, rec))
 
 	registerRequest(L, data.Request)
 	registerEnv(L, data.Env)
@@ -68,14 +69,14 @@ func RunScript(script string, data ExecData) ScriptResult {
 		registerNilResponse(L)
 	}
 
-	registerHelpers(L, testsTbl)
+	registerHelpers(L, rec)
 
 	var scriptErr string
 	if err := L.DoString(script); err != nil {
 		scriptErr = err.Error()
 	}
 
-	result := collectResults(testsTbl, scriptErr)
+	result := collectResults(rec, scriptErr)
 	result.Output = formatOutput(result, scriptErr)
 	return result
 }
@@ -275,7 +276,7 @@ func registerEnv(L *lua.LState, envMap map[string]string) {
 // Helper functions
 // ---------------------------------------------------------------------------
 
-func registerHelpers(L *lua.LState, testsTbl *lua.LTable) {
+func registerHelpers(L *lua.LState, rec *recorder) {
 	// json_decode(string) -> table
 	L.SetGlobal("json_decode", L.NewFunction(func(L *lua.LState) int {
 		str := L.ToString(1)
@@ -305,44 +306,84 @@ func registerHelpers(L *lua.LState, testsTbl *lua.LTable) {
 		fn := L.CheckFunction(2)
 
 		L.Push(fn)
-		err := L.PCall(0, 0, nil)
-		if err != nil {
-			L.SetField(testsTbl, desc, lua.LFalse)
+		if err := L.PCall(0, 0, nil); err != nil {
+			rec.add(desc, false, errorMessage(err))
 		} else {
-			L.SetField(testsTbl, desc, lua.LTrue)
+			rec.add(desc, true, "")
 		}
 		return 0
 	}))
 }
 
 // ---------------------------------------------------------------------------
+// Test recording
+// ---------------------------------------------------------------------------
+
+// recorder keeps assertions in the order the script produced them. Repeated
+// names are kept as separate results instead of overwriting each other.
+type recorder struct {
+	results []TestResult
+}
+
+func (r *recorder) add(name string, passed bool, message string) {
+	r.results = append(r.results, TestResult{Name: name, Passed: passed, Message: message})
+}
+
+// newTestsTable returns a proxy table: every `tests[name] = value` assignment
+// is recorded in order, and reads return the last value assigned to a name.
+func newTestsTable(L *lua.LState, rec *recorder) *lua.LTable {
+	shadow := L.NewTable()
+	proxy := L.NewTable()
+	meta := L.NewTable()
+	L.SetField(meta, "__newindex", L.NewFunction(func(L *lua.LState) int {
+		key := L.Get(2)
+		val := L.Get(3)
+		passed := luaToBool(val)
+		msg := ""
+		if !passed {
+			msg = fmt.Sprintf("expected truthy value, got %s", val.String())
+		}
+		rec.add(key.String(), passed, msg)
+		shadow.RawSet(key, val)
+		return 0
+	}))
+	L.SetField(meta, "__index", shadow)
+	L.SetMetatable(proxy, meta)
+	return proxy
+}
+
+// errorMessage strips the Lua stack traceback from a PCall error so the
+// report only carries the assertion message.
+func errorMessage(err error) string {
+	if apiErr, ok := err.(*lua.ApiError); ok {
+		msg := apiErr.Object.String()
+		if msg != "" {
+			return msg
+		}
+	}
+	msg := err.Error()
+	if idx := strings.Index(msg, "\nstack traceback:"); idx >= 0 {
+		msg = msg[:idx]
+	}
+	return msg
+}
+
+// ---------------------------------------------------------------------------
 // Result collection & formatting
 // ---------------------------------------------------------------------------
 
-func collectResults(testsTbl *lua.LTable, scriptErr string) ScriptResult {
+func collectResults(rec *recorder, scriptErr string) ScriptResult {
 	result := ScriptResult{
-		Results: []TestResult{},
+		Results:     append([]TestResult{}, rec.results...),
+		ScriptError: scriptErr,
 	}
-
-	testsTbl.ForEach(func(k, v lua.LValue) {
-		name := k.String()
-		passed := luaToBool(v)
-
-		result.Results = append(result.Results, TestResult{
-			Name:   name,
-			Passed: passed,
-		})
-		if passed {
+	for _, tr := range result.Results {
+		if tr.Passed {
 			result.PassCount++
 		} else {
 			result.FailCount++
 		}
-	})
-
-	if scriptErr != "" {
-		result.ScriptError = scriptErr
 	}
-
 	return result
 }
 
@@ -366,6 +407,9 @@ func formatOutput(result ScriptResult, scriptErr string) string {
 			mark = "FAIL"
 		}
 		fmt.Fprintf(&b, "  [%s] %s\n", mark, tr.Name)
+		if tr.Message != "" {
+			fmt.Fprintf(&b, "         %s\n", tr.Message)
+		}
 	}
 
 	if len(result.Results) > 0 {
