@@ -174,3 +174,41 @@ func BodyExample(op *openapi3.Operation) (mediaType, raw string) {
 	}
 	return mediaType, ""
 }
+
+// SampleBody is BodyExample with a fallback: when the operation declares a
+// body schema but no example, it returns a value built by SchemaSample. It
+// is meant for editors (the user sees the body before sending), never for
+// `run`, which must not invent data.
+func SampleBody(op *openapi3.Operation) (mediaType, raw string) {
+	mediaType, raw = BodyExample(op)
+	if raw != "" || mediaType == "" {
+		return mediaType, raw
+	}
+	m := op.RequestBody.Value.Content[mediaType]
+	if m == nil || m.Schema == nil {
+		return mediaType, ""
+	}
+	v := SchemaSample(m.Schema)
+	if v == nil {
+		return mediaType, ""
+	}
+	if s, ok := v.(string); ok && !strings.Contains(mediaType, "json") {
+		return mediaType, s
+	}
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return mediaType, ""
+	}
+	return mediaType, string(data)
+}
+
+// FillSampleBody sets a synthetic body (SampleBody) on req when it has none.
+func FillSampleBody(spec *openapi3.T, req *model.Request, ref model.OpenAPIRef) {
+	if req.Body.Raw != "" {
+		return
+	}
+	if mt, raw := SampleBody(FindOperation(spec, ref)); raw != "" {
+		req.Body.Type = model.MimeType(mt)
+		req.Body.Raw = raw
+	}
+}
