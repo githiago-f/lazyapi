@@ -79,7 +79,7 @@ jobs:
 
       - name: Run example tests
         run: |
-          ./lazyapi run examples/openapi.yml --methods all --frozen-lockfile \
+          ./lazyapi run examples/openapi.yml --methods all --flows --frozen-lockfile \
             --output junit --output-file lazyapi-report.xml
 
       - name: Upload report

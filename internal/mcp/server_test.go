@@ -143,7 +143,7 @@ func TestProtocol(t *testing.T) {
 		}
 	}
 	for _, want := range []string{"list_specs", "list_operations", "describe_operation", "send_request", "run_tests",
-		"read_test", "write_test", "validate_spec", "script_api"} {
+		"run_flow", "write_flow", "read_test", "write_test", "validate_spec", "script_api"} {
 		if !names[want] {
 			t.Errorf("missing tool %s", want)
 		}
@@ -273,5 +273,49 @@ func TestTools_Confinement(t *testing.T) {
 	res, text, isErr := c.tool("send_request", map[string]any{"spec": "api/spec.yml", "operation": "getUser"})
 	if isErr || res["outcome"] != "error" || !strings.Contains(text, "request failed") {
 		t.Errorf("network error = %s", text)
+	}
+}
+
+func TestTools_Flows(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.WriteHeader(201)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":1}`))
+	}))
+	defer api.Close()
+	root := setupRoot(t, api.URL)
+	c := startServer(t, root)
+
+	w, text, isErr := c.tool("write_flow", map[string]any{"spec": "api/spec.yml", "name": "signup",
+		"source": `const r = lazyapi.send("createUser"); test("created", () => expect(r).toHaveStatus(201));
+const u = lazyapi.send("getUser", { params: { id: "1" } }); test("readable", () => expect(u.json().id).toBe(1));`})
+	if isErr || w["path"] != "api/flows/signup.js" || w["compileError"] != nil {
+		t.Fatalf("write_flow = %s", text)
+	}
+
+	res, text, isErr := c.tool("run_flow", map[string]any{"spec": "api/spec.yml", "flow": "signup"})
+	if isErr || res["outcome"] != "passed" || len(res["steps"].([]any)) != 2 {
+		t.Errorf("run_flow = %s", text)
+	}
+	if !strings.Contains(text, "#2 GET /users/{id} · response matches the OpenAPI schema") {
+		t.Errorf("each step should be contract-checked: %s", text)
+	}
+
+	rep, _, _ := c.tool("run_tests", map[string]any{"spec": "api/spec.yml", "include_flows": true})
+	ops := rep["operations"].([]any)
+	if last := ops[len(ops)-1].(map[string]any); last["kind"] != "flow" {
+		t.Errorf("include_flows should append the flow: %v", last)
+	}
+
+	for _, bad := range []string{"../x", "a/b", ""} {
+		if _, _, isErr := c.tool("write_flow", map[string]any{"spec": "api/spec.yml", "name": bad, "source": "x"}); !isErr {
+			t.Errorf("name %q should be rejected", bad)
+		}
+	}
+	if _, text, isErr := c.tool("run_flow", map[string]any{"spec": "api/spec.yml", "flow": "../../etc/passwd"}); !isErr || !strings.Contains(text, "outside the server root") {
+		t.Errorf("flow path escape: %s", text)
 	}
 }

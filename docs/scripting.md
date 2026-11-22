@@ -45,6 +45,54 @@ lazyapi run api.yml --script all.js          # one script for every operation
 
 In the TUI, open the **Tests** tab and press `F5`.
 
+## Changing the request: `before(req)`
+
+A test script can export `before`, which runs **before** the request is sent. Use it to authenticate, sign or build the request:
+
+```js
+import { login } from "./helpers.js";
+
+export function before(req) {
+  req.headers.Authorization = "Bearer " + login();   // login() uses lazyapi.send
+  req.query.trace = "1";
+  req.body = { ...JSON.parse(req.body || "{}"), requestedAt: Date.now() };
+}
+
+test("authorized", () => expect(response).toHaveStatus(200));
+```
+
+- `req` has `method`, `url` and `path` (read-only), plus `headers`, `query`, `params` and `body`, which you can change. Change it in place or return a new object. A non-string `body` is JSON-encoded.
+- `before` can call `lazyapi.send()` and `vars.set()`, and its `console` output is kept.
+- The top level of the file (everything outside `before`) still runs **after** the response. To reach the export, the file is evaluated once before the request. In that pass `test()`, `console`, `vars.set()` and top-level `lazyapi.send()` calls are ignored, and errors are swallowed, because the top level normally reads `response`.
+- If `before` throws, the request is **not sent** and the failure is reported as a `script` check.
+- The request check and the request that is sent both use the request as `before` left it.
+
+## Flows
+
+A flow is a scenario across operations: `flows/<name>.js` next to the spec. There is no implicit request or response: the flow calls `lazyapi.send()` in order and asserts with `test()`.
+
+```js
+// flows/userLifecycle.js
+import { login, bearer } from "../tests/helpers.js";
+
+const auth = bearer(login());
+const created = lazyapi.send("createUser", { headers: auth, body: { name: "Ana", email: "ana@example.com" } });
+test("created", () => expect(created).toHaveStatus(201));
+vars.set("userId", created.json().id);
+
+const removed = lazyapi.send("deleteUser", { params: { id: vars.get("userId") }, headers: auth });
+test("deleted", () => expect(removed).toHaveStatus(204));
+```
+
+**Every `lazyapi.send()` in a flow is checked automatically**: the request matches the spec, the status is declared, and the response matches the schema. These checks are named after the step, e.g. `#2 POST /users · status 201 is declared`. A flow that makes no requests and no assertions fails.
+
+```bash
+lazyapi run api.yml --flow flows/userLifecycle.js   # just this flow
+lazyapi run api.yml --methods all --flows           # operations, then every flow
+```
+
+Flows run sequentially after the operations and share `env` and `vars` with them. `--flow-timeout` (default `5m`) bounds each flow. The report lists every step (method, path, status, time) and the checks.
+
 ## Editor support
 
 ```bash
@@ -76,7 +124,7 @@ Failure messages are explicit, e.g. `expected 404 to be 200` or `schema validati
 
 ## Automatic contract check
 
-`send`, `run` and the TUI also check, even without a script, that every request matches the operation (`request` check) and that every response with a declared schema matches it (`contract` check). Use `--no-contract` to turn both off.
+`send`, `run`, flows and the TUI also check, even without a script, that every request matches the operation (`request` check) and that every response with a declared schema matches it (`contract` check). Use `--no-contract` to turn both off.
 
 ## Imports
 

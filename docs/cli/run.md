@@ -22,12 +22,27 @@ lazyapi run <spec.yml> [flags]
 | `--op <list>` | Only these operations, by `operationId` or `"METHOD /path"` |
 | `--grep <regex>` | Only operations whose `METHOD /path operationId summary` matches |
 
+## Order
+
+Operations run in spec order within four groups: reads (`GET`/`HEAD`/`OPTIONS`), then `POST`, then `PUT`/`PATCH`, then `DELETE`. A run therefore does not delete what later operations read. For exact sequences, use [flows](/scripting#flows).
+
+## Flows
+
+| Flag | Description |
+|------|-------------|
+| `--flows` | After the operations, run every `flows/*.js` next to the spec |
+| `--flow <file>` | Run only this flow (repeatable); no operations are run |
+| `--flow-timeout <d>` | Maximum run time of one flow (default `5m`) |
+
+Flow results appear in the report with `"kind": "flow"`, `"method": "FLOW"`, the flow path, its `steps` and its checks.
+
 ## Execution
 
 | Flag | Description |
 |------|-------------|
-| `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first) |
-| `--env <file>` | `.env` file for <code v-pre>{{env.NAME}}</code> |
+| `--env-name <name>` | Named environment from [`lazyapi.config.yml`](/environments): server, env file, vars and credentials |
+| `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first). Wins over the environment |
+| `--env <file>` | `.env` file for <code v-pre>{{env.NAME}}</code>. Wins over the environment |
 | `--param k=v` | Path parameter for operations that declare it (repeatable). Otherwise the spec's example is used; with no value at all, the operation is skipped |
 | `--query k=v`, `--header k=v` | Added to every request (repeatable) |
 | `--timeout <d>` | Per-request timeout (default `30s`) |

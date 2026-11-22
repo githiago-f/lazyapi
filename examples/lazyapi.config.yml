@@ -1,0 +1,12 @@
+# Named environments: lazyapi run examples/openapi.yml --env-name production
+# The TUI cycles them with ctrl+v. Paths are relative to this file.
+default: local
+environments:
+  local:
+    server: http://127.0.0.1:4010   # lazyapi mock examples/openapi.yml
+    env: .env.example
+    vars:
+      tenant: demo
+  production:
+    server: "1"                     # index into the spec's servers
+    env: .env.production            # create it locally; never commit secrets

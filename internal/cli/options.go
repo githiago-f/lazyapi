@@ -14,6 +14,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/project"
 	"github.com/githiago-f/lazyapi/internal/report"
 	"github.com/githiago-f/lazyapi/internal/runner"
 	"github.com/githiago-f/lazyapi/internal/script"
@@ -51,9 +52,9 @@ func runtimeErr(err error) error {
 
 // runFlags are shared by `run`/`smoke` and `send`.
 type runFlags struct {
-	server, envFile, output, outputFile, bodies *string
-	params, query, headers                      kvFlag
-	timeout                                     *time.Duration
+	server, envFile, envName, output, outputFile, bodies *string
+	params, query, headers                               kvFlag
+	timeout                                              *time.Duration
 
 	script, allowImport     *string
 	offline, reload, frozen *bool
@@ -65,6 +66,7 @@ func registerRunFlags(fs *flag.FlagSet, scriptHelp string) *runFlags {
 	f := &runFlags{params: kvFlag{}, query: kvFlag{}, headers: kvFlag{}}
 	f.server = fs.String("server", "", "server URL or index into the spec's servers (default: first)")
 	f.envFile = fs.String("env", "", "environment file ({{env.NAME}})")
+	f.envName = fs.String("env-name", "", "environment from "+project.FileName+" (default: its 'default', or $LAZYAPI_ENV)")
 	f.output = fs.String("output", report.Pretty, "output format: "+strings.Join(report.Formats, ", "))
 	f.outputFile = fs.String("output-file", "", "write the --output report to this file (stdout keeps the pretty log)")
 	f.bodies = fs.String("bodies", string(report.BodiesFailed), "bodies in JSON output: failed, all, none")
@@ -96,9 +98,17 @@ func (f *runFlags) validate() error {
 	return nil
 }
 
-// options builds runner options for a spec.
+// options builds runner options for a spec. A named environment from
+// lazyapi.config.yml supplies the server, env file, vars and credentials;
+// explicit --server / --env win over it.
 func (f *runFlags) options(specPath string) (runner.Options, error) {
-	envMap, err := env.NewStore(*f.envFile).Load()
+	selected, err := project.Resolve(specPath, *f.envName, *f.server, *f.envFile)
+	if err != nil {
+		return runner.Options{}, usageErr("%v", err)
+	}
+	server, envFile := selected.Server, selected.EnvFile
+
+	envMap, err := env.NewStore(envFile).Load()
 	if err != nil {
 		return runner.Options{}, runtimeErr(fmt.Errorf("error loading env file: %w", err))
 	}
@@ -113,7 +123,10 @@ func (f *runFlags) options(specPath string) (runner.Options, error) {
 	modules.AllowedHosts = splitList(*f.allowImport)
 
 	return runner.Options{
-		Server:        *f.server,
+		EnvName:       selected.Name,
+		Vars:          selected.Vars,
+		Auth:          selected.Auth,
+		Server:        server,
 		Env:           envMap,
 		Params:        f.params,
 		Query:         f.query,

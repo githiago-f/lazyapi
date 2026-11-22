@@ -129,14 +129,24 @@ func FormatOp(op runner.OpResult) string {
 	}
 
 	status := ""
-	if op.Response != nil {
+	switch {
+	case op.Response != nil:
 		status = fmt.Sprintf(" — %s (%dms)", op.Response.StatusText, op.Response.DurationMs)
+	case op.Kind == runner.KindFlow:
+		status = fmt.Sprintf(" — %d requests", len(op.Steps))
 	}
 	attempts := ""
 	if op.Attempts > 1 {
 		attempts = fmt.Sprintf(" [%d attempts]", op.Attempts)
 	}
 	fmt.Fprintf(&b, "%s %s%s%s\n", strings.ToUpper(string(op.Outcome[:1]))+string(op.Outcome[1:]), op.Label(), status, attempts)
+	for i, st := range op.Steps {
+		if st.Error != "" {
+			fmt.Fprintf(&b, "  → #%d %s %s — %s\n", i+1, st.Method, st.Path, st.Error)
+			continue
+		}
+		fmt.Fprintf(&b, "  → #%d %s %s — %d (%dms)\n", i+1, st.Method, st.Path, st.Status, st.DurationMs)
+	}
 	for _, l := range op.Logs {
 		fmt.Fprintf(&b, "  [%s] %s\n", l.Level, l.Message)
 	}
@@ -146,7 +156,7 @@ func FormatOp(op runner.OpResult) string {
 			mark = "FAIL"
 		}
 		name := c.Name
-		if c.Kind == runner.CheckContract || c.Kind == runner.CheckStatus || c.Kind == runner.CheckScript {
+		if c.Kind != runner.CheckTest && op.Kind != runner.KindFlow {
 			name = c.Kind + ": " + name
 		}
 		fmt.Fprintf(&b, "  [%s] %s\n", mark, name)

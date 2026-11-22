@@ -25,20 +25,20 @@ git clone https://github.com/githiago-f/lazyapi.git && cd lazyapi
 go build -o lazyapi ./cmd/lazyapi
 
 ./lazyapi mock examples/openapi.yml &          # fake API from the spec's examples
-./lazyapi run examples/openapi.yml --methods all
+./lazyapi run examples/openapi.yml --methods all --flows
 ```
 
 ```text
 Passed GET /users/{id} — 200 OK (1ms)
-  [PASS] request matches the OpenAPI spec
+  [PASS] request: request matches the OpenAPI spec
   [PASS] status: status 200 is declared
   [PASS] contract: response matches the OpenAPI schema
   [PASS] returns the requested user
+  [PASS] the request was authenticated by before()
   [PASS] unknown users answer 404 with an error body
-  [PASS] works with a token from login
 ========================================
-Operations: 6 passed, 0 failed, 0 errors, 0 skipped (13ms)
-Checks:     26 passed, 0 failed
+Operations: 7 passed, 0 failed, 0 errors, 0 skipped (20ms)
+Checks:     40 passed, 0 failed
 ```
 
 Then open the TUI on the same spec: `./lazyapi examples/openapi.yml`.
@@ -81,6 +81,18 @@ test("chained call with a token", () => {
 });
 ```
 
+A script can also `export function before(req)` to change the request before it is sent (auth, signatures, bodies).
+
+Scenarios across operations go in **flows** (`flows/*.js`). A flow calls `lazyapi.send()` in order, and every step is checked against the spec automatically:
+
+```js
+// flows/userLifecycle.js
+const created = lazyapi.send("createUser", { body: { name: "Ana", email: "ana@example.com" } });
+test("created", () => expect(created).toHaveStatus(201));
+const removed = lazyapi.send("deleteUser", { params: { id: String(created.json().id) } });
+test("deleted", () => expect(removed).toHaveStatus(204));
+```
+
 Scripts run in a sandbox with `request`, `response`, `env`, `vars`, `lazyapi.send`, `test`, `expect` (Jest-style matchers) and `console`. Run `lazyapi types` for the TypeScript definitions. Details: [docs/scripting.md](docs/scripting.md).
 
 ## CLI
@@ -88,6 +100,8 @@ Scripts run in a sandbox with `request`, `response`, `env`, `vars`, `lazyapi.sen
 ```bash
 lazyapi run api.yml [--tag users] [--op getUser] [--methods all] [--parallel 8] [--retries 2] [--bail]
 lazyapi run api.yml --output json|junit|tap [--output-file report.xml]
+lazyapi run api.yml --flows                  # operations, then every flows/*.js
+lazyapi run api.yml --env-name staging       # server, env file, vars, credentials from lazyapi.config.yml
 lazyapi send request api.yml --op createUser --body @user.json --param id=1 --output json
 lazyapi list ops api.yml --json
 lazyapi describe api.yml getUser --json      # params, bodies, responses, referenced schemas
@@ -96,7 +110,9 @@ lazyapi mock api.yml --port 4010             # fake API; Prefer: code=404 picks 
 lazyapi types                                # script API (TypeScript definitions)
 ```
 
-By default, `run` only sends `GET`, `HEAD` and `OPTIONS`; pass `--methods all` to include writes. Path parameters come from `--param` or the spec's examples, and the CLI never invents values.
+Named environments and credentials (bearer, basic, API key, OAuth2 client credentials/password with automatic tokens) live in `lazyapi.config.yml`. See [docs/environments.md](docs/environments.md).
+
+By default, `run` only sends `GET`, `HEAD` and `OPTIONS` (reads first, deletes last); pass `--methods all` to include writes. Path parameters come from `--param` or the spec's examples, and the CLI never invents values.
 
 Exit status is the same for every command: **0** all passed · **1** a check failed · **2** usage error · **3** something could not run (spec, network, config).
 

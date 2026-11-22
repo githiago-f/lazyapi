@@ -58,6 +58,12 @@ type Options struct {
 	Query   map[string]string // query params added to every request
 	Headers map[string]string // headers added to every request
 	Body    *string           // request body override (RunOne)
+	// EnvName is the named environment in use (reported only).
+	EnvName string
+	// Vars are the initial run variables ({{var.X}}).
+	Vars map[string]string
+	// Auth fills credentials by security scheme name.
+	Auth map[string]model.AuthSecrets
 
 	Filter  Filter
 	Timeout time.Duration // per request
@@ -66,6 +72,12 @@ type Options struct {
 	Modules       *script.ModuleLoader // URL imports; nil disables them
 	ScriptTimeout time.Duration
 	NoContract    bool
+
+	// Flows run after the operations (see RunFlow); FlowTimeout bounds each.
+	// SkipOperations runs the flows only.
+	Flows          []string
+	SkipOperations bool
+	FlowTimeout    time.Duration
 
 	DryRun   bool
 	Bail     bool // stop scheduling after the first failure or error
@@ -84,7 +96,8 @@ type target struct {
 	skipped string // non-empty: excluded with this reason
 }
 
-// plan lists the operations a run would visit, in spec order. Operations not
+// plan lists the operations a run would visit: reads, creates, updates,
+// then deletes (spec order within each group). Operations not
 // selected by Ops/Tags/Grep are omitted; excluded methods are kept with a
 // skip reason so they are visible in reports.
 func plan(spec *openapi3.T, specPath string, f Filter) []target {
@@ -102,7 +115,23 @@ func plan(spec *openapi3.T, specPath string, f Filter) []target {
 		}
 		out = append(out, t)
 	}
+	// Reads first, deletes last, so a run does not remove what later
+	// operations read. Spec order is kept within each group.
+	slices.SortStableFunc(out, func(a, b target) int { return methodRank(a.ref.Method) - methodRank(b.ref.Method) })
 	return out
+}
+
+func methodRank(m string) int {
+	switch m {
+	case "POST":
+		return 1
+	case "PUT", "PATCH":
+		return 2
+	case "DELETE":
+		return 3
+	default:
+		return 0
+	}
 }
 
 func (f Filter) selects(method, path string, op *openapi3.Operation) bool {
@@ -122,14 +151,17 @@ func (f Filter) selects(method, path string, op *openapi3.Operation) bool {
 // error is only about persisting the module lockfile.
 func Run(ctx context.Context, spec *openapi3.T, specPath string, opts Options) (Report, error) {
 	start := time.Now()
-	targets := plan(spec, specPath, opts.Filter)
+	var targets []target
+	if !opts.SkipOperations {
+		targets = plan(spec, specPath, opts.Filter)
+	}
 	results := make([]OpResult, len(targets))
 
 	sharedEnv := opts.Env
 	if sharedEnv == nil {
 		sharedEnv = map[string]string{}
 	}
-	sharedVars := map[string]string{}
+	sharedVars := copyMap(opts.Vars)
 
 	parallel := max(1, opts.Parallel)
 	em := newEmitter(opts.OnResult)
@@ -181,7 +213,28 @@ func Run(ctx context.Context, spec *openapi3.T, specPath string, opts Options) (
 	}
 	wg.Wait()
 
-	report := Report{Spec: specPath, StartedAt: start, Operations: results}
+	// Flows run sequentially after the operations, sharing env and vars.
+	for _, flow := range opts.Flows {
+		var res OpResult
+		switch {
+		case stopped || ctx.Err() != nil:
+			res = OpResult{Kind: KindFlow, Method: "FLOW", Path: relToSpec(specPath, absPath(flow)), Outcome: Skipped,
+				Reason: "not run: stopped after an earlier failure (--bail)"}
+		case opts.DryRun:
+			res = OpResult{Kind: KindFlow, Method: "FLOW", Path: relToSpec(specPath, absPath(flow)), Outcome: Skipped, Reason: "--dry-run does not run flows"}
+		default:
+			res = RunFlow(ctx, spec, specPath, flow, opts, sharedEnv, sharedVars)
+			if opts.Bail && (res.Outcome == Failed || res.Outcome == Errored) {
+				stopped = true
+			}
+		}
+		if opts.OnResult != nil {
+			opts.OnResult(res)
+		}
+		results = append(results, res)
+	}
+
+	report := Report{Spec: specPath, Environment: opts.EnvName, StartedAt: start, Operations: results}
 	report.Summary = Summarize(results, time.Since(start))
 	return report, opts.Modules.SaveLock()
 }
@@ -198,7 +251,7 @@ func RunOne(ctx context.Context, spec *openapi3.T, specPath string, ref model.Op
 	if envMap == nil {
 		envMap = map[string]string{}
 	}
-	res := execute(ctx, spec, specPath, target{ref: ref, op: op}, opts, envMap, map[string]string{}, true)
+	res := execute(ctx, spec, specPath, target{ref: ref, op: op}, opts, envMap, copyMap(opts.Vars), true)
 	return res, opts.Modules.SaveLock()
 }
 
@@ -237,6 +290,7 @@ func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, o
 		req.Body.Raw = *opts.Body
 	}
 	req.Env, req.Vars, req.Timeout = envMap, vars, opts.Timeout
+	req.Auth = model.ApplySecrets(req.Auth, opts.Auth)
 
 	if missing := req.MissingPathParams(); len(missing) > 0 {
 		res.Reason = fmt.Sprintf("no value for path parameter(s) %s (pass --param %s=<value> or declare an example in the spec)",
@@ -275,7 +329,7 @@ func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, o
 	return exchange(ctx, res, ExchangeInput{
 		Spec: spec, SpecPath: specPath, Ref: &ref, Request: req,
 		Script: source, ScriptOptions: sopts,
-		NoContract: opts.NoContract, Retries: opts.Retries,
+		NoContract: opts.NoContract, Retries: opts.Retries, Auth: opts.Auth,
 	})
 }
 
@@ -290,6 +344,18 @@ type ExchangeInput struct {
 	ScriptOptions script.Options
 	NoContract    bool
 	Retries       int
+	// Auth fills credentials into lazyapi.send() calls made by the script.
+	Auth map[string]model.AuthSecrets
+}
+
+// bind connects a script to the spec (lazyapi.send, toMatchSchema).
+func (in ExchangeInput) bind(data *script.ExecData, req model.Request) {
+	if in.Spec == nil {
+		return
+	}
+	sctx := &script.SpecContext{Spec: in.Spec, SpecPath: in.SpecPath, ServerURL: req.ServerURL,
+		Env: req.Env, Vars: req.Vars, Timeout: req.Timeout, Auth: in.Auth}
+	sctx.Bind(data)
 }
 
 // Exchange sends an already-built request — e.g. one edited in the TUI — and
@@ -317,6 +383,24 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 	req := in.Request
 	if in.Script != "" && in.ScriptOptions.Filename != "" && in.SpecPath != "" {
 		res.TestsFile = relToSpec(in.SpecPath, in.ScriptOptions.Filename)
+	}
+
+	// before(req) may change the request (auth, signatures, bodies) first.
+	if in.Script != "" && strings.Contains(in.Script, "before") {
+		data := script.ExecData{Request: req, Env: req.Env, Vars: req.Vars}
+		in.bind(&data, req)
+		br := script.Before(in.Script, data, in.ScriptOptions)
+		res.Logs = append(res.Logs, br.Logs...)
+		if br.Error != "" {
+			res.Request = requestInfo(req)
+			res.Checks = append(res.Checks, Check{Kind: CheckScript, Name: "before() ran without errors", Message: br.Error})
+			res.Outcome = Failed
+			res.Reason = "not sent: before() failed"
+			return res
+		}
+		if br.Defined {
+			req = br.Request
+		}
 	}
 	res.Request = requestInfo(req)
 
@@ -373,11 +457,7 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 			Env:  req.Env,
 			Vars: req.Vars,
 		}
-		if in.Spec != nil {
-			sctx := &script.SpecContext{Spec: in.Spec, SpecPath: in.SpecPath, ServerURL: req.ServerURL,
-				Env: req.Env, Vars: req.Vars, Timeout: req.Timeout}
-			sctx.Bind(&data)
-		}
+		in.bind(&data, req)
 		sr := script.Run(in.Script, data, in.ScriptOptions)
 		for _, tr := range sr.Results {
 			res.Checks = append(res.Checks, Check{Kind: CheckTest, Name: tr.Name, Passed: tr.Passed, Message: tr.Message})
@@ -385,7 +465,7 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 		if sr.ScriptError != "" {
 			res.Checks = append(res.Checks, Check{Kind: CheckScript, Name: "script ran without errors", Message: sr.ScriptError})
 		}
-		res.Logs = sr.Logs
+		res.Logs = append(res.Logs, sr.Logs...)
 	}
 
 	res.Outcome = outcomeFor(res.Checks)
@@ -468,6 +548,12 @@ func loadScript(spec *openapi3.T, specPath string, t target, opts Options) (stri
 	}
 	o.Modules, o.Timeout = base.Modules, base.Timeout
 	return source, o, nil
+}
+
+// serverIndex reports whether v is a numeric --server index.
+func serverIndex(v string) (int, bool) {
+	idx, err := strconv.Atoi(v)
+	return idx, err == nil && idx >= 0
 }
 
 // selectServer applies a --server value: a URL, or an index into the spec's

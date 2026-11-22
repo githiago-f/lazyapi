@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -18,6 +19,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/project"
 	"github.com/githiago-f/lazyapi/internal/runner"
 	"github.com/githiago-f/lazyapi/internal/store"
 	overlay "github.com/rmhubbert/bubbletea-overlay"
@@ -52,6 +54,11 @@ type Tui struct {
 	cancelSend context.CancelFunc
 	// confirm holds a destructive request waiting for y/n.
 	confirm *responses.SendMsg
+
+	// project is lazyapi.config.yml (nil when absent); activeEnv is the
+	// selected named environment (nil: none).
+	project   *project.Config
+	activeEnv *project.Environment
 
 	width, height int
 
@@ -122,8 +129,15 @@ func (t Tui) title() string {
 		parts = append(parts, titleInfoStyle.Render(fmt.Sprintf("%d specs", len(t.openAPIFiles))))
 	}
 	envLabel := titleNoEnv.Render("env: none · ctrl+v")
-	if p := t.envStore.Path(); p != "" {
-		envLabel = titleEnvStyle.Render("env: " + env.Label(p))
+	switch {
+	case t.activeEnv != nil:
+		label := "env: " + t.activeEnv.Name
+		if server := t.envServer(); server != "" {
+			label += " → " + server
+		}
+		envLabel = titleEnvStyle.Render(label)
+	case t.envStore.Path() != "":
+		envLabel = titleEnvStyle.Render("env: " + env.Label(t.envStore.Path()))
 	}
 	return strings.Join(parts, titleInfoStyle.Render("  ·  ")) + "   " + envLabel
 }
@@ -225,7 +239,7 @@ func (t Tui) View() tea.View {
 		req := t.confirm.Request
 		box := confirmStyle.Render(fmt.Sprintf("%s\n\n%s %s\n%s\n\n%s",
 			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Red)).Render("Send a request that may change data?"),
-			req.Method.Label(), req.ResolvedURL(), titleInfoStyle.Render("env: "+env.Label(t.envStore.Path())),
+			req.Method.Label(), req.ResolvedURL(), titleInfoStyle.Render("env: "+t.envName()),
 			lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Render("y")+" send   "+
 				lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Render("any other key")+" cancel"))
 		base = overlay.Composite(box, base, overlay.Center, overlay.Center, 0, 0)
@@ -255,6 +269,30 @@ func (t Tui) View() tea.View {
 		AltScreen: true,
 		MouseMode: tea.MouseModeCellMotion,
 	}
+}
+
+// envServer is the active environment's server as a URL.
+func (t Tui) envServer() string {
+	if t.activeEnv == nil || t.activeEnv.Server == "" {
+		return ""
+	}
+	spec := t.defaultFile
+	if spec == "" && len(t.openAPIFiles) > 0 {
+		spec = t.openAPIFiles[0]
+	}
+	servers, _ := store.LoadServers(spec)
+	if u := serverFor(t.activeEnv.Server, servers); u != "" {
+		return u
+	}
+	return t.activeEnv.Server
+}
+
+// envName labels the active environment for messages.
+func (t Tui) envName() string {
+	if t.activeEnv != nil {
+		return t.activeEnv.Name
+	}
+	return env.Label(t.envStore.Path())
 }
 
 // contentSize is the area between the title bar and the help bar.
@@ -293,6 +331,7 @@ func (t Tui) startSend(msg responses.SendMsg) (Tui, tea.Cmd) {
 	if t.cancelSend != nil {
 		t.cancelSend()
 	}
+	t.applyEnv(&msg)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancelSend = cancel
 	var spin tea.Cmd
@@ -325,11 +364,69 @@ func (t Tui) previewSendMsg() (*responses.SendMsg, error) {
 		req.ServerURL = u
 	}
 	req.Env, _ = t.envStore.Load()
-	return &responses.SendMsg{Source: responses.FromPreview, Request: req}, nil
+	msg := &responses.SendMsg{Source: responses.FromPreview, Request: req}
+	t.applyEnv(msg)
+	return msg, nil
 }
 
-// switchEnv cycles through the env files in the working directory.
+// applyEnv points a request at the active environment (server, vars,
+// credentials). It is idempotent.
+func (t Tui) applyEnv(msg *responses.SendMsg) {
+	e := t.activeEnv
+	if e == nil {
+		return
+	}
+	if e.Server != "" {
+		if u := serverFor(e.Server, msg.Request.Servers); u != "" {
+			msg.Request.ServerURL = u
+		}
+	}
+	msg.Auth, msg.Vars = e.Auth, e.Vars
+}
+
+// serverFor resolves an environment's server: a URL, or an index into the
+// spec's servers.
+func serverFor(v string, servers []string) string {
+	if idx, err := strconv.Atoi(v); err == nil {
+		if idx >= 0 && idx < len(servers) {
+			return servers[idx]
+		}
+		return ""
+	}
+	return v
+}
+
+// useEnv activates a named environment (nil clears it).
+func (t *Tui) useEnv(e *project.Environment) {
+	t.activeEnv = e
+	path := ""
+	if e != nil {
+		path = e.Env
+	}
+	t.envStore.SetPath(path)
+	t.titleBar.Title = t.title()
+}
+
+// switchEnv cycles through the named environments of lazyapi.config.yml
+// (then "none"), or through the env files in the working directory when
+// there is no config.
 func (t Tui) switchEnv() (Tui, tea.Cmd) {
+	if t.project != nil {
+		names := append(t.project.Names(), "")
+		current := ""
+		if t.activeEnv != nil {
+			current = t.activeEnv.Name
+		}
+		next := names[(slices.Index(names, current)+1)%len(names)]
+		if next == "" {
+			t.useEnv(nil)
+			return t, notify("Environment: none", components.Info)
+		}
+		e, _ := t.project.Select(next)
+		t.useEnv(e)
+		return t, notify("Environment: "+next, components.Info)
+	}
+
 	options := append([]string{""}, env.Discover(".")...)
 	if p := t.envStore.Path(); p != "" && !slices.Contains(options, p) {
 		options = append(options, p)
@@ -402,8 +499,23 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case store.RequestFilesMsg:
 		t.openAPIFiles = msg.Paths
+		spec := t.defaultFile
+		if spec == "" && len(msg.Paths) > 0 {
+			spec = msg.Paths[0]
+		}
+		if cfg, err := project.Find(spec); err != nil {
+			cmd = notify("lazyapi.config.yml: "+err.Error(), components.Error)
+		} else if cfg != nil {
+			t.project = cfg
+			// An explicit --env file keeps priority over the default environment.
+			if t.envStore.Path() == "" {
+				if e, err := cfg.Select(""); err == nil && e != nil {
+					t.useEnv(e)
+				}
+			}
+		}
 		t.titleBar.Title = t.title()
-		return t, store.LoadRequestsList(msg.Paths)
+		return t, tea.Batch(cmd, store.LoadRequestsList(msg.Paths))
 
 	case store.LoadedRequestListMsg:
 		t.requestList = t.requestList.SetItems(msg.Items)

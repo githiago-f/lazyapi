@@ -68,3 +68,9 @@ func splitList(v string) []string {
 	}
 	return out
 }
+
+// listFlag collects a repeatable string flag (e.g. --flow a.js --flow b.js).
+type listFlag []string
+
+func (l *listFlag) String() string     { return strings.Join(*l, ",") }
+func (l *listFlag) Set(v string) error { *l = append(*l, v); return nil }

@@ -10,11 +10,12 @@ Prioridades: **P0** bloqueia uso real · **P1** alto valor · **P2** polimento.
 | 2 | `1ad8ead` | Engine JS/TS (goja + esbuild), imports `https://` com `lazyapi.lock`, `expect`, `lazyapi.send`, contrato automático; Lua removido |
 | 3 | `a45e115` | `runner` estruturado, `run` com json/junit/tap, exit codes 0/1/2/3, `list`/`describe`/`validate`, servidor MCP |
 | 4 | `8131547` | UI: tela de resposta com abas e checks, highlight, busca, cancelamento, confirmação, envs, `$EDITOR`, rodapé de atalhos |
-| 5 | (este) | README, `lazyapi mock`, exemplos executáveis no CI, check `request`, `llms.txt`, skill de testes de API |
+| 5 | `9cc29dd` | README, `lazyapi mock`, exemplos executáveis no CI, check `request`, `llms.txt`, skill de testes de API |
+| 6 | (este) | `before(req)`, fluxos, ordem do `run`, ambientes nomeados, credenciais e OAuth2 automático |
 
 **O que já funciona hoje:** um agent consegue descobrir, chamar, testar e validar uma API via MCP ou CLI JSON. Um humano consegue fazer o mesmo no TUI, vendo os mesmos checks.
 
-**O que ainda impede o uso real:** cenários com autenticação ou várias etapas dão trabalho (a ordem do `run` é a do spec: o `DELETE` roda antes do `GET` do mesmo path). Por isso a próxima fase é a 6.
+**O que ainda impede o uso real:** APIs com bodies form/multipart, TLS customizado ou proxy não podem ser chamadas, e quem vem do Postman ou do cURL não tem caminho de migração. Por isso a próxima fase é a 7.
 
 ---
 
@@ -30,16 +31,20 @@ Objetivo: alguém (pessoa ou agent) clona o repositório e em 2 minutos roda tes
 - [x] AGENTS.md: mock, check `request`, exemplos como teste; item de código morto removido.
 - [ ] `lazyapi.lock` de exemplo: os exemplos não usam import por URL, para o CI não depender de rede. Avaliar um exemplo opcional com cache.
 
-## Fase 6 — Cenários reais: auth e fluxos (P1) ← próxima
+## Fase 6 — Cenários reais: auth e fluxos (P1) ✅
 
 Objetivo: validar APIs que exigem login e sequências de CRUD, que é onde testes por operação isolada não bastam.
 
-- [ ] **Pre-request script**, por exemplo `x-lazyapi-pre-request` ou `export function before(req)` no mesmo arquivo. Serve para gerar token, assinar o request ou montar o body. Precisa decidir o formato primeiro.
-- [ ] **Fluxos `flows/*.js`**: cenários com várias operações (`login → create → get → delete`) usando `lazyapi.send` e `vars`. Comando `lazyapi run --flow <file>`, ferramenta MCP `run_flow`, e reports no mesmo formato do `run`.
-- [ ] **Ambientes nomeados** em `lazyapi.config.yml` (`environments: {local, staging}` → server + arquivo env) com `--env-name staging`. O `ctrl+v` do TUI passa a usar essa lista.
-- [ ] **OAuth2 client-credentials/password automático**: buscar e cachear o token pelo `tokenUrl` do security scheme.
+- [x] **`export function before(req)`** no arquivo de testes: muda headers, query, params e body antes do envio. Pode usar `lazyapi.send` e `vars`. Se lança erro, o request não é enviado (check `script`).
+- [x] **Fluxos `flows/*.js`**: `run --flow <file>` (só o fluxo) e `run --flows` (operações e depois todos os fluxos). Cada `lazyapi.send` vira um passo com checks de request, status e contract. MCP `run_flow`/`write_flow`, e `include_flows` no `run_tests`.
+- [x] **Ordem do `run`**: leituras, POST, PUT/PATCH e por último DELETE (antes o DELETE rodava antes do GET).
+- [x] **Ambientes nomeados** em `lazyapi.config.yml` (server, env file, vars, credenciais por security scheme) com `--env-name`, `$LAZYAPI_ENV`, `env_name` no MCP e `ctrl+v` no TUI. O ambiente aparece no report.
+- [x] **Credenciais**: bearer, basic, API key (header, query, cookie) e OAuth2 (`accessToken` fixo, ou client credentials/password com token automático e cache até expirar). Credenciais vazias não são mais enviadas (antes saía `Authorization: Bearer ` vazio).
+- [x] Exemplos: `before()` com login no `getUser.js`, fluxo `userLifecycle.js`, `lazyapi.config.yml`; tudo roda no `go test` e no CI.
+- [ ] Fluxos no TUI (lista e execução com progresso — junto da "tela do runner" da Fase 8).
+- [ ] `after(res)` para limpeza (ex.: apagar o que um teste criou).
 
-## Fase 7 — Completude HTTP e migração (P1)
+## Fase 7 — Completude HTTP e migração (P1) ← próxima
 
 Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de quem usa Postman ou cURL.
 

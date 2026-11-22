@@ -42,15 +42,17 @@ internal/
     add.go / create.go / remove.go / server.go  # spec editing commands
   runner/                  # Executes operations → structured results (no printing)
     result.go              #   Outcome, Check (status|contract|test|script), OpResult, Report, Summarize, exit codes
-    runner.go              #   Filter, ParseMethods, Run (ordered OnResult, parallel, bail, retries), RunOne
+    runner.go              #   Filter, ParseMethods, Run (reads→POST→PUT/PATCH→DELETE, parallel, bail, retries), RunOne, Exchange
+    flow.go                #   RunFlow (flows/*.js; every lazyapi.send step gets request/status/contract checks), FindFlows
   report/                  # Renders runner results: pretty (FormatOp/WriteSummary), json, junit, tap; body policy
   inspect/                 # ListOperations, Describe (with referenced schemas), Validate (OpenAPI + scripts compile)
   mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled) + Tools confined to a root dir
+  project/                 # lazyapi.config.yml: named environments (server, env file, vars, auth secrets), Find/Select/Resolve
   mock/                    # Mock server: routes spec paths, answers with examples or SchemaSample, validates requests (422), Prefer: code=/example=
   script/                  # JS/TS test engine: esbuild bundling + goja sandbox
-    script.go              #   Run(source, ExecData, Options) → Result; native bridge; Format
+    script.go              #   Run (post-response), Before (export function before(req)), native bridge, Format
     prelude.js             #   JS side of the API: test, expect matchers, console, LazyResponse
-    bundle.go              #   Bundle() — esbuild plugin: https imports, local imports confined to Root, bare imports rejected
+    bundle.go              #   Bundle() — CommonJS wrapped in (function(module, exports){...}) so exports exist before the body; esbuild plugin: https imports, local imports confined to Root, bare imports rejected
     modules.go             #   ModuleLoader — https fetch, disk cache, lazyapi.lock integrity, Offline/Reload/Frozen/AllowedHosts
     spec.go                #   SpecContext (lazyapi.send + contract), ResolveTarget, OperationOptions
     lazyapi.d.ts           #   Public script API (embedded; printed by `lazyapi types`)
@@ -79,7 +81,8 @@ internal/
   inmath/                  # Math utilities
     counters.go            #   Circle() — wraps int within [min, max] (typo: Circle → Circle)
   model/                   # Core types
-    request.go             #   Request, OpenAPIRef, Send()/SendContext(), HTTPRequest (the exact *http.Request sent), ResolvedURL, MissingPathParams
+    request.go             #   Request, OpenAPIRef, Send()/SendContext(), HTTPRequest (the exact *http.Request sent; empty credentials are skipped), ResolvedURL, MissingPathParams
+    oauth.go               #   AuthSecrets, ApplySecrets (by scheme name), OAuth2 client_credentials/password token fetch + cache
     method.go              #   Method iota (POST=0..HEAD), MarshalYAML/UnmarshalYAML/Label
     body.go                #   Body {MimeType, Raw}, MimeType constants
     auth.go                #   AuthType iota, AuthScheme {all secrets + schema metadata}
@@ -133,6 +136,9 @@ internal/
 - **Run safety** — runs only `GET,HEAD,OPTIONS` unless `--methods` is given; skips operations whose path params have no value (never invents one); a status not declared in the operation's `responses` is a failed `status` check (exit 1).
 - **Execution** — all checks live in `internal/runner`: request (`store.ValidateRequest` on `Request.HTTPRequest`, does not block sending) → status declared → contract (`store.ValidateResponse`) → script. `--no-contract` skips request + contract. CLI and MCP only render `runner.Report`/`OpResult`. Never print from runner.
 - **Exit codes** — 0 ok, 1 a check failed, 2 usage, 3 could not run (errors win over failures). Return `*cli.ExitError` (`usageErr`, `runtimeErr`) instead of plain errors from commands.
+- **before(req)** — `script.Before` evaluates the module once with side effects suppressed (test/console/vars/send are no-ops, top-level errors swallowed), then calls the exported `before` with the full API. The runner applies it before the request check and the send; if it throws, the request is not sent (failed `script` check).
+- **Flows** — `run --flow f.js` (only flows) or `--flows` (operations, then `flows/*.js`); MCP `run_flow`/`write_flow`. Results have `kind: "flow"` and `steps`.
+- **Environments** — `project.Resolve(spec, --env-name, --server, --env)`: explicit flags win; secrets go to `runner.Options.Auth` → `model.ApplySecrets` (operations, `lazyapi.send`, flows, TUI). TUI `ctrl+v` cycles named envs when a config exists.
 - **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
 
