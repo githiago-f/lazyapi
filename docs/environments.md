@@ -28,9 +28,19 @@ environments:
   production:
     server: "1"                # an index into the spec's servers also works
     env: .env.production
+    http:                      # TLS, proxy and redirects for this environment
+      caCert: certs/internal-ca.pem     # paths are relative to this file
+      clientCert: certs/client.pem
+      clientKey: certs/client-key.pem
+      proxy: http://proxy.internal:3128
+      noRedirects: false
+      maxRedirects: 5
+      insecure: false
 ```
 
 Keep secrets in the env files (gitignored) and reference them with templates. The config file itself can be committed.
+
+CLI flags such as `--insecure` or `--proxy` are combined with the environment's `http` settings.
 
 ## Using an environment
 

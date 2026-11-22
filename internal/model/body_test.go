@@ -12,18 +12,26 @@ import (
 	"testing"
 )
 
+type captured struct {
+	header http.Header
+	body   []byte
+}
+
+// capture returns a server and a function that yields the last request it
+// received (passed through a channel, so the race detector sees the handoff).
 func capture(t *testing.T) (*httptest.Server, func() *http.Request) {
 	t.Helper()
-	var last *http.Request
-	var body []byte
+	ch := make(chan captured, 16)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ = io.ReadAll(r.Body)
-		last = r
+		body, _ := io.ReadAll(r.Body)
+		ch <- captured{header: r.Header.Clone(), body: body}
 	}))
 	t.Cleanup(srv.Close)
 	return srv, func() *http.Request {
-		last.Body = io.NopCloser(strings.NewReader(string(body)))
-		return last
+		c := <-ch
+		r, _ := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(string(c.body)))
+		r.Header = c.header
+		return r
 	}
 }
 

@@ -107,8 +107,15 @@ lazyapi list ops api.yml --json
 lazyapi describe api.yml getUser --json      # params, bodies, responses, referenced schemas
 lazyapi validate spec api.yml                # OpenAPI + operationIds + test scripts compile
 lazyapi mock api.yml --port 4010             # fake API; Prefer: code=404 picks a response
+lazyapi import postman shop.json --into api.yml   # also: curl '<command>', har capture.har
+lazyapi send request api.yml --op getUser --output curl
+lazyapi send request api.yml --op upload --file avatar=./me.png --form caption=hi
 lazyapi types                                # script API (TypeScript definitions)
 ```
+
+TLS (`--insecure`, `--ca-cert`, mTLS), proxies, redirects and body limits can be set per run or per environment. Results include timing (DNS, connect, TLS, TTFB) and cookies.
+
+Coming from Postman? `lazyapi import postman` converts a collection into operations and keeps its scripts running through a `pm` compatibility layer. Folders become tags, and tokens go to an env file, not into the spec.
 
 Named environments and credentials (bearer, basic, API key, OAuth2 client credentials/password with automatic tokens) live in `lazyapi.config.yml`. See [docs/environments.md](docs/environments.md).
 

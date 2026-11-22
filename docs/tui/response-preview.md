@@ -12,6 +12,8 @@ The editor and the request list show responses in the same view. Both send reque
 |-----|---------|
 | **Body** | Pretty-printed and syntax-highlighted (JSON, YAML, XML, HTML, JS, CSS). JSON keeps key order and is not HTML-escaped. `r` shows the raw body |
 | **Headers** | The request that was sent (URL, headers with secrets redacted) and the response headers |
+| **Cookies** | Cookies set by the response, with domain, path, expiry, `HttpOnly`, `Secure` and `SameSite` |
+| **Timeline** | DNS, TCP connect, TLS handshake, waiting (TTFB) and download, as proportional bars; a reused keep-alive connection is noted |
 | **Checks** | `status` (declared in the spec), `contract` (body/headers match the schema) and every `test()` from the script, each with its failure message |
 | **Console** | `console.log/info/warn/error` from the test script |
 
