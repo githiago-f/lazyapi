@@ -3,6 +3,8 @@ package model
 import (
 	"testing"
 
+	"strings"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -170,5 +172,20 @@ func TestMethodYAMLRoundtrip(t *testing.T) {
 		if deserialized != m {
 			t.Errorf("YAML roundtrip failed for Method(%d): got %d", m, deserialized)
 		}
+	}
+}
+
+func TestParseMethod(t *testing.T) {
+	for m := POST; m <= LastMethod; m++ {
+		if got, ok := ParseMethod(" " + strings.ToLower(m.Label()) + " "); !ok || got != m {
+			t.Errorf("ParseMethod(%q) = %v, %v", m.Label(), got, ok)
+		}
+	}
+	if _, ok := ParseMethod("TRACE"); ok {
+		t.Error("TRACE is not supported")
+	}
+	var m Method
+	if err := yaml.Unmarshal([]byte("trace"), &m); err == nil {
+		t.Error("an unknown method in YAML must be an error, not POST")
 	}
 }
