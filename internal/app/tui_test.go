@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/history"
 )
 
 const tuiSpec = `openapi: 3.0.0
@@ -196,6 +197,23 @@ func TestTUI_HistoryAfterSend(t *testing.T) {
 	tm.Send(press("esc"))
 	tm.Send(press("enter")) // replay opens the editor
 	waitFor(t, tm, "Send", "Docs")
+}
+
+func TestTUI_ClearHistory(t *testing.T) {
+	tm, _ := newTUI(t)
+	waitFor(t, tm, "/orders")
+	tm.Send(press("down"))
+	tm.Send(press("s"))
+	waitFor(t, tm, "200 OK")
+	tm.Send(press("H"))
+	waitFor(t, tm, "1 request")
+	tm.Send(press("X"))
+	waitFor(t, tm, "Delete all 1 saved request?")
+	tm.Send(press("y"))
+	waitFor(t, tm, "History cleared", "Nothing sent yet.")
+	if files, _ := filepath.Glob(filepath.Join(history.Dir(), "*.jsonl")); len(files) != 0 {
+		t.Errorf("history files left: %v", files)
+	}
 }
 
 func TestTUI_EditorSendAndEscBack(t *testing.T) {

@@ -86,3 +86,32 @@ paths:
 		t.Errorf("enter should replay the selected entry")
 	}
 }
+
+func TestHistoryClearAsksFirst(t *testing.T) {
+	now := time.Now()
+	m := New()
+	m.SetSize(140, 30)
+	m.SetEntries([]history.Entry{entry("a.yml", now, 200, `{}`), entry("b.yml", now, 200, `{}`), entry("a.yml", now, 200, `{}`)})
+
+	m, _ = m.Update(press("X"))
+	if !strings.Contains(ansi.Strip(m.View()), "Delete all 3 saved requests?") {
+		t.Fatalf("no confirmation:\n%s", ansi.Strip(m.View()))
+	}
+	m, cmd := m.Update(press("n"))
+	if cmd != nil || m.confirmClear {
+		t.Error("any other key keeps the history")
+	}
+
+	m, _ = m.Update(press("X"))
+	_, cmd = m.Update(press("y"))
+	msg, ok := cmd().(ClearMsg)
+	if !ok || len(msg.Specs) != 2 || msg.Specs[0] != "a.yml" || msg.Specs[1] != "b.yml" {
+		t.Errorf("clear = %#v", msg)
+	}
+
+	empty := New()
+	empty, _ = empty.Update(press("X"))
+	if empty.confirmClear {
+		t.Error("nothing to clear: no confirmation")
+	}
+}

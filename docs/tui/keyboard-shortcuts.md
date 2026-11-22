@@ -89,6 +89,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `enter` | Replay: open the request in the editor with the values it was sent with |
 | `d` | Diff the response with the previous response of the same operation |
 | `x` | Diff the response with the example saved in the spec |
+| `X` | Delete the history shown (asks `y`/`N`) |
 | `tab` | Focus the response details |
 | `esc` | Close the diff, then back |
 
