@@ -18,7 +18,7 @@ internal/
         header.go          #     Header key/value pairs (n+a to add)
         params.go          #     Query + Path params (n+q / n+p to add)
         auth.go            #     Auth schemes (n+a / x+a to add/remove)
-        tests.go           #     Tests tab — Lua script editor, F5 runs it; default template is not persisted
+        tests.go           #     Tests tab — JS/TS script editor, F5 runs it via internal/script; default template is not persisted
         field.go           #     paramField helper (name+value pair)
       requests/            #   Request browser (compact list + preview + tags)
         list.go            #     RequestList — custom compact list with filter, tag grouping, scroll
@@ -39,8 +39,13 @@ internal/
     send.go                #   SendRequest (--server, --env, --param/--query/--header, --script, --timeout, --save-example)
     server.go              #   AddServer
     smoke.go               #   SmokeTests (--methods, --tag, --op, --param, --dry-run; status checked vs spec)
-  lua/                     # Embedded Lua test engine (gopher-lua)
-    engine.go              #   RunScript(script, ExecData) → ScriptResult (ordered results + failure messages)
+  script/                  # JS/TS test engine: esbuild bundling + goja sandbox
+    script.go              #   Run(source, ExecData, Options) → Result; native bridge; Format
+    prelude.js             #   JS side of the API: test, expect matchers, console, LazyResponse
+    bundle.go              #   Bundle() — esbuild plugin: https imports, local imports confined to Root, bare imports rejected
+    modules.go             #   ModuleLoader — https fetch, disk cache, lazyapi.lock integrity, Offline/Reload/Frozen/AllowedHosts
+    spec.go                #   SpecContext (lazyapi.send + contract), ResolveTarget, OperationOptions
+    lazyapi.d.ts           #   Public script API (embedded; printed by `lazyapi types`)
   components/              # Reusable UI components
     button.go              #   Button with click debounce
     field.go               #   Field wraps textinput.Model
@@ -82,7 +87,8 @@ internal/
                            #   OpenRequestFile, OpenDraftFile, SaveTempFile, SaveFile,
                            #   DeleteRequestFile, LoadForDuplicate, SaveResponseExampleCmd
     filepath.go            #   Glob() with ** support (Globs type + Expand method)
-    tests.go               #   x-lazyapi-tests: LoadOperationTests, SaveOperationTests, TestScriptName
+    tests.go               #   x-lazyapi-tests: LoadOperationTests, SaveOperationTests, OperationTestsPath, TestScriptName (rejects .lua)
+    contract.go            #   ValidateResponse (openapi3filter), ResponseSchemaDeclared
     examples.go            #   ParamExample, DeclaredStatuses, StatusDeclared, FindOperation
     openapi_test.go        #   Auth roundtrip tests using testdata fixtures
     testdata/              #   Static .yml fixtures (minimal.yml, global_security.yml, params.yml)
@@ -104,7 +110,7 @@ internal/
 `internal/store/` — data access. Core functions are synchronous; `tea.Cmd` wrappers in `file_system.go` for TUI.
 
 - **OpenAPI as source of truth** — every `.yml`/`.yaml` file parsed as OpenAPI 3.x via `openapi3.Loader`. `IsOpenAPIFile()` checks for `openapi` or `swagger` root keys via YAML unmarshal.
-- **Test scripts** — persisted as files next to the spec (default `tests/<operationId|method_path>.lua`) and referenced per operation by the `x-lazyapi-tests` extension. Paths must stay inside the spec directory. `OperationToRequest` loads them into `Request.Tests`; `SaveFile` writes them via `SaveOperationTests`. The CLI never reads test scripts from temp files.
+- **Test scripts** — JavaScript/TypeScript files next to the spec (default `tests/<operationId|method_path>.js`) and referenced per operation by the `x-lazyapi-tests` extension. Paths must stay inside the spec directory. `OperationToRequest` loads them into `Request.Tests`; `SaveFile` writes them via `SaveOperationTests`. The CLI never reads test scripts from temp files.
 - **Errors** — `tea.Cmd` wrappers return `store.ErrorMsg{Message}` on failure; the TUI shows it as a notification. Never return `tea.Quit`/`tea.Println` as a `tea.Msg` and never `panic` in store code.
 - **Temp/draft files** — stored in `os.TempDir()/lazyapi/<sanitized-abs-path>/`. Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
 - **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]requests.RequestItem` with Tags), `OperationToRequest` (pre-fills path params and required query/header params from spec examples), `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
@@ -115,9 +121,10 @@ internal/
 - **TUI** (`lazyapi` with no subcommand) — interactive bubbletea UI. Default mode.
 - **CLI** (`lazyapi create|remove|add|send|smoke ...`) — headless commands. Dispatch: `cmd/lazyapi/main.go` checks `os.Args[1]`; known verbs → `cli.Run()`, else → `tea.NewProgram(app.NewTui(...))`.
 - **Flag parsing** — `send`/`smoke` use the stdlib `flag` package via `newFlagSet` + `parseInterleaved` (flags allowed before/after positionals; unknown flags are errors). `main.go` still parses `--env` ad-hoc.
-- **CLI subcommands**: `create file [name] [servers...]`, `add request <file> <path> <method>`, `add server <file> <url>`, `remove request <file> <method> <path>`, `send request <file> <path> <method> [flags]`, `smoke tests <file> [flags]`. See `docs/cli/`.
+- **CLI subcommands**: `create file [name] [servers...]`, `add request <file> <path> <method>`, `add server <file> <url>`, `remove request <file> <method> <path>`, `send request <file> <path> <method> [flags]`, `smoke tests <file> [flags]`, `types`. See `docs/cli/` and `docs/scripting.md`.
 - **Smoke safety** — runs only `GET,HEAD,OPTIONS` unless `--methods` is given; skips operations whose path params have no value (never invents one); a status not declared in the operation's `responses` counts as an error.
 - **Exit status** — `cli.Run` exits 1 on any error, including failed tests and undeclared statuses.
+- **Scripts** — `send`/`smoke` share `opRunner` (`cli/runner.go`): automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
 
 ## Editor Field Cycle
@@ -157,7 +164,7 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 
 ## Testing
 
-- **Test files** next to code (`internal/store/openapi_test.go`). CLI tests use `httptest` servers (`internal/cli/runner_test.go`).
+- **Test files** next to code (`internal/store/openapi_test.go`). CLI tests use `httptest` servers (`internal/cli/runner_test.go`). URL-import tests use an `httptest.NewTLSServer` fake CDN (`internal/script/modules_test.go`) — never hit the real network in tests.
 - **Fixtures** in `internal/store/testdata/` as `.yml` files. Use `fixturePath(name)`.
 - **Avoid `/tmp`** — use `t.TempDir()` for file roundtrips.
 - **Pattern** — roundtrip (marshal → write → read → unmarshal → verify), not UI interaction.

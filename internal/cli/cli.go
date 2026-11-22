@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"os"
+
+	"github.com/githiago-f/lazyapi/internal/script"
 )
 
 func Run(args []string) {
@@ -74,6 +76,10 @@ func run(args []string) error {
 		}
 		return SmokeTests(args[2:])
 
+	case "types":
+		fmt.Print(script.Types)
+		return nil
+
 	default:
 		printUsage()
 		return fmt.Errorf("unknown command: %s", args[0])
@@ -91,13 +97,20 @@ Usage:
   lazyapi remove request <file> <method> <path>  Remove a request from a spec file
   lazyapi send request <file> <path> <method>    Send one request and run its tests
   lazyapi smoke tests <file>                     Run every selected operation and its tests
+  lazyapi types                                  Print the test script API (TypeScript definitions)
 
 Flags (send and smoke):
   --server url|index  Server URL, or index into the spec's servers (default: first)
   --env file          Environment file ({{env.NAME}} values)
-  --script file       Test script; overrides the operation's x-lazyapi-tests file
+  --script file       Test script (.js/.ts); overrides the operation's x-lazyapi-tests file
   --param k=v         Path parameter value (repeatable; default: spec example)
   --timeout 30s       Per-request timeout
+  --script-timeout d  Maximum run time of a test script (default 30s)
+  --no-contract       Do not validate responses against the OpenAPI schema
+  --offline           Never download URL imports; use the module cache only
+  --reload            Re-download URL imports and update lazyapi.lock
+  --frozen-lockfile   Fail if a URL import is not pinned in lazyapi.lock (CI)
+  --allow-import list Hosts URL imports may come from (default: any https host)
 
 Flags (send only):
   --query k=v         Query parameter (repeatable)
@@ -110,7 +123,10 @@ Flags (smoke only):
   --op list           Only these operations (operationId or "METHOD /path")
   --dry-run           Print what would be sent without sending
 
-Test scripts are stored next to the spec and referenced per operation via
-x-lazyapi-tests (e.g. tests/listItems.lua). Commands exit with status 1 when
-a request fails, a status code is not declared in the spec, or a test fails.`)
+Test scripts are JavaScript/TypeScript files stored next to the spec and
+referenced per operation via x-lazyapi-tests (e.g. tests/listItems.js). They
+may import relative files and https:// modules (pinned in lazyapi.lock).
+Responses are validated against the OpenAPI schema automatically.
+Commands exit with status 1 when a request fails, a status code is not
+declared in the spec, the response breaks the schema, or a test fails.`)
 }

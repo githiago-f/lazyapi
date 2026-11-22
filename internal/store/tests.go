@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -19,7 +20,10 @@ const TestsExtension = "x-lazyapi-tests"
 const TestsDir = "tests"
 
 // TestScriptExt is the extension used for newly created test scripts.
-const TestScriptExt = ".lua"
+const TestScriptExt = ".js"
+
+// supportedScriptExts are the script types the engine can run.
+var supportedScriptExts = []string{".js", ".mjs", ".ts", ".mts"}
 
 var nonIdentChars = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
@@ -66,6 +70,17 @@ func resolveTestsPath(specPath, rel string) (string, error) {
 	return full, nil
 }
 
+// OperationTestsPath returns the absolute path of the operation's script:
+// the x-lazyapi-tests file when set, otherwise where a new script would be
+// created. It is used to resolve relative imports inside the script.
+func OperationTestsPath(specPath string, op *openapi3.Operation, ref model.OpenAPIRef) (string, error) {
+	rel := testsRef(op)
+	if rel == "" {
+		rel = TestsDir + "/" + TestScriptName(op, ref)
+	}
+	return resolveTestsPath(specPath, rel)
+}
+
 // LoadOperationTests reads the test script referenced by the operation.
 // It returns "" with no error when the operation has no script.
 func LoadOperationTests(specPath string, op *openapi3.Operation) (string, error) {
@@ -75,6 +90,9 @@ func LoadOperationTests(specPath string, op *openapi3.Operation) (string, error)
 	}
 	full, err := resolveTestsPath(specPath, rel)
 	if err != nil {
+		return "", err
+	}
+	if err := checkScriptExt(rel); err != nil {
 		return "", err
 	}
 	data, err := os.ReadFile(full)
@@ -100,11 +118,15 @@ func SaveOperationTests(spec *openapi3.T, specPath string, ref model.OpenAPIRef,
 	}
 
 	rel := testsRef(op)
-	if rel == "" {
+	if rel == "" || strings.EqualFold(filepath.Ext(rel), ".lua") {
+		// New script, or migrating away from a legacy Lua file.
 		rel = TestsDir + "/" + TestScriptName(op, ref)
 	}
 	full, err := resolveTestsPath(specPath, rel)
 	if err != nil {
+		return err
+	}
+	if err := checkScriptExt(rel); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -118,5 +140,18 @@ func SaveOperationTests(spec *openapi3.T, specPath string, ref model.OpenAPIRef,
 		op.Extensions = map[string]any{}
 	}
 	op.Extensions[TestsExtension] = rel
+	return nil
+}
+
+// checkScriptExt rejects script types the engine cannot run.
+func checkScriptExt(rel string) error {
+	ext := strings.ToLower(filepath.Ext(rel))
+	if ext == ".lua" {
+		return fmt.Errorf("%s: Lua test scripts are no longer supported; rewrite it in JavaScript "+
+			"(run `lazyapi types` for the script API) and point %s at the .js file", rel, TestsExtension)
+	}
+	if !slices.Contains(supportedScriptExts, ext) {
+		return fmt.Errorf("%s: unsupported test script type %q (use %s)", rel, ext, strings.Join(supportedScriptExts, ", "))
+	}
 	return nil
 }

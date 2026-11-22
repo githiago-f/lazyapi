@@ -26,7 +26,7 @@ func copyFixture(t *testing.T, name string) string {
 func TestSaveOperationTests_Roundtrip(t *testing.T) {
 	specPath := copyFixture(t, "minimal.yml")
 	ref := model.OpenAPIRef{FilePath: specPath, Path: "/items/{id}", Method: "GET"}
-	script := `tests["ok"] = response.status() == 200`
+	script := `test("ok", () => expect(response.status).toBe(200));`
 
 	spec, err := ParseSpec(specPath)
 	if err != nil {
@@ -39,7 +39,7 @@ func TestSaveOperationTests_Roundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scriptPath := filepath.Join(filepath.Dir(specPath), "tests", "get_items_id.lua")
+	scriptPath := filepath.Join(filepath.Dir(specPath), "tests", "get_items_id.js")
 	data, err := os.ReadFile(scriptPath)
 	if err != nil {
 		t.Fatalf("script file not written: %v", err)
@@ -49,7 +49,7 @@ func TestSaveOperationTests_Roundtrip(t *testing.T) {
 	}
 
 	raw, _ := os.ReadFile(specPath)
-	if !strings.Contains(string(raw), TestsExtension+": tests/get_items_id.lua") {
+	if !strings.Contains(string(raw), TestsExtension+": tests/get_items_id.js") {
 		t.Errorf("spec does not reference script:\n%s", raw)
 	}
 
@@ -75,8 +75,8 @@ func TestSaveOperationTests_UsesOperationID(t *testing.T) {
 	if err := SaveOperationTests(spec, specPath, ref, "-- t"); err != nil {
 		t.Fatal(err)
 	}
-	if got := spec.Paths.Find("/items").Post.Extensions[TestsExtension]; got != "tests/createItem.lua" {
-		t.Errorf("extension = %v, want tests/createItem.lua", got)
+	if got := spec.Paths.Find("/items").Post.Extensions[TestsExtension]; got != "tests/createItem.js" {
+		t.Errorf("extension = %v, want tests/createItem.js", got)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestLoadOperationTests_RejectsEscapingPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	op := spec.Paths.Find("/items").Get
-	for _, bad := range []string{"../outside.lua", "/etc/passwd"} {
+	for _, bad := range []string{"../outside.js", "/etc/passwd"} {
 		op.Extensions = map[string]any{TestsExtension: bad}
 		if _, err := LoadOperationTests(specPath, op); err == nil {
 			t.Errorf("expected error for %q", bad)
@@ -125,5 +125,44 @@ func TestLoadOperationTests_NoReference(t *testing.T) {
 	got, err := LoadOperationTests(fixturePath("minimal.yml"), spec.Paths.Find("/items").Get)
 	if err != nil || got != "" {
 		t.Errorf("got (%q, %v), want empty, nil", got, err)
+	}
+}
+
+func TestLoadOperationTests_RejectsLua(t *testing.T) {
+	specPath := copyFixture(t, "minimal.yml")
+	spec, err := ParseSpec(specPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := spec.Paths.Find("/items").Get
+	op.Extensions = map[string]any{TestsExtension: "tests/old.lua"}
+	if _, err := LoadOperationTests(specPath, op); err == nil || !strings.Contains(err.Error(), "no longer supported") {
+		t.Errorf("expected Lua rejection, got %v", err)
+	}
+
+	// Saving migrates the reference to a .js file.
+	ref := model.OpenAPIRef{FilePath: specPath, Path: "/items", Method: "GET"}
+	if err := SaveOperationTests(spec, specPath, ref, "test('x', () => {});"); err != nil {
+		t.Fatal(err)
+	}
+	if got := op.Extensions[TestsExtension]; got != "tests/get_items.js" {
+		t.Errorf("extension = %v, want tests/get_items.js", got)
+	}
+}
+
+func TestOperationTestsPath(t *testing.T) {
+	specPath := copyFixture(t, "minimal.yml")
+	spec, err := ParseSpec(specPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := model.OpenAPIRef{FilePath: specPath, Path: "/items/{id}", Method: "DELETE"}
+	got, err := OperationTestsPath(specPath, spec.Paths.Find("/items/{id}").Delete, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(filepath.Dir(specPath), "tests", "delete_items_id.js")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
