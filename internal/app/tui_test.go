@@ -231,7 +231,7 @@ func TestTUI_SwitchNamedEnvironment(t *testing.T) {
 	tm.Send(tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
 	waitFor(t, tm, "Environment: staging", "staging → http://staging.invalid")
 	tm.Send(tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
-	waitFor(t, tm, "Environment: none")
+	waitFor(t, tm, "env: none · ctrl+v") // the toast reuses "Environment: " on screen: only the title is redrawn whole
 }
 
 func TestTUI_EscCancelsRequestInFlight(t *testing.T) {
