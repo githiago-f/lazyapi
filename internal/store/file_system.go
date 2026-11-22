@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"gopkg.in/yaml.v3"
 )
@@ -19,7 +18,7 @@ type RequestFilesMsg struct {
 }
 
 type LoadedRequestListMsg struct {
-	Items []requests.RequestItem
+	Items []model.RequestItem
 }
 
 type LoadedFile struct {
@@ -195,7 +194,7 @@ func FindRequestFiles() tea.Cmd {
 
 func LoadRequestsList(paths []string) tea.Cmd {
 	return func() tea.Msg {
-		var listItems []requests.RequestItem
+		var listItems []model.RequestItem
 		for _, filePath := range paths {
 			spec, err := ParseSpec(filePath)
 			if err != nil {
@@ -289,7 +288,7 @@ func tempPathForRef(ref model.OpenAPIRef) string {
 	return filepath.Join(dir, fmt.Sprintf("tmp.%s.%s", ref.Method, safe))
 }
 
-func ListDrafts(filePath string) []requests.RequestItem {
+func ListDrafts(filePath string) []model.RequestItem {
 	dir := tempDirForFile(filePath)
 	pattern := filepath.Join(dir, "draft.*")
 	matches, err := filepath.Glob(pattern)
@@ -297,7 +296,7 @@ func ListDrafts(filePath string) []requests.RequestItem {
 		return nil
 	}
 
-	var items []requests.RequestItem
+	var items []model.RequestItem
 	for _, draftFile := range matches {
 		data, err := os.ReadFile(draftFile)
 		if err != nil {
@@ -307,7 +306,7 @@ func ListDrafts(filePath string) []requests.RequestItem {
 		if err := yaml.Unmarshal(data, &req); err != nil {
 			continue
 		}
-		items = append(items, requests.RequestItem{
+		items = append(items, model.RequestItem{
 			Method:    req.Method,
 			URI:       req.URI,
 			About:     req.About,
@@ -379,7 +378,7 @@ func SaveTempFile(data model.Request) tea.Cmd {
 	}
 }
 
-func LoadForDuplicate(item requests.RequestItem) tea.Cmd {
+func LoadForDuplicate(item model.RequestItem) tea.Cmd {
 	return func() tea.Msg {
 		if item.DraftPath != "" {
 			file, err := os.Open(item.DraftPath)
@@ -481,7 +480,7 @@ func SaveFile(data model.Request) tea.Cmd {
 	}
 }
 
-func DeleteRequestFile(item requests.RequestItem) tea.Cmd {
+func DeleteRequestFile(item model.RequestItem) tea.Cmd {
 	return func() tea.Msg {
 		if item.DraftPath != "" {
 			if err := os.Remove(item.DraftPath); err != nil {

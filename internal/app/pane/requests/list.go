@@ -220,7 +220,7 @@ func (rl RequestList) View() tea.View {
 		if selected {
 			prefix = cursorMark.String()
 		}
-		rendered = append(rendered, prefix+line.item.RenderCompact(rl.width, selected))
+		rendered = append(rendered, prefix+RenderCompact(line.item, rl.width, selected))
 	}
 
 	if len(rl.filtered) == 0 {

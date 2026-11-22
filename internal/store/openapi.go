@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"gopkg.in/yaml.v3"
 )
@@ -44,8 +43,8 @@ func ParseSpec(path string) (*openapi3.T, error) {
 	return doc, nil
 }
 
-func ListOperations(spec *openapi3.T, filePath string) []requests.RequestItem {
-	var items []requests.RequestItem
+func ListOperations(spec *openapi3.T, filePath string) []model.RequestItem {
+	var items []model.RequestItem
 
 	for _, pathKey := range spec.Paths.InMatchingOrder() {
 		pathItem := spec.Paths.Find(pathKey)
@@ -53,7 +52,7 @@ func ListOperations(spec *openapi3.T, filePath string) []requests.RequestItem {
 			continue
 		}
 		for method, op := range pathItem.Operations() {
-			items = append(items, requests.RequestItem{
+			items = append(items, model.RequestItem{
 				Method: model.MethodFromLabel(method),
 				URI:    pathKey,
 				About: model.About{
@@ -71,7 +70,7 @@ func ListOperations(spec *openapi3.T, filePath string) []requests.RequestItem {
 		}
 	}
 
-	slices.SortStableFunc(items, func(a, b requests.RequestItem) int {
+	slices.SortStableFunc(items, func(a, b model.RequestItem) int {
 		if c := strings.Compare(strings.ToLower(a.URI), strings.ToLower(b.URI)); c != 0 {
 			return c
 		}
@@ -359,7 +358,7 @@ func LoadServers(filePath string) ([]string, string) {
 	return servers, ""
 }
 
-func LoadPersistedServerURL(item requests.RequestItem) string {
+func LoadPersistedServerURL(item model.RequestItem) string {
 	var path string
 	if item.OpenAPIRef != nil {
 		path = tempPathForRef(*item.OpenAPIRef)

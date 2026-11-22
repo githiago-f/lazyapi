@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"gopkg.in/yaml.v3"
 )
@@ -125,7 +124,7 @@ func TestLoadForDuplicate_Draft(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	item := requests.RequestItem{
+	item := model.RequestItem{
 		URI:       "/items",
 		Method:    model.POST,
 		DraftPath: draftFile,
@@ -724,7 +723,7 @@ servers:
 		t.Fatal(err)
 	}
 
-	item := requests.RequestItem{
+	item := model.RequestItem{
 		URI:       "/items",
 		Method:    model.POST,
 		DraftPath: draftFile,
@@ -748,7 +747,7 @@ servers:
 }
 
 func TestLoadForDuplicate_OpenAPIRefPreservesServers(t *testing.T) {
-	item := requests.RequestItem{
+	item := model.RequestItem{
 		URI:    "/items",
 		Method: model.POST,
 		OpenAPIRef: &model.OpenAPIRef{

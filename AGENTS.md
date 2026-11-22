@@ -26,7 +26,7 @@ internal/
       requests/            #   Request browser (compact list + preview + tags)
         list.go            #     RequestList — custom compact list with filter, tag grouping, scroll
         group.go           #     GroupByTags — groups items by first OpenAPI tag
-        item.go            #     RequestItem (Method, URI, About, Tags, RenderCompact)
+        item.go            #     RequestItem = model.RequestItem; RenderCompact, methodStyle
         preview.go         #     PreviewModel — request header only (the TUI renders the response below it)
         tags.go            #     TagsOverlay — cursor-positioned tag editor (add/delete/change)
       responses/           #   Response view shared by editor and list preview
@@ -124,7 +124,7 @@ internal/
 - **`model.About`** — `{Summary, Description}` for operation documentation.
 - **`model.Body`** — `{MimeType, Raw}`. Constants: `ApplicationJSON` (`"application/json"`), `PlainText` (`"text/plain"`).
 - **`model.AuthScheme`** — Single struct for all types (Basic, Bearer, API Key, OAuth2) with both schema-definition fields and secret fields.
-- **`requests.RequestItem`** — Display item: Method, URI, About, Tags, FileName, DraftPath, OpenAPIRef, RequestTime. Has `RenderCompact()` for single-line list rendering. No longer implements `list.Item`.
+- **`model.RequestItem`** — List item data: Method, URI, About, Tags, FileName, DraftPath, OpenAPIRef, RequestTime, `FilterValue()`. `requests.RequestItem` is an alias; `requests.RenderCompact(item, width, selected)` renders one line.
 - **`config.PageIndex`** — `RequestList` (0) or `RequestEditor` (1).
 
 ## Store Layer
@@ -135,7 +135,7 @@ internal/
 - **Test scripts** — JavaScript/TypeScript files next to the spec (default `tests/<operationId|method_path>.js`) and referenced per operation by the `x-lazyapi-tests` extension. Paths must stay inside the spec directory. `OperationToRequest` loads them into `Request.Tests`; `SaveFile` writes them via `SaveOperationTests`. The CLI never reads test scripts from temp files.
 - **Errors** — `tea.Cmd` wrappers return `store.ErrorMsg{Message}` on failure; the TUI shows it as a notification. Never return `tea.Quit`/`tea.Println` as a `tea.Msg` and never `panic` in store code.
 - **Temp/draft files** — stored in `os.TempDir()/lazyapi/<sanitized-abs-path>/`. Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
-- **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]requests.RequestItem` with Tags), `OperationToRequest` (pre-fills path params and required query/header params from spec examples), `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
+- **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]model.RequestItem` with Tags), `OperationToRequest` (pre-fills path params and required query/header params from spec examples), `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
 - **`Glob`** — custom double-star (`**`) glob in `filepath.go` using `strings.Split` + `filepath.Walk`.
 
 ## TUI vs CLI
@@ -171,7 +171,7 @@ internal/
 - List sends use `store.LoadRequest(ref)` (temp edits, else spec with examples). Non-safe methods (POST/PUT/PATCH/DELETE) go through a y/N confirmation overlay.
 - `Tui.capturesKeys()` (list filter, editor URI/tab content, response search) disables global shortcuts like `q`, `?`, `ctrl+v`.
 - Environment: `ctrl+v` cycles `env.Discover(".")` via `env.Store.SetPath`; the title bar shows spec and env.
-- `pane/requests` must not import `responses`/`runner` (store imports `requests` → import cycle). The TUI composes preview header + `previewResp`.
+- Core packages (store, runner, script, mcp, …) must not import `internal/app` or `internal/components` (enforced by `internal/archtest`). `model.RequestItem` is the list item data; `app/pane/requests` aliases it and renders it (`RenderCompact`).
 
 ## Editor Field Cycle
 
@@ -202,7 +202,6 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - HTTP-method→string mapping repeated in 5 places (Method.Label, Method.UnmarshalYAML, methodFromLabel, RemoveOperationFromSpec, hardcoded strings).
 - Parameter-ref creation blocks duplicated between `AddOperationToSpec` and `ApplyRequestToOperation`.
 - `env.Load()` and `mergeDotenv()` share identical line-parsing logic.
-- `store` imports the UI package `app/pane/requests` (`RequestItem`); move the item data type to `model` to break the dependency.
 - bubbles viewport mispositions highlights on ANSI-colored content (`parseMatches` mixes stripped and raw offsets); the response view strips colors while a search is active.
 
 ### Linter (3 deprecations)
