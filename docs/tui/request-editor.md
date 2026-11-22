@@ -59,10 +59,10 @@ Custom HTTP headers as key/value pairs. Add with `n` + `h`. Common headers like 
 
 ### Body
 
-The request body textarea. Supports two content types:
+The request body, in the operation's media type:
 
-- **`application/json`** — format your JSON here
-- **`text/plain`** — plain text
+- **JSON, text, XML, …** — a text area (`ctrl+x` opens it in `$EDITOR`).
+- **`application/x-www-form-urlencoded` and `multipart/form-data`** — **Form fields**: one name/value row per field, like the Headers tab. `tab` / `shift+tab` move between cells, `ctrl+g` adds a field, a row without a name is dropped, and a repeated name sends the field several times. The rows are kept as a JSON object, which is encoded as form fields when sending; `ctrl+x` edits that object in `$EDITOR`. File parts are only sent from the CLI (`--file`).
 
 Select the type from the dropdown.
 

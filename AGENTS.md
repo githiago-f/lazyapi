@@ -54,7 +54,7 @@ internal/
   history/                 # TUI request history per spec (user cache dir, jsonl, 0600): no env/auth secrets, sensitive headers/query redacted, body templates kept; Replay
   diff/                    # Line diff (LCS with prefix/suffix trimming), hunks with folded context
   jq/                      # gojq wrapper: Apply(filter, body) with timeout, Check(filter)
-  importer/                # curl / Postman / HAR → spec operations (Apply: path templating, inferred schemas, security, tests); pm compat scripts
+  importer/                # curl / Postman (+ environments: WriteEnvironment → .env.<name> + project.AddEnvironment) / HAR → spec operations (Apply: path templating, inferred schemas, security, tests); pm compat scripts
   mock/                    # Mock server: routes spec paths, answers with examples or SchemaSample, validates requests (422), Prefer: code=/example=
   script/                  # JS/TS test engine: esbuild bundling + goja sandbox
     script.go              #   Run (post-response), Before (export function before(req)), native bridge, Format
@@ -62,7 +62,7 @@ internal/
     postman.js             #   `pm` compatibility layer (pm.test/expect with Chai subset, pm.response, variable scopes)
     bundle.go              #   Bundle() — CommonJS wrapped in (function(module, exports){...}) so exports exist before the body; esbuild plugin: https imports, local imports confined to Root, bare imports rejected
     modules.go             #   ModuleLoader — https fetch, disk cache, lazyapi.lock integrity, Offline/Reload/Frozen/AllowedHosts
-    spec.go                #   SpecContext (lazyapi.send + contract), ResolveTarget, OperationOptions
+    spec.go                #   SpecContext (lazyapi.send + contract; "METHOD https://…" targets mapped with store.MatchPath and sent to that host), ResolveTarget, OperationOptions
     lazyapi.d.ts           #   Public script API (embedded; printed by `lazyapi types`)
   components/              # Reusable UI components
     button.go              #   Button with click debounce
@@ -151,7 +151,7 @@ internal/
 - **after(res)** — `script.Run` calls the exported `after` with `response` once the top level finished (also when tests failed or it threw; not after a timeout). `Result.AfterRan/AfterError` → `runner.afterChecks` adds a `script` check "after() ran without errors". `Before` never calls it.
 - **Flows** — `run --flow f.js` (only flows) or `--flows` (operations, then `flows/*.js`); MCP `run_flow`/`write_flow`. Results have `kind: "flow"` and `steps`.
 - **HTTP** — one client per run from `model.HTTPOptions` (flags merged over the environment's `http:`), set on every request incl. `lazyapi.send`, flows and OAuth2 token calls. `SendTimed` returns DNS/connect/TLS/TTFB timing; results carry `timing` and `cookies`.
-- **Import** — never copy credentials into specs (Authorization/API-key headers become security schemes plus a note). Multipart files must never be read from request bodies (scripts/MCP could exfiltrate files).
+- **Import** — never copy credentials into specs (Authorization/API-key headers become security schemes plus a note). Credentials that are only `{{env.X}}` references go to `Result.Auth` → the environment's `auth:` in lazyapi.config.yml (edited with yaml.Node via `project.AddEnvironment`, never overwriting). Multipart files must never be read from request bodies (scripts/MCP could exfiltrate files).
 - **Environments** — `project.Resolve(spec, --env-name, --server, --env)`: explicit flags win; secrets go to `runner.Options.Auth` → `model.ApplySecrets` (operations, `lazyapi.send`, flows, TUI). TUI `ctrl+v` cycles named envs when a config exists.
 - **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.

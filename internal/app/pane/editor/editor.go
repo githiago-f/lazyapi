@@ -250,6 +250,7 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	*docs = docs.SetValue(formData.About)
 
 	bd := rp.RequestTabs.Tabs[Body].Content.(*body)
+	bd.SetForm(formData.Body.IsForm())
 	bd.SetValue(formData.Body.Raw)
 
 	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
