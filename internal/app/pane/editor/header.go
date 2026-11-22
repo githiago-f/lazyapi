@@ -65,6 +65,9 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !h.active {
 			return &h, nil
 		}
+		if h.grid.completing(h.focusPos) && menuKey(msg) {
+			return &h, h.grid.update(h.focusPos, msg)
+		}
 		total := h.grid.cells()
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.AddHeader):
@@ -79,3 +82,6 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return &h, nil
 }
+
+// Completing reports whether the focused field has its menu open.
+func (h header) Completing() bool { return h.active && h.grid.completing(h.focusPos) }

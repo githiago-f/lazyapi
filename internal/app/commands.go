@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/app/pane/palette"
@@ -12,6 +13,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
 	"github.com/githiago-f/lazyapi/internal/app/pane/runview"
 	"github.com/githiago-f/lazyapi/internal/components"
+	"github.com/githiago-f/lazyapi/internal/components/complete"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/history"
@@ -284,16 +286,35 @@ func (t Tui) replay(e history.Entry) (Tui, tea.Cmd) {
 	return t, func() tea.Msg { return store.LoadedFile{Data: req} }
 }
 
-// templateSource lists the names {{...}} completions offer: the env file's
-// keys and the active environment's vars.
+// templateSource feeds completions and template colors: the env file's
+// keys and the active environment's vars are offered; anything the env
+// (including the process environment) resolves counts as having a value.
 type templateSource struct {
 	store *env.Store
 	vars  map[string]string
 }
 
-func (s *templateSource) names() []string {
-	envMap, _ := s.store.Load()
-	return env.Names(env.Context{Env: envMap, Vars: s.vars})
+func (s *templateSource) Vars() []complete.Var {
+	var out []complete.Var
+	for k, v := range s.store.FileValues() {
+		out = append(out, complete.Var{Ref: "env." + k, Value: v})
+	}
+	for k, v := range s.vars {
+		out = append(out, complete.Var{Ref: "var." + k, Value: v})
+	}
+	return out
+}
+
+func (s *templateSource) Has(ref string) bool {
+	scope, name, _ := strings.Cut(ref, ".")
+	switch scope {
+	case "env":
+		m, _ := s.store.Load()
+		_, ok := m[name]
+		return ok
+	}
+	// var.X is often set by a script at run time: never drawn as missing.
+	return true
 }
 
 // missingRefs lists the editor request's {{env.X}}/{{var.X}} references

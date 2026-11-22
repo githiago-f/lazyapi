@@ -24,13 +24,13 @@ type documentation struct {
 	active      bool
 
 	Summary     components.Field
-	Description components.Text
+	Description components.CodeEditor
 }
 
 func DocumentationTab() *documentation {
 	return &documentation{
 		Summary:     components.InitField("Summary", ""),
-		Description: components.NewTextarea("Longer request description", ""),
+		Description: components.NewCodeEditor(components.LangMarkdown, "Longer description (Markdown)", ""),
 	}
 }
 
@@ -60,15 +60,13 @@ func (d documentation) View() tea.View {
 	activeColor := config.DefaultConfig.PrimaryColor()
 
 	d.Summary.Style = d.Summary.Style.UnsetBorderForeground()
-	d.Description.Style = d.Description.Style.UnsetBorderForeground()
-
-	if d.active {
-		switch docField(d.fieldCursor) {
-		case summary:
-			d.Summary.Style = d.Summary.Style.BorderForeground(activeColor)
-		case description:
-			d.Description.Style = d.Description.Style.BorderForeground(activeColor)
-		}
+	if d.active && docField(d.fieldCursor) == summary {
+		d.Summary.Style = d.Summary.Style.BorderForeground(activeColor)
+	}
+	if d.active && docField(d.fieldCursor) == description {
+		d.Description.Focus()
+	} else {
+		d.Description.Blur()
 	}
 
 	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top,
@@ -92,20 +90,22 @@ func (d documentation) Init() tea.Cmd {
 func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
+		if d.Completing() && menuKey(msg) {
+			break // the open menu takes tab/esc/arrows
+		}
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Next) && d.active:
 			d.fieldCursor = inmath.Circle(d.fieldCursor+1, 0, int(description))
+			return &d, nil
 		case key.Matches(msg, config.DefaultKeyMap.Prev) && d.active:
 			d.fieldCursor = inmath.Circle(d.fieldCursor-1, 0, int(description))
+			return &d, nil
 		}
 
 	case tea.WindowSizeMsg:
 		d.Summary.Style = d.Summary.Style.Width(msg.Width)
 		d.Summary.TextInput.SetWidth(max(0, msg.Width-2))
-		descHeight := max(1, msg.Height-8)
-		d.Description.Style = d.Description.Style.Width(msg.Width).Height(descHeight)
-		d.Description.TextArea.SetWidth(max(0, msg.Width-2))
-		d.Description.TextArea.SetHeight(descHeight)
+		d.Description.SetSize(msg.Width, max(4, msg.Height-6))
 
 	case tabs.SetActiveTabMsg:
 		d.active = msg.Active
@@ -122,10 +122,21 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			model, cmd = d.Summary.Update(msg)
 			d.Summary, _ = model.(components.Field)
 		case description:
-			model, cmd = d.Description.Update(msg)
-			d.Description, _ = model.(components.Text)
+			d.Description.Focus()
+			d.Description, cmd = d.Description.Update(msg)
 		}
 	}
 
 	return &d, cmd
+}
+
+// Completing reports whether a field has its completion menu open.
+func (d documentation) Completing() bool {
+	if !d.active {
+		return false
+	}
+	if docField(d.fieldCursor) == summary {
+		return d.Summary.Completing()
+	}
+	return d.Description.Completing()
 }

@@ -156,6 +156,45 @@ func (as authScheme) updateField(fieldIdx int, msg tea.Msg) (authScheme, tea.Cmd
 	return as, nil
 }
 
+// textField is the text field at fieldIdx (nil for selectors).
+func (as *authScheme) textField(fieldIdx int) *components.Field {
+	inner := fieldIdx - 1
+	switch as.typeSelector.Cursor {
+	case int(model.AuthBasic):
+		switch inner {
+		case 0:
+			return &as.usernameField
+		case 1:
+			return &as.passwordField.Field
+		}
+	case int(model.AuthBearer):
+		if inner == 0 {
+			return &as.tokenField
+		}
+	case int(model.AuthAPIKey):
+		switch inner {
+		case 0:
+			return &as.keyNameField
+		case 2:
+			return &as.keyValueField
+		}
+	case int(model.AuthOAuth2):
+		switch inner {
+		case 1:
+			return &as.clientIDField
+		case 2:
+			return &as.clientSecretField.Field
+		case 3:
+			return &as.authURLField
+		case 4:
+			return &as.tokenURLField
+		case 5:
+			return &as.scopesField
+		}
+	}
+	return nil
+}
+
 func (as *authScheme) viewFields(width int, isActive bool, activeFieldIdx int) string {
 	var lines []string
 
@@ -190,11 +229,11 @@ func renderField(label string, f *components.Field, width int, focused bool) str
 	if focused {
 		f.Style = f.Style.BorderForeground(activeColor)
 	}
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		label,
-		f.View().Content,
-	)
+	parts := []string{label, f.View().Content}
+	if menu := f.MenuView(width); menu != "" && focused {
+		parts = append(parts, menu)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 func renderSelector(label string, s *components.Selector, width int, focused bool) string {
@@ -271,7 +310,7 @@ func (a auth) View() tea.View {
 	activeColor := config.DefaultConfig.PrimaryColor()
 	schemeStyle := lipgloss.NewStyle().
 		Width(a.width-2).
-		Border(lipgloss.NormalBorder()).
+		Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2)).
 		Padding(0, 1)
 
 	fieldBaseOffset := 0
@@ -430,6 +469,16 @@ func (a auth) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// An open completion menu owns tab/esc/arrows.
+		if a.focusPos >= 0 {
+			si, fi := a.resolveField(a.focusPos)
+			if f := a.schemes[si].textField(fi); f != nil && f.Completing() && menuKey(msg) {
+				scheme, cmd := a.schemes[si].updateField(fi, msg)
+				a.schemes[si] = scheme
+				return &a, cmd
+			}
+		}
+
 		// Navigation
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Next):
@@ -455,4 +504,14 @@ func (a auth) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return &a, nil
+}
+
+// Completing reports whether the focused field has its menu open.
+func (a auth) Completing() bool {
+	if !a.active || a.focusPos < 0 || len(a.schemes) == 0 {
+		return false
+	}
+	si, fi := a.resolveField(a.focusPos)
+	f := a.schemes[si].textField(fi)
+	return f != nil && f.Completing()
 }

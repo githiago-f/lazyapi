@@ -37,7 +37,7 @@ func (p PassField) View() tea.View {
 		indicator = "●"
 	}
 	return tea.NewView(p.Style.Inherit(defaultStyle).Render(
-		p.TextInput.View() + " " + indicator,
+		p.Content(!p.ShowContent) + " " + indicator,
 	))
 }
 

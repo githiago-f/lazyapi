@@ -86,6 +86,19 @@ func (s *Store) Load() (map[string]string, error) {
 	return s.env, nil
 }
 
+// FileValues returns only the variables defined in the env file (not the
+// process environment); nil when there is no file.
+func (s *Store) FileValues() map[string]string {
+	if s.filepath == "" {
+		return nil
+	}
+	data, err := os.ReadFile(s.filepath)
+	if err != nil {
+		return nil
+	}
+	return mergeDotenv(nil, string(data))
+}
+
 // ForceReload always re-reads the file and updates the cache.
 func (s *Store) ForceReload() (map[string]string, error) {
 	s.hash = ""
