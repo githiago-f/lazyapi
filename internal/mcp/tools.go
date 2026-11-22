@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/githiago-f/lazyapi/internal/env"
+	"github.com/githiago-f/lazyapi/internal/importer"
 	"github.com/githiago-f/lazyapi/internal/inspect"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/project"
@@ -144,6 +145,31 @@ var toolList = []tool{
 			"source": str("Flow script source"),
 		}),
 		call: (*Tools).writeFlow,
+	},
+	{
+		Name: "import_curl",
+		Description: "Add the operation described by a curl command to a spec (created if missing): path parameters, " +
+			"query/header parameters, body example and inferred schema, security scheme. Credentials are not copied.",
+		InputSchema: obj([]string{"spec", "command"}, map[string]any{
+			"spec":    specArg,
+			"command": str("The curl command line"),
+		}),
+		call: (*Tools).importCurl,
+	},
+	{
+		Name:        "export_curl",
+		Description: "Build the exact request for an operation (examples, overrides, environment credentials, before() hook) and return it as a curl command, without sending it.",
+		InputSchema: obj([]string{"spec", "operation"}, map[string]any{
+			"spec": specArg, "operation": opArg,
+			"server":   str("Server URL, or index into the spec's servers"),
+			"params":   strMap("Path parameters"),
+			"query":    strMap("Query parameters"),
+			"headers":  strMap("Request headers"),
+			"body":     map[string]any{"description": "Request body: a string is sent as-is, anything else is JSON-encoded"},
+			"env_file": str("Environment file, relative to the root"),
+			"env_name": str("Named environment from lazyapi.config.yml"),
+		}),
+		call: (*Tools).exportCurl,
 	},
 	{
 		Name:        "read_test",
@@ -623,4 +649,81 @@ func (t *Tools) writeFlow(_ context.Context, args json.RawMessage) (any, error) 
 		out["compileError"] = err.Error()
 	}
 	return out, nil
+}
+
+func (t *Tools) importCurl(_ context.Context, args json.RawMessage) (any, error) {
+	var a struct {
+		Spec    string `json:"spec"`
+		Command string `json:"command"`
+	}
+	if err := decode(args, &a); err != nil {
+		return nil, err
+	}
+	specPath, err := t.path(a.Spec)
+	if err != nil {
+		return nil, err
+	}
+	r, err := importer.ParseCurl(a.Command)
+	if err != nil {
+		return nil, err
+	}
+	spec := importer.NewSpec("")
+	if _, statErr := os.Stat(specPath); statErr == nil {
+		if spec, err = store.ParseSpec(specPath); err != nil {
+			return nil, err
+		}
+	}
+	res, err := importer.Apply(spec, specPath, []importer.Request{r})
+	if err != nil {
+		return nil, err
+	}
+	if len(res.Added) > 0 {
+		if err := store.SaveSpec(specPath, spec); err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (t *Tools) exportCurl(ctx context.Context, args json.RawMessage) (any, error) {
+	var a struct {
+		runArgs
+		Operation string `json:"operation"`
+		Body      any    `json:"body"`
+	}
+	if err := decode(args, &a); err != nil {
+		return nil, err
+	}
+	specPath, opts, err := t.options(a.runArgs)
+	if err != nil {
+		return nil, err
+	}
+	spec, err := store.ParseSpec(specPath)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := script.ResolveTarget(spec, specPath, a.Operation)
+	if err != nil {
+		return nil, err
+	}
+	if a.Body != nil {
+		raw, ok := a.Body.(string)
+		if !ok {
+			data, err := json.Marshal(a.Body)
+			if err != nil {
+				return nil, err
+			}
+			raw = string(data)
+		}
+		opts.Body = &raw
+	}
+	req, err := runner.Prepare(ctx, spec, specPath, ref, opts)
+	if err != nil {
+		return nil, err
+	}
+	cmd, err := req.Curl(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"curl": cmd}, nil
 }
