@@ -210,6 +210,8 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 
 ## Testing
 
+- **TUI end-to-end**: `internal/app/tui_test.go` runs the whole program with `teatest` against an `httptest` server. Use `start(t, spec)` (it waits for the program to stop: the active page is a package-level variable, so two programs must never overlap), `waitFor` for text that appears, and `finalScreen` for text that changes in place (the renderer redraws only changed cells, e.g. counters).
+
 - **Examples are tests**: `internal/cli/examples_test.go` runs `examples/openapi.yml` + `examples/tests/*.js` against `mock.New` — keep them passing when changing the runner, script API or mock. CI also runs them against `lazyapi mock` and uploads a JUnit report.
 
 - **Test files** next to code (`internal/store/openapi_test.go`). CLI tests use `httptest` servers (`internal/cli/runner_test.go`). URL-import tests use an `httptest.NewTLSServer` fake CDN (`internal/script/modules_test.go`) — never hit the real network in tests.

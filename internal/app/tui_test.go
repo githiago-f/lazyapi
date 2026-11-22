@@ -1,0 +1,259 @@
+package app
+
+import (
+	"bytes"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/exp/teatest/v2"
+	"github.com/githiago-f/lazyapi/internal/components"
+	"github.com/githiago-f/lazyapi/internal/config"
+)
+
+const tuiSpec = `openapi: 3.0.0
+info: {title: Shop, version: "1"}
+servers:
+  - url: %s
+paths:
+  /health:
+    get:
+      operationId: health
+      summary: Service health
+      tags: [system]
+      responses: {"200": {description: ok}}
+  /orders:
+    post:
+      operationId: createOrder
+      summary: Create an order
+      tags: [orders]
+      responses: {"201": {description: created}}
+`
+
+// newTUI starts the whole TUI on a spec served by an httptest server.
+func newTUI(t *testing.T) (*teatest.TestModel, *httptest.Server) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			w.WriteHeader(201)
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"up"}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "shop.yml")
+	if err := os.WriteFile(spec, []byte(fmt.Sprintf(tuiSpec, srv.URL)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return start(t, spec), srv
+}
+
+// start runs the TUI on spec. The program is stopped (and waited for) when
+// the test ends: the TUI keeps the active page in a package-level variable,
+// so two programs must never run at the same time.
+func start(t *testing.T, spec string) *teatest.TestModel {
+	t.Helper()
+	t.Setenv("LAZYAPI_HISTORY_DIR", filepath.Join(filepath.Dir(spec), "history"))
+	config.DefaultConfig.Active = config.RequestList
+	components.Z.NewGlobal()
+	tm := teatest.NewTestModel(t, NewTui(spec, ""), teatest.WithInitialTermSize(140, 40))
+	t.Cleanup(func() {
+		_ = tm.Quit()
+		tm.WaitFinished(t, teatest.WithFinalTimeout(20*time.Second))
+	})
+	return tm
+}
+
+// waitFor waits until every text appears on screen (colors stripped).
+func waitFor(t *testing.T, tm *teatest.TestModel, texts ...string) {
+	t.Helper()
+	var seen bytes.Buffer
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		seen.Write(b)
+		plain := ansi.Strip(seen.String())
+		for _, s := range texts {
+			if !strings.Contains(plain, s) {
+				return false
+			}
+		}
+		return true
+	}, teatest.WithDuration(20*time.Second), teatest.WithCheckInterval(20*time.Millisecond))
+}
+
+// finalScreen stops the program and returns its last frame (colors
+// stripped). Use it for text that changes in place (counters), which the
+// renderer redraws only partially.
+func finalScreen(t *testing.T, tm *teatest.TestModel) string {
+	t.Helper()
+	if err := tm.Quit(); err != nil {
+		t.Fatal(err)
+	}
+	m := tm.FinalModel(t, teatest.WithFinalTimeout(20*time.Second))
+	return ansi.Strip(m.View().Content)
+}
+
+func press(s string) tea.KeyPressMsg {
+	switch s {
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "ctrl+k":
+		return tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}
+	}
+	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
+}
+
+// The list starts on POST /orders (tags sorted: orders, system).
+
+func TestTUI_DestructiveSendAsksFirst(t *testing.T) {
+	tm, _ := newTUI(t)
+	waitFor(t, tm, "/health", "/orders")
+
+	tm.Send(press("s"))
+	waitFor(t, tm, "Send a request that may change data?", "/orders")
+	tm.Send(press("n"))
+	waitFor(t, tm, "Request not sent")
+
+	tm.Send(press("s"))
+	waitFor(t, tm, "may change data?")
+	tm.Send(press("y"))
+	waitFor(t, tm, "201 Created")
+}
+
+func TestTUI_FilterAndSafeSend(t *testing.T) {
+	tm, _ := newTUI(t)
+	waitFor(t, tm, "/orders")
+	tm.Send(press("/"))
+	tm.Type("health")
+	tm.Send(press("enter"))
+	waitFor(t, tm, "Service health")
+	tm.Send(press("s"))
+	// GET is safe: no confirmation, the response shows up with its checks.
+	waitFor(t, tm, "200 OK", "checks")
+}
+
+func TestTUI_PaletteRunsTag(t *testing.T) {
+	tm, _ := newTUI(t)
+	waitFor(t, tm, "/orders")
+	tm.Send(press("ctrl+k"))
+	waitFor(t, tm, "type to search")
+	tm.Type("tag system")
+	tm.Send(press("enter"))
+	waitFor(t, tm, "shop.yml · tag system", "finished")
+	if out := finalScreen(t, tm); !strings.Contains(out, "✓ 1 passed") || !strings.Contains(out, "GET /health") || strings.Contains(out, "POST /orders") {
+		t.Errorf("runner screen:\n%s", out)
+	}
+}
+
+func TestTUI_RunnerEscGoesBack(t *testing.T) {
+	tm, _ := newTUI(t)
+	waitFor(t, tm, "/orders")
+	tm.Send(press("R"))
+	waitFor(t, tm, "finished")
+	tm.Send(press("esc"))
+	waitFor(t, tm, "Press s to send")
+}
+
+func TestTUI_RunWritesNeedsConfirmation(t *testing.T) {
+	tm, _ := newTUI(t)
+	waitFor(t, tm, "/orders")
+	tm.Send(press("ctrl+k"))
+	tm.Type("all operations")
+	tm.Send(press("enter"))
+	waitFor(t, tm, "Run every operation", "2 operations")
+	tm.Send(press("y"))
+	waitFor(t, tm, "finished")
+	if out := finalScreen(t, tm); !strings.Contains(out, "✓ 2 passed") || !strings.Contains(out, "POST /orders") {
+		t.Errorf("runner screen:\n%s", out)
+	}
+}
+
+func TestTUI_HistoryAfterSend(t *testing.T) {
+	tm, _ := newTUI(t)
+	waitFor(t, tm, "/orders")
+	tm.Send(press("down"))
+	tm.Send(press("s"))
+	waitFor(t, tm, "200 OK")
+	tm.Send(press("H"))
+	waitFor(t, tm, "History", "1 request", "GET /health")
+	tm.Send(press("d"))
+	waitFor(t, tm, "No earlier response")
+	tm.Send(press("esc"))
+	tm.Send(press("enter")) // replay opens the editor
+	waitFor(t, tm, "Send", "Docs")
+}
+
+func TestTUI_EditorSendAndEscBack(t *testing.T) {
+	tm, _ := newTUI(t)
+	waitFor(t, tm, "/orders")
+	tm.Send(press("down"))
+	tm.Send(press("enter"))
+	waitFor(t, tm, "No response yet")
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModAlt})
+	waitFor(t, tm, "200 OK")
+	tm.Send(press("esc"))
+	waitFor(t, tm, "Press s to send")
+}
+
+func TestTUI_SwitchNamedEnvironment(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "shop.yml")
+	if err := os.WriteFile(spec, []byte(fmt.Sprintf(tuiSpec, "http://unused.invalid")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := fmt.Sprintf("default: local\nenvironments:\n  local:\n    server: %s\n  staging:\n    server: http://staging.invalid\n", srv.URL)
+	if err := os.WriteFile(filepath.Join(dir, "lazyapi.config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm := start(t, spec)
+
+	waitFor(t, tm, "env: local")
+	// The default environment's server is used: the request reaches srv.
+	tm.Send(press("down"))
+	tm.Send(press("s"))
+	waitFor(t, tm, "200 OK")
+
+	tm.Send(tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
+	waitFor(t, tm, "Environment: staging", "staging → http://staging.invalid")
+	tm.Send(tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
+	waitFor(t, tm, "Environment: none")
+}
+
+func TestTUI_EscCancelsRequestInFlight(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(func() { close(release); srv.Close() })
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "shop.yml")
+	if err := os.WriteFile(spec, []byte(fmt.Sprintf(tuiSpec, srv.URL)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm := start(t, spec)
+
+	waitFor(t, tm, "/orders")
+	tm.Send(press("down"))
+	tm.Send(press("s"))
+	waitFor(t, tm, "Sending")
+	tm.Send(press("esc"))
+	waitFor(t, tm, "request cancelled")
+}
