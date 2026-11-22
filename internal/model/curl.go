@@ -71,10 +71,18 @@ func (r *Request) Curl(ctx context.Context) (string, error) {
 
 // shellQuote wraps s in single quotes for POSIX shells.
 func shellQuote(s string) string {
-	if s != "" && strings.IndexFunc(s, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_./:=@,+%", r))
-	}) < 0 {
+	if s != "" && strings.IndexFunc(s, unsafeShellRune) < 0 {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// unsafeShellRune reports whether r needs quoting in a POSIX shell word.
+func unsafeShellRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return false
+	default:
+		return !strings.ContainsRune("-_./:=@,+%", r)
+	}
 }
