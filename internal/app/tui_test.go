@@ -430,3 +430,53 @@ func TestTUI_CtrlEInEditorDoesNotSaveExample(t *testing.T) {
 		t.Errorf("ctrl+e in a field changed the spec:\n%s", data)
 	}
 }
+
+type memClip struct{ text string }
+
+func (m *memClip) WriteAll(s string) error  { m.text = s; return nil }
+func (m *memClip) ReadAll() (string, error) { return m.text, nil }
+
+func TestTUI_CtrlCCopiesSelection(t *testing.T) {
+	clip := &memClip{}
+	components.Clipboard = clip
+	t.Cleanup(func() { components.Clipboard = components.SystemClipboard{} })
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	t.Cleanup(srv.Close)
+	spec := filepath.Join(t.TempDir(), "api.yml")
+	if err := os.WriteFile(spec, []byte(fmt.Sprintf(`openapi: 3.0.0
+info: {title: API, version: "1"}
+servers: [{url: %s}]
+paths:
+  /items:
+    post:
+      requestBody:
+        content:
+          application/json:
+            example: {name: a}
+      responses: {"200": {description: ok}}
+`, srv.URL)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm := start(t, spec)
+	waitFor(t, tm, "/items")
+	tm.Send(press("enter"))
+	waitFor(t, tm, "No response yet")
+	for i := 0; i < 4; i++ {
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	}
+	for i := 0; i < 4; i++ {
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyRight})
+	}
+	tm.Send(press("enter"))
+	waitFor(t, tm, "✓ valid")
+	tm.Send(tea.KeyPressMsg{Code: 'a', Mod: tea.ModAlt})
+	tm.Send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	waitFor(t, tm, "Copied")
+	if !strings.Contains(clip.text, `"name": "a"`) {
+		t.Errorf("clipboard = %q", clip.text)
+	}
+	// Without a selection, ctrl+c quits as always.
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+	tm.Send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(10*time.Second))
+}

@@ -311,3 +311,6 @@ func formatTestResults(result script.Result) string {
 
 // editorHeight is the script editor's text height (the rest shows results).
 func (tp testsPane) editorHeight() int { return max(1, tp.height*7/10) }
+
+// HasSelection reports whether the script editor has selected text.
+func (tp testsPane) HasSelection() bool { return tp.active && tp.script.HasSelection() }

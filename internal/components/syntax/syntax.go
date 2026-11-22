@@ -237,8 +237,24 @@ var cursorStyle = lipgloss.NewStyle().Reverse(true)
 // Render draws runes [from, from+width) of l. cursor (a rune index, or -1)
 // is drawn reversed; a cursor at the end of the line is a reversed space.
 func Render(l Line, from, width, cursor int) string {
+	return RenderSelection(l, from, width, cursor, -1, -1)
+}
+
+var selectionBg = lipgloss.Color(config.Surface2)
+
+// RenderSelection is Render with runes [selStart, selEnd) drawn on the
+// selection background (selEnd past the line marks the line break too).
+func RenderSelection(l Line, from, width, cursor, selStart, selEnd int) string {
 	if width <= 0 {
 		return ""
+	}
+	inSel := func(i int) bool { return i >= selStart && i < selEnd }
+	style := func(i int) lipgloss.Style {
+		st := styles[l.Kinds[i]]
+		if inSel(i) {
+			st = st.Background(selectionBg)
+		}
+		return st
 	}
 	var b strings.Builder
 	end := min(l.Len(), from+width)
@@ -250,14 +266,17 @@ func Render(l Line, from, width, cursor int) string {
 			continue
 		}
 		j := i
-		for j < end && l.Kinds[j] == l.Kinds[i] && j != cursor {
+		for j < end && l.Kinds[j] == l.Kinds[i] && j != cursor && inSel(j) == inSel(i) {
 			j++
 		}
-		b.WriteString(styles[l.Kinds[i]].Render(string(l.Runes[i:j])))
+		b.WriteString(style(i).Render(string(l.Runes[i:j])))
 		i = j
 	}
-	if cursor >= l.Len() && cursor >= from && cursor < from+width {
+	switch {
+	case cursor >= l.Len() && cursor >= from && cursor < from+width:
 		b.WriteString(cursorStyle.Render(" "))
+	case selEnd > l.Len() && l.Len() >= from && l.Len() < from+width:
+		b.WriteString(lipgloss.NewStyle().Background(selectionBg).Render(" ")) // the selected line break
 	}
 	return b.String()
 }

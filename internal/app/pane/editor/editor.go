@@ -691,3 +691,17 @@ func menuKey(k tea.KeyPressMsg) bool {
 	}
 	return false
 }
+
+// HasSelection reports whether the open tab's editor has selected text:
+// ctrl+c then copies it instead of quitting.
+func (rp RequestPane) HasSelection() bool {
+	if field(rp.fieldsCursor) != reqTabs || !rp.BlockTab {
+		return false
+	}
+	content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor()].Content
+	if sc, ok := content.(scrollable.Model); ok {
+		content = sc.Content
+	}
+	h, ok := content.(interface{ HasSelection() bool })
+	return ok && h.HasSelection()
+}

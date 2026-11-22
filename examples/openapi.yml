@@ -59,7 +59,13 @@ openapi: 3.0.0
 paths:
     /auth/login:
         post:
+            description: Login example
             operationId: login
+            parameters:
+                - in: query
+                  name: Variavel
+                  schema:
+                    type: string
             requestBody:
                 content:
                     application/json:
@@ -94,6 +100,7 @@ paths:
             summary: Exchange credentials for a token
             tags:
                 - auth
+            x-lazyapi-tests: tests/login.js
     /health:
         get:
             operationId: healthCheck

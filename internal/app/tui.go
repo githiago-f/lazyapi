@@ -891,7 +891,9 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t, nil
 		}
 		switch {
-		case key.Matches(msg, config.DefaultKeyMap.Kill):
+		// With text selected in an editor, ctrl+c copies it (handled below).
+		case key.Matches(msg, config.DefaultKeyMap.Kill) &&
+			!(config.DefaultConfig.Active == config.RequestEditor && t.editor.HasSelection()):
 			return t, tea.Quit
 		case key.Matches(msg, config.DefaultKeyMap.Palette) && t.tagsOverlay == nil:
 			w, h := t.width, t.height

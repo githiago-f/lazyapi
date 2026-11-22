@@ -189,3 +189,126 @@ func TestCodeEditorTypingThroughMenus(t *testing.T) {
 		t.Errorf("typed %q\n got  %q", src, c.Value())
 	}
 }
+
+type memClipboard struct{ text string }
+
+func (m *memClipboard) WriteAll(s string) error  { m.text = s; return nil }
+func (m *memClipboard) ReadAll() (string, error) { return m.text, nil }
+
+func k(s string) tea.KeyPressMsg {
+	m := tea.KeyPressMsg{}
+	for {
+		switch {
+		case strings.HasPrefix(s, "shift+"):
+			m.Mod |= tea.ModShift
+			s = s[6:]
+			continue
+		case strings.HasPrefix(s, "alt+"):
+			m.Mod |= tea.ModAlt
+			s = s[4:]
+			continue
+		case strings.HasPrefix(s, "ctrl+"):
+			m.Mod |= tea.ModCtrl
+			s = s[5:]
+			continue
+		}
+		break
+	}
+	switch s {
+	case "left":
+		m.Code = tea.KeyLeft
+	case "right":
+		m.Code = tea.KeyRight
+	case "down":
+		m.Code = tea.KeyDown
+	case "end":
+		m.Code = tea.KeyEnd
+	case "home":
+		m.Code = tea.KeyHome
+	case "tab":
+		m.Code = tea.KeyTab
+	case "esc":
+		m.Code = tea.KeyEscape
+	case "backspace":
+		m.Code = tea.KeyBackspace
+	default:
+		m.Code = []rune(s)[0]
+	}
+	return m
+}
+
+func TestCodeEditorSelection(t *testing.T) {
+	clip := &memClipboard{}
+	Clipboard = clip
+	defer func() { Clipboard = SystemClipboard{} }()
+
+	c := NewCodeEditor(LangText, "", "hello world\nsecond line")
+	c.SetSize(60, 12)
+	c = typeIn(c, k("shift+end"))
+	if c.SelectedText() != "hello world" {
+		t.Fatalf("shift+end: %q", c.SelectedText())
+	}
+	c = typeIn(c, k("shift+left"), k("shift+left"))
+	if c.SelectedText() != "hello wor" {
+		t.Errorf("shrink: %q", c.SelectedText())
+	}
+	c, cmd := c.Update(k("ctrl+c"))
+	if clip.text != "hello wor" || cmd == nil {
+		t.Errorf("copy: %q", clip.text)
+	}
+	if !c.HasSelection() {
+		t.Error("copy keeps the selection")
+	}
+	c = typeIn(c, "X")
+	if c.Value() != "Xld\nsecond line" || c.HasSelection() {
+		t.Errorf("typing replaces: %q", c.Value())
+	}
+
+	// A quote wraps the selection; esc clears it.
+	c.SetValue("abc")
+	c = typeIn(c, k("alt+a"), "\"")
+	if c.Value() != "\"abc\"" {
+		t.Errorf("wrap: %q", c.Value())
+	}
+	c = typeIn(c, k("shift+left"), k("esc"))
+	if c.HasSelection() {
+		t.Error("esc clears the selection")
+	}
+
+	// Multi-line cut and paste.
+	c.SetValue("one\ntwo\nthree")
+	c = typeIn(c, k("shift+down"), k("shift+end"))
+	c, _ = c.Update(k("alt+x"))
+	if c.Value() != "\nthree" || clip.text != "one\ntwo" {
+		t.Errorf("cut: %q / %q", c.Value(), clip.text)
+	}
+	c = typeIn(c, k("alt+v"))
+	if c.Value() != "one\ntwo\nthree" {
+		t.Errorf("paste: %q", c.Value())
+	}
+
+	// tab / shift+tab indent the selected lines.
+	c.SetValue("a\nb\nc")
+	c = typeIn(c, k("shift+down"), k("shift+end"), k("tab"))
+	if c.Value() != "  a\n  b\nc" || !c.HasSelection() {
+		t.Errorf("indent: %q", c.Value())
+	}
+	c = typeIn(c, k("shift+tab"))
+	if c.Value() != "a\nb\nc" {
+		t.Errorf("dedent: %q", c.Value())
+	}
+	c = typeIn(c, k("backspace"))
+	if c.Value() != "\nc" { // "a\nb" was selected; the last line break stays
+		t.Errorf("backspace deletes the selection: %q", c.Value())
+	}
+	// A plain movement drops the selection.
+	c.SetValue("xy")
+	c = typeIn(c, k("shift+right"))
+	if !strings.Contains(c.View().Content, "48;2;88;91;112") {
+		t.Error("selected text has the selection background")
+	}
+	c = typeIn(c, k("right"))
+	if c.HasSelection() {
+		t.Error("moving without shift clears the selection")
+	}
+}
