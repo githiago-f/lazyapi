@@ -15,27 +15,14 @@ import (
 // variables. System env is loaded first; .env values override system values.
 // If filepath is empty, returns only system env.
 func Load(filepath string) (map[string]string, error) {
-	env := loadSystemEnv()
-
 	if filepath == "" {
-		return env, nil
+		return loadSystemEnv(), nil
 	}
-
-	f, err := os.Open(filepath)
+	data, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		key, val, ok := parseEnvLine(scanner.Text())
-		if ok {
-			env[key] = val
-		}
-	}
-
-	return env, scanner.Err()
+	return mergeDotenv(loadSystemEnv(), string(data)), nil
 }
 
 func loadSystemEnv() map[string]string {
@@ -94,10 +81,7 @@ func (s *Store) Load() (map[string]string, error) {
 		return s.env, nil
 	}
 
-	env := loadSystemEnv()
-	env = mergeDotenv(env, string(data))
-
-	s.env = env
+	s.env = mergeDotenv(loadSystemEnv(), string(data))
 	s.hash = hash
 	return s.env, nil
 }
