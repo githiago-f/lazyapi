@@ -27,7 +27,7 @@ lazyapi run <spec.yml> [flags]
 | Flag | Description |
 |------|-------------|
 | `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first) |
-| `--env <file>` | `.env` file for `{{env.NAME}}` |
+| `--env <file>` | `.env` file for <code v-pre>{{env.NAME}}</code> |
 | `--param k=v` | Path parameter for operations that declare it (repeatable). Otherwise the spec's example is used; with no value at all, the operation is skipped |
 | `--query k=v`, `--header k=v` | Added to every request (repeatable) |
 | `--timeout <d>` | Per-request timeout (default `30s`) |

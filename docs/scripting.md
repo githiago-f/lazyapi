@@ -59,8 +59,8 @@ Add `/// <reference path="./lazyapi.d.ts" />` to the top of a script for autocom
 |--------|-------------|
 | `request` | The request sent: `method`, `url`, `path`, `headers` (lower-cased), `query`, `params`, `body`, `json()` |
 | `response` | `status`, `statusText`, `headers` (lower-cased), `body`, `time` (ms), `header(name)`, `json()`, `text()`. `null` in the TUI before a request is sent |
-| `env` | `get`, `set`, `has`, `all` over environment variables (`{{env.X}}`). Changes last for the current run |
-| `vars` | Same API for run variables (`{{var.X}}`). During `run` (without `--parallel`), later operations see them |
+| `env` | `get`, `set`, `has`, `all` over environment variables (<code v-pre>{{env.X}}</code>). Changes last for the current run |
+| `vars` | Same API for run variables (<code v-pre>{{var.X}}</code>). During `run` (without `--parallel`), later operations see them |
 | `lazyapi.send(target, opts?)` | Sends another operation synchronously and returns its response. `opts`: `params`, `query`, `headers`, `body` (objects are JSON-encoded) |
 | `test(name, fn)` | Registers a test. It fails if `fn` throws or returns a rejected promise |
 | `expect(value)` | Assertions (see below) |
