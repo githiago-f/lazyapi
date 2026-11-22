@@ -137,7 +137,10 @@ func (r *Request) SendContext(parent context.Context) (*http.Response, string, e
 
 	q := req.URL.Query()
 	for name, value := range r.Query {
-		q.Set(name, env.Resolve(value, ctx))
+		// Optional parameters without a value are not sent.
+		if resolved := env.Resolve(value, ctx); resolved != "" {
+			q.Set(name, resolved)
+		}
 	}
 	for name, value := range r.Headers {
 		req.Header.Set(name, env.Resolve(value, ctx))

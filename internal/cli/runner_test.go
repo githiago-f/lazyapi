@@ -335,9 +335,8 @@ func TestSend_ScriptChainsRequestsWithImports(t *testing.T) {
 	writeTestScript(t, spec, "me.js", meScript)
 	writeTestScript(t, spec, "helpers.js", `export const bearer = (t) => ({ Authorization: "Bearer " + t });`)
 
-	// The main request itself is unauthenticated (401, undeclared → warning only);
-	// the script logs in and calls /me again with the token.
-	if err := SendRequest([]string{spec, "/me", "GET", "--server", srv.URL}); err != nil {
+	// The script logs in and calls /me again with the token it got.
+	if err := SendRequest([]string{spec, "/me", "GET", "--server", srv.URL, "--header", "Authorization=Bearer abc"}); err != nil {
 		t.Fatalf("SendRequest: %v", err)
 	}
 }
@@ -372,7 +371,7 @@ func TestSmoke_ScriptErrorFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := SmokeTests([]string{spec, "--server", srv.URL, "--op", "listItems", "--script", scriptPath})
-	if err == nil || !strings.Contains(err.Error(), "1 errors") {
-		t.Fatalf("expected script error to fail smoke, got %v", err)
+	if ExitCode(err) != 1 || !strings.Contains(err.Error(), "1 failed") {
+		t.Fatalf("expected script error to fail the run with exit 1, got %v (code %d)", err, ExitCode(err))
 	}
 }

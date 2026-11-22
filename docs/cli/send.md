@@ -1,51 +1,41 @@
 # `lazyapi send request`
 
-Send a single operation from an OpenAPI spec and run its tests.
-
-## Usage
+Sends one operation and runs its checks: declared status, response contract and the operation's test script.
 
 ```bash
-lazyapi send request <file> <path> <method> [flags]
+lazyapi send request <spec.yml> <path> <method> [flags]
+lazyapi send request <spec.yml> --op <operationId> [flags]
 ```
-
-Flags may appear before, between, or after the positional arguments.
-
-## Arguments
-
-| Argument | Description |
-|----------|-------------|
-| `file` | Path to an OpenAPI YAML file |
-| `path` | Path as written in the spec, e.g. `/users/{id}` |
-| `method` | HTTP method (case-insensitive) |
 
 ## Flags
 
 | Flag | Description |
 |------|-------------|
-| `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first server) |
-| `--env <file>` | Path to a `.env` file for `{{env.X}}` resolution |
-| `--param k=v` | Path parameter (repeatable). Defaults to the spec's example |
-| `--query k=v` | Query parameter (repeatable) |
-| `--header k=v` | Header (repeatable) |
-| `--script <file>` | Test script; overrides the operation's `x-lazyapi-tests` file |
-| `--timeout <duration>` | Request timeout (default `30s`) |
-| `--save-example` | Save the response as an OpenAPI example in the spec |
-| `--no-contract` | Skip validating the response against the OpenAPI schema |
-| `--script-timeout <duration>` | Maximum script run time (default `30s`) |
-| `--offline` / `--reload` / `--frozen-lockfile` / `--allow-import <hosts>` | URL import behavior, see [Test Scripts](../scripting.md#imports) |
-
-If a path parameter has neither a `--param` value nor an example in the spec, the command fails and does not send anything.
+| `--op <id>` | Operation to send, instead of `<path> <method>` (`"METHOD /path"` also works) |
+| `--param k=v` | Path parameter (repeatable). Defaults to the spec's example; a missing value is an error |
+| `--query k=v`, `--header k=v` | Query parameter / header (repeatable) |
+| `--body <value\|@file\|@->` | Request body: literal, read from a file, or from stdin |
+| `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first) |
+| `--env <file>` | `.env` file for `{{env.X}}` |
+| `--timeout <d>` | Request timeout (default `30s`) |
+| `--script <file>` | Test script; overrides the operation's `x-lazyapi-tests` |
+| `--no-contract` | Skip the response schema check |
+| `--output pretty\|json\|junit\|tap` | `json` prints the [operation result](/cli/run#json-report) with full bodies |
+| `--output-file <path>`, `--bodies <failed\|all\|none>` | As in [`run`](/cli/run#output); `send` defaults to `--bodies all` |
+| `--save-example` | Save the response as an example in the spec |
+| `--dry-run` | Resolve the request (URL, headers, body) without sending |
+| `--script-timeout`, `--offline`, `--reload`, `--frozen-lockfile`, `--allow-import` | See [Test Scripts](/scripting#imports) |
 
 ## Examples
 
 ```bash
-lazyapi send request my-api.yml /users GET
-lazyapi send request my-api.yml /users GET --server http://localhost:3000
-lazyapi send request my-api.yml /users/{id} GET --param id=42 --header "X-Trace=abc"
-lazyapi send request my-api.yml /users POST --env .env --script tests/create_user.js
-lazyapi send request my-api.yml /users/{id} GET --param id=1 --save-example
+lazyapi send request api.yml /users GET
+lazyapi send request api.yml --op getUser --param id=42 --header "X-Trace=abc"
+lazyapi send request api.yml --op createUser --body @new-user.json --output json
+echo '{"name":"ana"}' | lazyapi send request api.yml --op createUser --body @-
+lazyapi send request api.yml --op getUser --param id=1 --save-example
 ```
 
-## Output and exit code
+## Exit status
 
-The status (with round-trip time), headers and body are printed to stdout. Then come the contract check (when the response has a declared schema) and the script results. A warning is printed if the status code is not declared in the spec. The command exits with status 1 if the request fails, the contract check fails, or a test fails.
+0 when every check passes, 1 when a check fails, 2 for usage errors, and 3 when the request could not be sent (network error, missing path parameter, no server).

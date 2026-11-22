@@ -1,128 +1,226 @@
 package cli
 
 import (
+	"context"
+	"flag"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"sort"
 	"strings"
-	"time"
 
-	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/report"
+	"github.com/githiago-f/lazyapi/internal/runner"
+	"github.com/githiago-f/lazyapi/internal/script"
 	"github.com/githiago-f/lazyapi/internal/store"
 )
 
-const sendUsage = "usage: lazyapi send request <file> <path> <method> [--server url|index] [--env file] " +
-	"[--param k=v]... [--query k=v]... [--header k=v]... [--script file] [--timeout 30s] [--save-example] " +
-	"[--no-contract] [--offline] [--reload] [--frozen-lockfile] [--allow-import hosts]"
+const sendUsage = `usage: lazyapi send request <spec.yml> (<path> <method> | --op <operationId>) [flags]
+
+  --op id             operation to send (instead of <path> <method>)
+  --param k=v  --query k=v  --header k=v   (repeatable)
+  --body value|@file  request body; @file reads it from a file, @- from stdin
+  --server url|index  --env file  --timeout 30s
+  --script file       test script (default: the operation's x-lazyapi-tests)
+  --no-contract  --script-timeout d  --offline  --reload  --frozen-lockfile  --allow-import hosts
+  --output pretty|json|junit|tap  --output-file path  --bodies failed|all|none (default all)
+  --save-example      save the response as an example in the spec
+  --dry-run           show the request without sending it
+
+Exit status: 0 passed, 1 a check failed, 2 usage error, 3 the request could not be sent.`
 
 func SendRequest(args []string) error {
 	fs := newFlagSet("send request")
-	serverFlag := fs.String("server", "", "server URL or index into the spec's servers")
-	envFile := fs.String("env", "", "environment file")
-	sflags := registerScriptFlags(fs, "test script (overrides x-lazyapi-tests)")
+	f := registerRunFlags(fs, "test script (overrides x-lazyapi-tests)")
+	opFlag := fs.String("op", "", "operationId (or \"METHOD /path\") to send")
+	body := fs.String("body", "", "request body, @file or @- for stdin")
 	saveExample := fs.Bool("save-example", false, "save the response as an example in the spec")
-	timeout := fs.Duration("timeout", model.DefaultTimeout, "request timeout")
-	params, query, headers := kvFlag{}, kvFlag{}, kvFlag{}
-	fs.Var(params, "param", "path parameter name=value (repeatable)")
-	fs.Var(query, "query", "query parameter name=value (repeatable)")
-	fs.Var(headers, "header", "header name=value (repeatable)")
 
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
-		return fmt.Errorf("%w\n%s", err, sendUsage)
+		return usageErr("%v\n%s", err, sendUsage)
 	}
-	if len(pos) != 3 {
-		return fmt.Errorf("%s", sendUsage)
+	if !flagSet(fs, "bodies") {
+		*f.bodies = string(report.BodiesAll) // a single request: show what came back
 	}
-	file, path, method := pos[0], pos[1], strings.ToUpper(pos[2])
+	if err := f.validate(); err != nil {
+		return err
+	}
 
+	var file, target string
+	switch {
+	case len(pos) == 1 && *opFlag != "":
+		file, target = pos[0], *opFlag
+	case len(pos) == 3 && *opFlag == "":
+		file, target = pos[0], strings.ToUpper(pos[2])+" "+pos[1]
+	default:
+		return usageErr("%s", sendUsage)
+	}
+
+	spec, err := loadSpec(file)
+	if err != nil {
+		return err
+	}
+	ref, err := script.ResolveTarget(spec, file, target)
+	if err != nil {
+		return runtimeErr(err)
+	}
+	opts, err := f.options(file)
+	if err != nil {
+		return err
+	}
+	if flagSet(fs, "body") {
+		raw, err := readBody(*body)
+		if err != nil {
+			return usageErr("--body: %v", err)
+		}
+		opts.Body = &raw
+	}
+
+	res, lockErr := runner.RunOne(context.Background(), spec, file, ref, opts)
+
+	if f.prettyToStdout() {
+		printSendResult(res)
+	}
+	if err := writeSendReport(f, file, res); err != nil {
+		return err
+	}
+	if lockErr != nil {
+		return runtimeErr(lockErr)
+	}
+
+	if *saveExample && res.Response != nil {
+		if err := saveResponseExample(file, ref, res.Response); err != nil {
+			return runtimeErr(err)
+		}
+		if f.prettyToStdout() {
+			fmt.Println("\n✓ Example saved to spec")
+		}
+	}
+
+	switch res.Outcome {
+	case runner.Errored:
+		return &ExitError{Code: runner.ExitErrored, Err: fmt.Errorf("%s: %s", res.Label(), res.Reason)}
+	case runner.Failed:
+		failed := 0
+		for _, c := range res.Checks {
+			if !c.Passed {
+				failed++
+			}
+		}
+		return &ExitError{Code: runner.ExitFailed, Err: fmt.Errorf("request checks failed: %d failed", failed)}
+	}
+	return nil
+}
+
+// writeSendReport emits the machine-readable output of a single request.
+// JSON on stdout is just the operation result; other cases use a report.
+func writeSendReport(f *runFlags, file string, res runner.OpResult) error {
+	if *f.output == report.Pretty {
+		return nil
+	}
+	if *f.output == report.JSON && *f.outputFile == "" {
+		if err := report.WriteJSON(os.Stdout, report.FilterBodies(res, report.Bodies(*f.bodies))); err != nil {
+			return runtimeErr(err)
+		}
+		return nil
+	}
+	rep := runner.Report{Spec: file, Operations: []runner.OpResult{res}}
+	rep.Summary = runner.Summarize(rep.Operations, 0)
+	if res.Response != nil {
+		rep.Summary.DurationMs = res.Response.DurationMs
+	}
+	if *f.outputFile != "" {
+		return f.writeReport(rep)
+	}
+	if err := report.Write(os.Stdout, *f.output, rep, report.Bodies(*f.bodies)); err != nil {
+		return runtimeErr(err)
+	}
+	return nil
+}
+
+func flagSet(fs *flag.FlagSet, name string) bool {
+	found := false
+	fs.Visit(func(fl *flag.Flag) { found = found || fl.Name == name })
+	return found
+}
+
+func readBody(v string) (string, error) {
+	switch {
+	case v == "@-":
+		data, err := io.ReadAll(os.Stdin)
+		return string(data), err
+	case strings.HasPrefix(v, "@"):
+		data, err := os.ReadFile(v[1:])
+		return string(data), err
+	default:
+		return v, nil
+	}
+}
+
+func printSendResult(res runner.OpResult) {
+	if res.Request != nil {
+		fmt.Printf("%s %s\n", res.Request.Method, res.Request.URL)
+	}
+	switch res.Outcome {
+	case runner.Errored, runner.Skipped:
+		fmt.Printf("Error: %s\n", res.Reason)
+		return
+	case runner.Planned:
+		fmt.Println("(dry run — not sent)")
+		return
+	}
+	r := res.Response
+	fmt.Printf("Status: %s (%dms)\n", r.StatusText, r.DurationMs)
+	fmt.Println("\n--- Headers ---")
+	names := make([]string, 0, len(r.Headers))
+	for k := range r.Headers {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		fmt.Printf("  %s: %s\n", k, r.Headers[k])
+	}
+	fmt.Println("\n--- Body ---")
+	fmt.Println(r.Body)
+	fmt.Println("\n--- Checks ---")
+	for _, l := range res.Logs {
+		fmt.Printf("  [%s] %s\n", l.Level, l.Message)
+	}
+	passed, failed := 0, 0
+	for _, c := range res.Checks {
+		mark := "PASS"
+		if c.Passed {
+			passed++
+		} else {
+			failed++
+			mark = "FAIL"
+		}
+		name := c.Name
+		if c.Kind != runner.CheckTest {
+			name = c.Kind + ": " + name
+		}
+		fmt.Printf("  [%s] %s\n", mark, name)
+		if c.Message != "" {
+			fmt.Printf("         %s\n", c.Message)
+		}
+	}
+	fmt.Printf("\n%d passed, %d failed\n", passed, failed)
+}
+
+func saveResponseExample(file string, ref model.OpenAPIRef, r *runner.ResponseInfo) error {
 	spec, err := store.ParseSpec(file)
 	if err != nil {
-		return fmt.Errorf("error parsing spec: %w", err)
-	}
-
-	ref := model.OpenAPIRef{FilePath: file, Path: path, Method: method}
-	op := store.FindOperation(spec, ref)
-	if op == nil {
-		return fmt.Errorf("operation %s %s not found in %s", method, path, file)
-	}
-	req := store.OperationToRequest(spec, ref)
-	req.Timeout = *timeout
-	applyOverrides(req.Params, params, false)
-	applyOverrides(req.Query, query, false)
-	applyOverrides(req.Headers, headers, false)
-
-	if missing := req.MissingPathParams(); len(missing) > 0 {
-		return fmt.Errorf("missing value for path parameter(s) %s: pass --param %s=<value> or declare an example in the spec",
-			strings.Join(missing, ", "), missing[0])
-	}
-
-	if err := selectServer(&req, *serverFlag); err != nil {
 		return err
 	}
-	if req.ServerURL == "" {
-		return fmt.Errorf("no server URL available. Specify one with --server <url>")
+	header := http.Header{}
+	for k, v := range r.Headers {
+		header.Set(k, v)
 	}
-	fmt.Printf("Server: %s\n", req.ServerURL)
-
-	envMap, err := env.NewStore(*envFile).Load()
-	if err != nil {
-		return fmt.Errorf("error loading env file: %w", err)
+	if err := store.SaveResponseExample(spec, ref, r.Status, header, r.Body); err != nil {
+		return fmt.Errorf("error saving example: %w", err)
 	}
-	runner, err := newOpRunner(spec, file, sflags, envMap, *timeout)
-	if err != nil {
-		return err
-	}
-	runner.prepare(&req)
-	source, scriptOpts, err := runner.scriptFor(op, ref)
-	if err != nil {
-		return err
-	}
-
-	start := time.Now()
-	response, body, err := req.Send()
-	elapsed := time.Since(start)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = response.Body.Close() }()
-
-	fmt.Printf("Status: %s (%dms)\n", response.Status, elapsed.Milliseconds())
-	declared := store.DeclaredStatuses(spec, ref)
-	if !store.StatusDeclared(declared, response.StatusCode) {
-		fmt.Printf("Warning: status %d is not declared for this operation (declared: %s)\n",
-			response.StatusCode, strings.Join(declared, ", "))
-	}
-
-	fmt.Println("\n--- Headers ---")
-	for name, values := range response.Header {
-		for _, v := range values {
-			fmt.Printf("  %s: %s\n", name, v)
-		}
-	}
-
-	fmt.Println("\n--- Body ---")
-	fmt.Println(body)
-
-	fmt.Println("\n--- Tests ---")
-	passed := runner.check(req, ref, response, body, elapsed, source, scriptOpts, "  ")
-	fmt.Printf("\n%d passed, %d failed\n", runner.pass, runner.fail)
-	if err := runner.finish(); err != nil {
-		return err
-	}
-	var testFailure error
-	if !passed {
-		testFailure = fmt.Errorf("request checks failed: %d failed, %d script errors", runner.fail, runner.scriptErrors)
-	}
-
-	if *saveExample {
-		if err := store.SaveResponseExample(spec, ref, response.StatusCode, response.Header, body); err != nil {
-			return fmt.Errorf("error saving example: %w", err)
-		}
-		if err := store.SaveSpec(file, spec); err != nil {
-			return fmt.Errorf("error writing spec: %w", err)
-		}
-		fmt.Println("\n✓ Example saved to spec")
-	}
-
-	return testFailure
+	return store.SaveSpec(file, spec)
 }

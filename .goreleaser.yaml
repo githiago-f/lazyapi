@@ -10,6 +10,8 @@ builds:
   - id: binary
     main: ./cmd/lazyapi
     binary: lazyapi
+    ldflags:
+      - -s -w -X github.com/githiago-f/lazyapi/internal/cli.Version={{.Version}}
 
     goos:
       - linux

@@ -161,27 +161,30 @@ func NewDraftPath(filePath string) string {
 	return filepath.Join(dir, fmt.Sprintf("draft.new.%d", newDraftCounter))
 }
 
-func FindRequestFiles() tea.Cmd {
-	return func() tea.Msg {
-		yamlFiles, err := Glob("./**/*.yml")
+// FindSpecFiles returns the OpenAPI files (.yml/.yaml) under root.
+func FindSpecFiles(root string) ([]string, error) {
+	var specs []string
+	for _, ext := range []string{"yml", "yaml"} {
+		files, err := Glob(filepath.Join(root, "**", "*."+ext))
 		if err != nil {
-			return ErrorMsg{Message: fmt.Sprintf("Error searching for spec files: %v", err)}
+			return nil, err
 		}
-		yamlFiles2, err := Glob("./**/*.yaml")
-		if err != nil {
-			return ErrorMsg{Message: fmt.Sprintf("Error searching for spec files: %v", err)}
-		}
-
-		var openAPIFiles []string
-		for _, f := range append(yamlFiles, yamlFiles2...) {
+		for _, f := range files {
 			if IsOpenAPIFile(f) {
-				openAPIFiles = append(openAPIFiles, f)
+				specs = append(specs, f)
 			}
 		}
+	}
+	return specs, nil
+}
 
-		return RequestFilesMsg{
-			Paths: openAPIFiles,
+func FindRequestFiles() tea.Cmd {
+	return func() tea.Msg {
+		specs, err := FindSpecFiles(".")
+		if err != nil {
+			return ErrorMsg{Message: fmt.Sprintf("Error searching for spec files: %v", err)}
 		}
+		return RequestFilesMsg{Paths: specs}
 	}
 }
 

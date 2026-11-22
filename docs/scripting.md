@@ -39,8 +39,8 @@ Run them with:
 
 ```bash
 lazyapi send request api.yml /users GET      # one operation
-lazyapi smoke tests api.yml                  # every GET/HEAD/OPTIONS operation
-lazyapi smoke tests api.yml --script all.js  # one script for every operation
+lazyapi run api.yml                          # every GET/HEAD/OPTIONS operation
+lazyapi run api.yml --script all.js          # one script for every operation
 ```
 
 In the TUI, open the **Tests** tab and press `F5`.
@@ -60,7 +60,7 @@ Add `/// <reference path="./lazyapi.d.ts" />` to the top of a script for autocom
 | `request` | The request sent: `method`, `url`, `path`, `headers` (lower-cased), `query`, `params`, `body`, `json()` |
 | `response` | `status`, `statusText`, `headers` (lower-cased), `body`, `time` (ms), `header(name)`, `json()`, `text()`. `null` in the TUI before a request is sent |
 | `env` | `get`, `set`, `has`, `all` over environment variables (`{{env.X}}`). Changes last for the current run |
-| `vars` | Same API for run variables (`{{var.X}}`). During `smoke`, later operations see them |
+| `vars` | Same API for run variables (`{{var.X}}`). During `run` (without `--parallel`), later operations see them |
 | `lazyapi.send(target, opts?)` | Sends another operation synchronously and returns its response. `opts`: `params`, `query`, `headers`, `body` (objects are JSON-encoded) |
 | `test(name, fn)` | Registers a test. It fails if `fn` throws or returns a rejected promise |
 | `expect(value)` | Assertions (see below) |
@@ -76,7 +76,7 @@ Failure messages are explicit, e.g. `expected 404 to be 200` or `schema validati
 
 ## Automatic contract check
 
-`send` and `smoke` also validate every response that has a declared schema. The result is reported as `contract: response matches the OpenAPI schema`, even without a script. Use `--no-contract` to turn it off.
+`send` and `run` also validate every response that has a declared schema. The result is reported as `contract: response matches the OpenAPI schema`, even without a script. Use `--no-contract` to turn it off.
 
 ## Imports
 
@@ -100,4 +100,4 @@ Only `https://` imports are accepted. Imported code runs with the same sandbox a
 
 ## Errors
 
-Syntax and runtime errors are reported with file, line and column, e.g. `ReferenceError: user is not defined (listUsers.js:4:3)`. They count as a failure: `send` and `smoke` exit with status 1.
+Syntax and runtime errors are reported with file, line and column, e.g. `ReferenceError: user is not defined (listUsers.js:4:3)`. They are reported as a failed `script` check, so `send` and `run` exit with status 1.

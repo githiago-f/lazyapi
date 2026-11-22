@@ -7,24 +7,34 @@ import (
 	"github.com/githiago-f/lazyapi/internal/script"
 )
 
+// Commands lists the first words that select CLI mode instead of the TUI.
+var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "mcp", "help"}
+
+// Run executes a CLI command and exits with its status code
+// (0 ok, 1 a check failed, 2 usage error, 3 something could not run).
 func Run(args []string) {
 	if err := run(args); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		os.Exit(ExitCode(err))
 	}
 }
 
 func run(args []string) error {
 	if len(args) < 1 {
 		printUsage()
-		return fmt.Errorf("no command specified")
+		return usageErr("no command specified")
 	}
 
+	sub := func(name string) bool { return len(args) >= 2 && args[1] == name }
+
 	switch args[0] {
+	case "help", "-h", "--help":
+		printUsage()
+		return nil
+
 	case "create":
-		if len(args) < 2 || args[1] != "file" {
-			fmt.Println("Usage: lazyapi create file [filename] [servers...]")
-			return fmt.Errorf("invalid create command")
+		if !sub("file") {
+			return usageErr("usage: lazyapi create file [filename] [servers...]")
 		}
 		filename := "openapi.yml"
 		servers := []string{}
@@ -35,54 +45,61 @@ func run(args []string) error {
 		return CreateFile(filename, servers)
 
 	case "remove":
-		if len(args) < 5 || args[1] != "request" {
-			fmt.Println("Usage: lazyapi remove request <file> <method> <path>")
-			return fmt.Errorf("invalid remove command")
+		if len(args) < 5 || !sub("request") {
+			return usageErr("usage: lazyapi remove request <file> <method> <path>")
 		}
 		return RemoveRequest(args[2], args[3], args[4])
 
 	case "add":
-		if len(args) < 2 {
-			fmt.Println("Usage: lazyapi add request|server ...")
-			return fmt.Errorf("invalid add command")
-		}
-		switch args[1] {
-		case "request":
-			if len(args) < 5 {
-				fmt.Println("Usage: lazyapi add request <file> <path> <method>")
-				return fmt.Errorf("invalid add request command")
-			}
+		switch {
+		case sub("request") && len(args) >= 5:
 			return AddRequest(args[2], args[3], args[4])
-		case "server":
-			if len(args) < 4 {
-				fmt.Println("Usage: lazyapi add server <file> <url>")
-				return fmt.Errorf("invalid add server command")
-			}
+		case sub("server") && len(args) >= 4:
 			return AddServer(args[2], args[3])
 		default:
-			fmt.Println("Usage: lazyapi add request|server ...")
-			return fmt.Errorf("invalid add subcommand: %s", args[1])
+			return usageErr("usage: lazyapi add request <file> <path> <method> | lazyapi add server <file> <url>")
 		}
 
 	case "send":
-		if len(args) < 2 || args[1] != "request" {
-			return fmt.Errorf("invalid send command\n%s", sendUsage)
+		if !sub("request") {
+			return usageErr("invalid send command\n%s", sendUsage)
 		}
 		return SendRequest(args[2:])
 
+	case "run":
+		return RunTests(args[1:])
+
 	case "smoke":
-		if len(args) < 3 || args[1] != "tests" {
-			return fmt.Errorf("invalid smoke command\n%s", smokeUsage)
+		if len(args) < 3 || !sub("tests") {
+			return usageErr("invalid smoke command (smoke tests is an alias of run)\n%s", runUsage)
 		}
-		return SmokeTests(args[2:])
+		return RunTests(args[2:])
+
+	case "list":
+		if !sub("ops") {
+			return usageErr("%s", listUsage)
+		}
+		return ListOps(args[2:])
+
+	case "describe":
+		return Describe(args[1:])
+
+	case "validate":
+		if !sub("spec") {
+			return usageErr("%s", validateUsage)
+		}
+		return ValidateSpec(args[2:])
 
 	case "types":
 		fmt.Print(script.Types)
 		return nil
 
+	case "mcp":
+		return ServeMCP(args[1:])
+
 	default:
 		printUsage()
-		return fmt.Errorf("unknown command: %s", args[0])
+		return usageErr("unknown command: %s", args[0])
 	}
 }
 
@@ -90,43 +107,36 @@ func printUsage() {
 	fmt.Println(`LazyAPI - OpenAPI-driven API exploration and testing
 
 Usage:
-  lazyapi [spec.yml] [--env file]                Start the TUI (interactive mode)
-  lazyapi create file [name] [urls...]           Create a new OpenAPI template file
-  lazyapi add request <file> <path> <method>     Add a new request to a spec file
-  lazyapi add server <file> <url>                Add a server URL to a spec file
-  lazyapi remove request <file> <method> <path>  Remove a request from a spec file
-  lazyapi send request <file> <path> <method>    Send one request and run its tests
-  lazyapi smoke tests <file>                     Run every selected operation and its tests
-  lazyapi types                                  Print the test script API (TypeScript definitions)
+  lazyapi [spec.yml] [--env file]                   Start the TUI (interactive mode)
 
-Flags (send and smoke):
-  --server url|index  Server URL, or index into the spec's servers (default: first)
-  --env file          Environment file ({{env.NAME}} values)
-  --script file       Test script (.js/.ts); overrides the operation's x-lazyapi-tests file
-  --param k=v         Path parameter value (repeatable; default: spec example)
-  --timeout 30s       Per-request timeout
-  --script-timeout d  Maximum run time of a test script (default 30s)
-  --no-contract       Do not validate responses against the OpenAPI schema
-  --offline           Never download URL imports; use the module cache only
-  --reload            Re-download URL imports and update lazyapi.lock
-  --frozen-lockfile   Fail if a URL import is not pinned in lazyapi.lock (CI)
-  --allow-import list Hosts URL imports may come from (default: any https host)
+  Testing
+  lazyapi run <spec.yml> [flags]                    Run operations, contract checks and test scripts
+  lazyapi send request <spec.yml> <path> <method>   Send one operation (or: --op <operationId>)
+  lazyapi smoke tests <spec.yml> [flags]            Alias of run
 
-Flags (send only):
-  --query k=v         Query parameter (repeatable)
-  --header k=v        Header (repeatable)
-  --save-example      Persist the response as an example in the spec
+  Inspecting
+  lazyapi list ops <spec.yml> [--json]              List operations
+  lazyapi describe <spec.yml> <operation> [--json]  Parameters, bodies, responses and schemas of an operation
+  lazyapi validate spec <spec.yml> [--json]         Validate the spec and its test scripts
+  lazyapi types                                     Print the test script API (TypeScript definitions)
 
-Flags (smoke only):
-  --methods list      Methods to run (default GET,HEAD,OPTIONS; "all" for every method)
-  --tag list          Only operations with one of these tags
-  --op list           Only these operations (operationId or "METHOD /path")
-  --dry-run           Print what would be sent without sending
+  Agents
+  lazyapi mcp [--root dir]                          Serve the tools above over MCP (stdio)
 
-Test scripts are JavaScript/TypeScript files stored next to the spec and
-referenced per operation via x-lazyapi-tests (e.g. tests/listItems.js). They
-may import relative files and https:// modules (pinned in lazyapi.lock).
-Responses are validated against the OpenAPI schema automatically.
-Commands exit with status 1 when a request fails, a status code is not
-declared in the spec, the response breaks the schema, or a test fails.`)
+  Editing
+  lazyapi create file [name] [urls...]              Create a new OpenAPI template file
+  lazyapi add request <file> <path> <method>        Add a new request to a spec file
+  lazyapi add server <file> <url>                   Add a server URL to a spec file
+  lazyapi remove request <file> <method> <path>     Remove a request from a spec file
+
+Run "lazyapi run" or "lazyapi send request" without arguments for their flags.
+Common flags: --server, --env, --param k=v, --query k=v, --header k=v, --timeout,
+--script, --no-contract, --output pretty|json|junit|tap, --output-file, --dry-run.
+
+Test scripts are JavaScript/TypeScript files next to the spec, referenced per
+operation by x-lazyapi-tests. They may import relative files and https://
+modules (pinned in lazyapi.lock). Responses are validated against the OpenAPI
+schema automatically.
+
+Exit status: 0 all passed, 1 a check failed, 2 usage error, 3 something could not run.`)
 }
