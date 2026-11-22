@@ -37,7 +37,7 @@ Inferred schemas list the observed properties but do not mark them required: one
   - `pm.expect` with Chai-style chains: `to.be.ok`, `.to.equal`, `.eql`, `.include`, `.property`, `.an('array')`, `.above`, `.lengthOf`, `.not`, …;
   - `pm.response` (`code`, `status`, `json()`, `text()`, `headers.get`, `responseTime`, `to.have.status`, `to.have.header`);
   - `pm.request` (headers `add`/`upsert`/`remove` in the pre-request phase);
-  - `pm.environment` / `pm.variables` / `pm.collectionVariables` / `pm.globals`, all backed by `env`.
+  - `pm.environment` / `pm.variables` / `pm.collectionVariables` / `pm.globals` / `pm.iterationData`, all backed by `env`; `pm.info.iteration` follows `run --data`.
 
   - `pm.sendRequest(url | {url, method, header, body}, callback)`: the URL is mapped to the spec operation it belongs to and sent with `lazyapi.send`, so it gets the same checks. The callback runs right away (scripts are synchronous) and the response is also returned. A URL that is not an operation of the spec fails with a message telling you to add it (for example with `lazyapi import curl`). `formdata` bodies are not supported.
 

@@ -95,6 +95,13 @@ type Options struct {
 	// OnResult, when set, receives each result in spec order as soon as it
 	// (and every result before it) is complete.
 	OnResult func(OpResult)
+
+	// Data runs everything once per row (data-driven run): the row's values
+	// are added to Env for that iteration ({{env.x}}, env.get, pm
+	// variables), and results carry Iteration.
+	Data []map[string]string
+
+	iteration, iterations int // set by Run for each Data row
 }
 
 // target is one selected operation.
@@ -158,6 +165,45 @@ func (f Filter) selects(method, path string, op *openapi3.Operation) bool {
 // Run executes every planned operation and returns the report. The returned
 // error is only about persisting the module lockfile.
 func Run(ctx context.Context, spec *openapi3.T, specPath string, opts Options) (Report, error) {
+	if len(opts.Data) == 0 {
+		return runOnce(ctx, spec, specPath, opts)
+	}
+	start := time.Now()
+	var all []OpResult
+	for i, row := range opts.Data {
+		it := opts
+		it.Data = nil
+		it.iteration, it.iterations = i, len(opts.Data)
+		it.Env = copyMap(opts.Env)
+		for k, v := range row {
+			it.Env[k] = v
+		}
+		if onResult := opts.OnResult; onResult != nil {
+			it.OnResult = func(r OpResult) {
+				r.Iteration = i + 1
+				onResult(r)
+			}
+		}
+		rep, err := runOnce(ctx, spec, specPath, it)
+		for _, r := range rep.Operations {
+			r.Iteration = i + 1
+			all = append(all, r)
+		}
+		if err != nil {
+			return Report{Spec: specPath, Environment: opts.EnvName, StartedAt: start, Operations: all,
+				Summary: Summarize(all, time.Since(start))}, err
+		}
+		if ctx.Err() != nil || (opts.Bail && rep.Summary.Failed+rep.Summary.Errors > 0) {
+			break
+		}
+	}
+	report := Report{Spec: specPath, Environment: opts.EnvName, StartedAt: start, Operations: all, Iterations: len(opts.Data)}
+	report.Summary = Summarize(all, time.Since(start))
+	return report, nil
+}
+
+// runOnce is one pass over the selected operations and flows.
+func runOnce(ctx context.Context, spec *openapi3.T, specPath string, opts Options) (Report, error) {
 	start := time.Now()
 	var targets []target
 	if !opts.SkipOperations {
@@ -254,7 +300,7 @@ func PlannedCount(spec *openapi3.T, specPath string, opts Options) int {
 	if !opts.SkipOperations {
 		n += len(plan(spec, specPath, opts.Filter))
 	}
-	return n
+	return n * max(1, len(opts.Data))
 }
 
 // RunOne executes a single operation. Unlike Run, overrides apply even if
@@ -350,7 +396,7 @@ func Prepare(ctx context.Context, spec *openapi3.T, specPath string, ref model.O
 		return req, err
 	}
 	data := script.ExecData{Request: req, Env: req.Env, Vars: req.Vars}
-	in := ExchangeInput{Spec: spec, SpecPath: specPath, Ref: &ref, Auth: opts.Auth}
+	in := ExchangeInput{Spec: spec, SpecPath: specPath, Ref: &ref, Auth: opts.Auth, Iteration: opts.iteration, Iterations: opts.iterations}
 	in.bind(&data, req)
 	br := script.Before(source, data, sopts)
 	if br.Error != "" {
@@ -397,6 +443,7 @@ func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, o
 		Spec: spec, SpecPath: specPath, Ref: &ref, Request: req,
 		Script: source, ScriptOptions: sopts,
 		NoContract: opts.NoContract, Retries: opts.Retries, Auth: opts.Auth,
+		Iteration: opts.iteration, Iterations: opts.iterations,
 	})
 }
 
@@ -413,10 +460,13 @@ type ExchangeInput struct {
 	Retries       int
 	// Auth fills credentials into lazyapi.send() calls made by the script.
 	Auth map[string]model.AuthSecrets
+	// Iteration/Iterations of a data-driven run, exposed to the script.
+	Iteration, Iterations int
 }
 
 // bind connects a script to the spec (lazyapi.send, toMatchSchema).
 func (in ExchangeInput) bind(data *script.ExecData, req model.Request) {
+	data.Iteration, data.Iterations = in.Iteration, in.Iterations
 	if in.Spec == nil {
 		return
 	}

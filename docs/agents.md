@@ -45,6 +45,8 @@ Tool failures (network errors, unknown operations) come back as results with `is
 
 ## A server to test against
 
+Data-driven checks: `run --data rows.csv` (MCP `run_tests` with `data_file`) runs the selection once per row with the row in the env; results carry `iteration`.
+
 When a test creates data against a real API, export `after(res)` from its script to delete it: it runs even when the tests fail, so runs stay repeatable. See [scripting](/scripting#cleaning-up-after-res).
 
 `lazyapi mock api.yml` serves the spec's examples and validates incoming requests (422 with the reason). Agents can build and check tests before the real API exists, or reach error paths with `Prefer: code=404`. See [mock](/cli/mock).

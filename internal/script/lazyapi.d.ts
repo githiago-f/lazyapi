@@ -133,6 +133,10 @@ declare const env: KeyValueStore;
 declare const vars: KeyValueStore;
 
 declare const lazyapi: {
+  /** 0-based iteration of a data-driven run (`lazyapi run --data rows.csv`); 0 otherwise. */
+  readonly iteration: number;
+  /** Number of iterations (rows of --data); 1 otherwise. */
+  readonly iterations: number;
   /**
    * Sends another operation from the same spec and returns its response.
    * target is an operationId, "METHOD /path", or "METHOD https://host/users/42?x=1":
