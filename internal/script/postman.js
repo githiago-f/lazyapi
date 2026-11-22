@@ -189,7 +189,7 @@
     test: function (name, fn) { return global.test(name, fn); },
     expect: function (v) { return new Assertion(v); },
     environment: scope(), variables: scope(), collectionVariables: scope(), globals: scope(), iterationData: scope(),
-    info: { eventName: "test", iteration: 0, iterationCount: 1, requestName: "" },
+    info: { eventName: "test", iteration: global.lazyapi.iteration, iterationCount: global.lazyapi.iterations, requestName: "" },
     // pm.sendRequest(url | {url, method, header, body}, callback): the URL is
     // mapped to the spec operation it belongs to and sent with lazyapi.send,
     // so it gets the same checks. The callback runs before sendRequest

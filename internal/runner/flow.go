@@ -108,7 +108,8 @@ func RunFlow(ctx context.Context, spec *openapi3.T, specPath, flowPath string, o
 		}
 	}
 
-	data := script.ExecData{Request: model.Request{Env: envMap, Vars: vars}, Env: envMap, Vars: vars}
+	data := script.ExecData{Request: model.Request{Env: envMap, Vars: vars}, Env: envMap, Vars: vars,
+		Iteration: opts.iteration, Iterations: opts.iterations}
 	sctx.Bind(&data)
 	sr := script.Run(string(source), data, sopts)
 	for _, tr := range sr.Results {

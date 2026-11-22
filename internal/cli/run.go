@@ -31,6 +31,11 @@ Flows:
   --flow file         run only this flow (repeatable); no operations are run
   --flow-timeout 5m   maximum run time of one flow
 
+Data-driven:
+  --data file         run everything once per row of a CSV (header row) or JSON (array of
+                      objects) file; the row's values are added to the env ({{env.col}},
+                      env.get, pm.iterationData) and results carry "iteration"
+
 Checks:
   --script file       test script for every operation (default: each x-lazyapi-tests)
   --no-contract       do not validate responses against the OpenAPI schema
@@ -55,6 +60,7 @@ func RunTests(args []string) error {
 	var flows listFlag
 	fs.Var(&flows, "flow", "run only this flow script (repeatable)")
 	allFlows := fs.Bool("flows", false, "also run every flows/*.js next to the spec, after the operations")
+	dataFile := fs.String("data", "", "CSV or JSON data file: run once per row")
 	flowTimeout := fs.Duration("flow-timeout", runner.DefaultFlowTimeout, "maximum run time of one flow")
 
 	pos, err := parseInterleaved(fs, args)
@@ -92,6 +98,13 @@ func RunTests(args []string) error {
 	}
 	opts.Parallel, opts.Retries, opts.Bail = *parallel, *retries, *bail
 	opts.FlowTimeout = *flowTimeout
+	if *dataFile != "" {
+		rows, err := runner.LoadData(*dataFile)
+		if err != nil {
+			return usageErr("--data: %v", err)
+		}
+		opts.Data = rows
+	}
 	switch {
 	case len(flows) > 0:
 		// Targeted: run just these flows, no operations.

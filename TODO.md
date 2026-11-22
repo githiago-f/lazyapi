@@ -86,7 +86,9 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 
 ## Próximas ideias
 
-- `formdata` (arquivos) no `pm.sendRequest`; runner de collection com iterações/data files (`pm.iterationData`).
+- [x] Runs com data files: `run --data rows.csv|json` (uma iteração por linha, linha no env, `lazyapi.iteration`, `pm.iterationData`, `[#n]` nos relatórios), MCP `data_file`.
+- [ ] `formdata` (arquivos) no `pm.sendRequest`.
+- [ ] Runner no TUI com data file (escolher o arquivo pela paleta).
 
 ## Fase 11 / Contínuo — qualidade de código
 

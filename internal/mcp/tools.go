@@ -120,6 +120,7 @@ var toolList = []tool{
 			"bail":          boolean("Stop after the first failure"),
 			"dry_run":       boolean("List what would be sent without sending"),
 			"include_flows": boolean("Also run every flows/*.js next to the spec, after the operations"),
+			"data_file":     str("CSV (header row) or JSON (array of objects) file, relative to the root: run everything once per row, with the row's values added to the env; results carry iteration"),
 		}),
 		call: (*Tools).runTests,
 	},
@@ -460,6 +461,7 @@ func (t *Tools) runTests(ctx context.Context, args json.RawMessage) (any, error)
 		Grep         string   `json:"grep"`
 		Bail         bool     `json:"bail"`
 		IncludeFlows bool     `json:"include_flows"`
+		DataFile     string   `json:"data_file"`
 	}
 	if err := decode(args, &a); err != nil {
 		return nil, err
@@ -479,6 +481,15 @@ func (t *Tools) runTests(ctx context.Context, args json.RawMessage) (any, error)
 		}
 	}
 	opts.Bail = a.Bail
+	if a.DataFile != "" {
+		p, err := t.path(a.DataFile)
+		if err != nil {
+			return nil, err
+		}
+		if opts.Data, err = runner.LoadData(p); err != nil {
+			return nil, err
+		}
+	}
 	if a.IncludeFlows {
 		if opts.Flows, err = runner.FindFlows(specPath); err != nil {
 			return nil, err
