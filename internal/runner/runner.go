@@ -67,6 +67,10 @@ type Options struct {
 
 	Filter  Filter
 	Timeout time.Duration // per request
+	// HTTPClient sends every request (nil: http.DefaultClient). MaxBody caps
+	// response bodies (0: model.DefaultMaxBody).
+	HTTPClient *http.Client
+	MaxBody    int64
 
 	ScriptPath    string               // overrides every operation's x-lazyapi-tests
 	Modules       *script.ModuleLoader // URL imports; nil disables them
@@ -290,6 +294,7 @@ func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, o
 		req.Body.Raw = *opts.Body
 	}
 	req.Env, req.Vars, req.Timeout = envMap, vars, opts.Timeout
+	req.HTTPClient, req.MaxBody = opts.HTTPClient, opts.MaxBody
 	req.Auth = model.ApplySecrets(req.Auth, opts.Auth)
 
 	if missing := req.MissingPathParams(); len(missing) > 0 {
@@ -354,7 +359,8 @@ func (in ExchangeInput) bind(data *script.ExecData, req model.Request) {
 		return
 	}
 	sctx := &script.SpecContext{Spec: in.Spec, SpecPath: in.SpecPath, ServerURL: req.ServerURL,
-		Env: req.Env, Vars: req.Vars, Timeout: req.Timeout, Auth: in.Auth}
+		Env: req.Env, Vars: req.Vars, Timeout: req.Timeout, Auth: in.Auth,
+		HTTPClient: req.HTTPClient, MaxBody: req.MaxBody}
 	sctx.Bind(data)
 }
 
@@ -409,7 +415,8 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 		res.Checks = append(res.Checks, requestCheck(ctx, in.Spec, *in.Ref, req))
 	}
 
-	resp, body, elapsed, attempts, err := sendWithRetries(ctx, &req, in.Retries)
+	resp, body, timing, attempts, err := sendWithRetries(ctx, &req, in.Retries)
+	elapsed := timing.Total
 	res.Attempts = attempts
 	if err != nil {
 		res.Outcome, res.Reason = Errored, "request failed: "+err.Error()
@@ -424,6 +431,8 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 		Headers:    flattenHeader(resp.Header),
 		Body:       body,
 		DurationMs: elapsed.Milliseconds(),
+		Timing:     newTimingInfo(timing),
+		Cookies:    cookiesOf(resp),
 	}
 
 	if inSpec {
@@ -492,24 +501,22 @@ func requestCheck(ctx context.Context, spec *openapi3.T, ref model.OpenAPIRef, r
 	return c
 }
 
-func sendWithRetries(ctx context.Context, req *model.Request, retries int) (*http.Response, string, time.Duration, int, error) {
+func sendWithRetries(ctx context.Context, req *model.Request, retries int) (*http.Response, string, model.Timing, int, error) {
 	var (
-		resp    *http.Response
-		body    string
-		err     error
-		elapsed time.Duration
+		resp   *http.Response
+		body   string
+		err    error
+		timing model.Timing
 	)
 	for attempt := 1; ; attempt++ {
-		start := time.Now()
-		resp, body, err = req.SendContext(ctx)
-		elapsed = time.Since(start)
+		resp, body, timing, err = req.SendTimed(ctx)
 		retryable := err != nil || resp.StatusCode >= 500
 		if !retryable || attempt > retries || ctx.Err() != nil {
-			return resp, body, elapsed, attempt, err
+			return resp, body, timing, attempt, err
 		}
 		select {
 		case <-ctx.Done():
-			return resp, body, elapsed, attempt, err
+			return resp, body, timing, attempt, err
 		case <-time.After(time.Duration(attempt) * 250 * time.Millisecond):
 		}
 	}
@@ -665,4 +672,38 @@ func (e *emitter) done(i int, r OpResult) {
 		e.next++
 		e.fn(r)
 	}
+}
+
+func newTimingInfo(t model.Timing) *TimingInfo {
+	ms := func(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
+	return &TimingInfo{DNSMs: ms(t.DNS), ConnectMs: ms(t.Connect), TLSMs: ms(t.TLS), TTFBMs: ms(t.TTFB),
+		TotalMs: ms(t.Total), Reused: t.Reused}
+}
+
+func cookiesOf(resp *http.Response) []CookieInfo {
+	var out []CookieInfo
+	for _, c := range resp.Cookies() {
+		ci := CookieInfo{Name: c.Name, Value: c.Value, Domain: c.Domain, Path: c.Path,
+			HTTPOnly: c.HttpOnly, Secure: c.Secure, SameSite: sameSite(c.SameSite)}
+		if !c.Expires.IsZero() {
+			ci.Expires = c.Expires.UTC().Format(time.RFC3339)
+		}
+		if c.MaxAge > 0 {
+			ci.MaxAge = c.MaxAge
+		}
+		out = append(out, ci)
+	}
+	return out
+}
+
+func sameSite(s http.SameSite) string {
+	switch s {
+	case http.SameSiteLaxMode:
+		return "Lax"
+	case http.SameSiteStrictMode:
+		return "Strict"
+	case http.SameSiteNoneMode:
+		return "None"
+	}
+	return ""
 }

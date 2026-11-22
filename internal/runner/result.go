@@ -52,6 +52,32 @@ type ResponseInfo struct {
 	Headers    map[string]string `json:"headers,omitempty"`
 	Body       string            `json:"body,omitempty"`
 	DurationMs int64             `json:"durationMs"`
+	Timing     *TimingInfo       `json:"timing,omitempty"`
+	Cookies    []CookieInfo      `json:"cookies,omitempty"`
+}
+
+// TimingInfo is where the time went, in milliseconds. Phases are zero when
+// they did not happen (a reused keep-alive connection has no DNS/connect/TLS).
+type TimingInfo struct {
+	DNSMs     float64 `json:"dnsMs"`
+	ConnectMs float64 `json:"connectMs"`
+	TLSMs     float64 `json:"tlsMs"`
+	TTFBMs    float64 `json:"ttfbMs"`
+	TotalMs   float64 `json:"totalMs"`
+	Reused    bool    `json:"reusedConnection"`
+}
+
+// CookieInfo is a cookie set by the response.
+type CookieInfo struct {
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Domain   string `json:"domain,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Expires  string `json:"expires,omitempty"`
+	MaxAge   int    `json:"maxAge,omitempty"`
+	HTTPOnly bool   `json:"httpOnly,omitempty"`
+	Secure   bool   `json:"secure,omitempty"`
+	SameSite string `json:"sameSite,omitempty"`
 }
 
 // Step is one lazyapi.send() call made by a flow.

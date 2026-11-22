@@ -270,7 +270,7 @@ func (a auth) View() tea.View {
 
 	activeColor := config.DefaultConfig.PrimaryColor()
 	schemeStyle := lipgloss.NewStyle().
-		Width(a.width - 2).
+		Width(a.width-2).
 		Border(lipgloss.NormalBorder()).
 		Padding(0, 1)
 

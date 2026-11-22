@@ -4,8 +4,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
-	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
+	"github.com/githiago-f/lazyapi/internal/config"
 )
 
 type body struct {

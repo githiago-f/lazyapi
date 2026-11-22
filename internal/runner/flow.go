@@ -81,6 +81,7 @@ func RunFlow(ctx context.Context, spec *openapi3.T, specPath, flowPath string, o
 	sctx := &script.SpecContext{
 		Spec: spec, SpecPath: specPath, ServerURL: server,
 		Env: envMap, Vars: vars, Timeout: opts.Timeout, Auth: opts.Auth,
+		HTTPClient: opts.HTTPClient, MaxBody: opts.MaxBody,
 	}
 	sctx.OnSend = func(ref model.OpenAPIRef, req model.Request, resp *script.Response, sendErr error) {
 		n := len(res.Steps) + 1

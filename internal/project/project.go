@@ -39,6 +39,8 @@ type Environment struct {
 	Env  string                       `yaml:"env,omitempty"`
 	Vars map[string]string            `yaml:"vars,omitempty"`
 	Auth map[string]model.AuthSecrets `yaml:"auth,omitempty"`
+	// HTTP holds TLS, proxy and redirect settings for this environment.
+	HTTP model.HTTPOptions `yaml:"http,omitempty"`
 }
 
 // Config is a parsed lazyapi.config.yml.
@@ -88,9 +90,15 @@ func Load(path string) (*Config, error) {
 			c.Environments[name] = e
 		}
 		e.Name = name
-		if e.Env != "" && !filepath.IsAbs(e.Env) {
-			e.Env = filepath.Join(filepath.Dir(path), e.Env)
+		rel := func(p *string) {
+			if *p != "" && !filepath.IsAbs(*p) {
+				*p = filepath.Join(filepath.Dir(path), *p)
+			}
 		}
+		rel(&e.Env)
+		rel(&e.HTTP.CACert)
+		rel(&e.HTTP.ClientCert)
+		rel(&e.HTTP.ClientKey)
 	}
 	if c.Default != "" && c.Environments[c.Default] == nil {
 		return nil, fmt.Errorf("%s: default environment %q is not defined", path, c.Default)
@@ -148,6 +156,7 @@ type Resolved struct {
 	EnvFile string
 	Vars    map[string]string
 	Auth    map[string]model.AuthSecrets
+	HTTP    model.HTTPOptions
 }
 
 // Resolve picks the environment for specPath (name "" means the default or
@@ -162,7 +171,7 @@ func Resolve(specPath, name, server, envFile string) (Resolved, error) {
 	if err != nil || e == nil {
 		return r, err
 	}
-	r.Name, r.Vars, r.Auth = e.Name, e.Vars, e.Auth
+	r.Name, r.Vars, r.Auth, r.HTTP = e.Name, e.Vars, e.Auth, e.HTTP
 	if r.Server == "" {
 		r.Server = e.Server
 	}
