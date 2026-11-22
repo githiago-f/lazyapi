@@ -148,6 +148,7 @@ internal/
 - **Execution** — all checks live in `internal/runner`: request (`store.ValidateRequest` on `Request.HTTPRequest`, does not block sending) → status declared → contract (`store.ValidateResponse`) → script. `--no-contract` skips request + contract. CLI and MCP only render `runner.Report`/`OpResult`. Never print from runner.
 - **Exit codes** — 0 ok, 1 a check failed, 2 usage, 3 could not run (errors win over failures). Return `*cli.ExitError` (`usageErr`, `runtimeErr`) instead of plain errors from commands.
 - **before(req)** — `script.Before` evaluates the module once with side effects suppressed (test/console/vars/send are no-ops, top-level errors swallowed), then calls the exported `before` with the full API. The runner applies it before the request check and the send; if it throws, the request is not sent (failed `script` check).
+- **after(res)** — `script.Run` calls the exported `after` with `response` once the top level finished (also when tests failed or it threw; not after a timeout). `Result.AfterRan/AfterError` → `runner.afterChecks` adds a `script` check "after() ran without errors". `Before` never calls it.
 - **Flows** — `run --flow f.js` (only flows) or `--flows` (operations, then `flows/*.js`); MCP `run_flow`/`write_flow`. Results have `kind: "flow"` and `steps`.
 - **HTTP** — one client per run from `model.HTTPOptions` (flags merged over the environment's `http:`), set on every request incl. `lazyapi.send`, flows and OAuth2 token calls. `SendTimed` returns DNS/connect/TLS/TTFB timing; results carry `timing` and `cookies`.
 - **Import** — never copy credentials into specs (Authorization/API-key headers become security schemes plus a note). Multipart files must never be read from request bodies (scripts/MCP could exfiltrate files).
@@ -208,6 +209,8 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - `scrollable.go` uses deprecated `msg.Type`, `tea.MouseWheelUp`, `tea.MouseWheelDown` — should migrate to `MouseAction`/`MouseButton`.
 
 ## Testing
+
+- **TUI end-to-end**: `internal/app/tui_test.go` runs the whole program with `teatest` against an `httptest` server. Use `start(t, spec)` (it waits for the program to stop: the active page is a package-level variable, so two programs must never overlap), `waitFor` for text that appears, and `finalScreen` for text that changes in place (the renderer redraws only changed cells, e.g. counters).
 
 - **Examples are tests**: `internal/cli/examples_test.go` runs `examples/openapi.yml` + `examples/tests/*.js` against `mock.New` — keep them passing when changing the runner, script API or mock. CI also runs them against `lazyapi mock` and uploads a JUnit report.
 

@@ -536,11 +536,25 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 		if sr.ScriptError != "" {
 			res.Checks = append(res.Checks, Check{Kind: CheckScript, Name: "script ran without errors", Message: sr.ScriptError})
 		}
+		res.Checks = append(res.Checks, afterChecks(sr)...)
 		res.Logs = append(res.Logs, sr.Logs...)
 	}
 
 	res.Outcome = outcomeFor(res.Checks)
 	return res
+}
+
+// afterChecks reports the after(res) hook: a passing check when it ran
+// cleanly (so a report shows the cleanup happened), a failing one when it threw.
+func afterChecks(sr script.Result) []Check {
+	if !sr.AfterRan {
+		return nil
+	}
+	c := Check{Kind: CheckScript, Name: "after() ran without errors", Passed: sr.AfterError == ""}
+	if !c.Passed {
+		c.Message = sr.AfterError
+	}
+	return []Check{c}
 }
 
 // requestCheck validates the request that is about to be sent against the

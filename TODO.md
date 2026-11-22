@@ -43,7 +43,7 @@ Objetivo: validar APIs que exigem login e sequências de CRUD, que é onde teste
 - [x] **Credenciais**: bearer, basic, API key (header, query, cookie) e OAuth2 (`accessToken` fixo, ou client credentials/password com token automático e cache até expirar). Credenciais vazias não são mais enviadas (antes saía `Authorization: Bearer ` vazio).
 - [x] Exemplos: `before()` com login no `getUser.js`, fluxo `userLifecycle.js`, `lazyapi.config.yml`; tudo roda no `go test` e no CI.
 - [x] Fluxos no TUI (paleta e tela do runner, Fase 8).
-- [ ] `after(res)` para limpeza (ex.: apagar o que um teste criou).
+- [x] `after(res)` para limpeza (Fase 9).
 
 ## Fase 7 — Completude HTTP e migração (P1) ✅
 
@@ -71,17 +71,21 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 - [ ] Limpar o histórico pelo TUI (hoje: apagar o arquivo ou `LAZYAPI_NO_HISTORY`).
 - [ ] Rodar um único passo de um fluxo / ver o request de cada passo no detalhe.
 
+## Fase 9 — Testes repetíveis e TUI testado ✅
+
+- [x] `export function after(res)`: roda depois dos testes, mesmo quando falham ou o script lança erro, com a API completa (`lazyapi.send` para apagar o que o teste criou). Vira o check `after() ran without errors`. Em fluxos, os requests do `after` aparecem como passos. O exemplo `createUser` apaga o usuário que cria.
+- [x] Testes end-to-end do TUI com `teatest` (`internal/app/tui_test.go`): o programa inteiro contra um `httptest`, cobrindo confirmação de envio destrutivo, filtro + envio, paleta → runner, run com escritas (y/N), `R` + `esc`, histórico + diff + replay, editor + `alt+enter`, troca de env nomeado e `esc` cancelando um request.
+
 ## Próximas ideias
 
-- `after(res)` para limpeza; `pm.sendRequest`; import de environments do Postman; editor de campos de form.
-- Testes de TUI end-to-end com `teatest` (hoje: testes por componente + validação manual no tmux).
+- `pm.sendRequest`; import de environments do Postman; editor de campos de form.
 
 ## Contínuo — qualidade de código
 
 Fazer junto com as fases, quando tocar no código em questão:
 
 - [ ] **Tirar a dependência `store` → `app/pane/requests`** (mover o tipo de dados de `RequestItem` para `model`). Hoje ela força o preview a ficar sem o componente de resposta e cria risco de import cycle.
-- [ ] Testes de TUI com `teatest` (os fluxos validados manualmente no tmux: envio, confirmação, busca, env).
+- [x] Testes de TUI com `teatest` (Fase 9).
 - [ ] Coverage no CI (o `-race` já roda).
 - [ ] `gofmt -w` nos 9 arquivos antigos fora do padrão (num commit só de formatação).
 - [ ] Estilo de param/header recriado a cada frame (o foco fica frágil).
