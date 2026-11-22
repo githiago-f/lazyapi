@@ -11,11 +11,12 @@ Prioridades: **P0** bloqueia uso real · **P1** alto valor · **P2** polimento.
 | 3 | `a45e115` | `runner` estruturado, `run` com json/junit/tap, exit codes 0/1/2/3, `list`/`describe`/`validate`, servidor MCP |
 | 4 | `8131547` | UI: tela de resposta com abas e checks, highlight, busca, cancelamento, confirmação, envs, `$EDITOR`, rodapé de atalhos |
 | 5 | `9cc29dd` | README, `lazyapi mock`, exemplos executáveis no CI, check `request`, `llms.txt`, skill de testes de API |
-| 6 | (este) | `before(req)`, fluxos, ordem do `run`, ambientes nomeados, credenciais e OAuth2 automático |
+| 6 | `f404bf7` | `before(req)`, fluxos, ordem do `run`, ambientes nomeados, credenciais e OAuth2 automático |
+| 7 | (este) | Opções HTTP/TLS/proxy, form e multipart, timing e cookies, import de curl/Postman/HAR, export curl, camada `pm` |
 
 **O que já funciona hoje:** um agent consegue descobrir, chamar, testar e validar uma API via MCP ou CLI JSON. Um humano consegue fazer o mesmo no TUI, vendo os mesmos checks.
 
-**O que ainda impede o uso real:** APIs com bodies form/multipart, TLS customizado ou proxy não podem ser chamadas, e quem vem do Postman ou do cURL não tem caminho de migração. Por isso a próxima fase é a 7.
+**O que ainda falta:** com as fases 1–7 o fluxo para agents, CI e migração está completo. O que sobra é polimento da UI (fase 8) e qualidade de código.
 
 ---
 
@@ -44,19 +45,23 @@ Objetivo: validar APIs que exigem login e sequências de CRUD, que é onde teste
 - [ ] Fluxos no TUI (lista e execução com progresso — junto da "tela do runner" da Fase 8).
 - [ ] `after(res)` para limpeza (ex.: apagar o que um teste criou).
 
-## Fase 7 — Completude HTTP e migração (P1) ← próxima
+## Fase 7 — Completude HTTP e migração (P1) ✅
 
 Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de quem usa Postman ou cURL.
 
-- [ ] `--insecure`, CA e certificado de cliente, proxy, política de redirects, limite de tamanho de body.
-- [ ] Bodies `application/x-www-form-urlencoded`, `multipart/form-data` e upload de arquivo (CLI, MCP e TUI).
-- [ ] **cURL ↔ request**: `lazyapi import curl`, e no TUI um "copy as cURL" (`ctrl+y` no request).
-- [ ] **Import de Postman collection e HAR** → operações no spec + testes JS (convertendo `pm.test` / `pm.expect` para `test` / `expect`).
-- [ ] Abas **Cookies** e **Timeline** (DNS/TLS/TTFB via `httptrace`) na tela de resposta.
+- [x] `--insecure`, `--ca-cert`, `--client-cert`/`--client-key` (mTLS), `--proxy`, `--no-redirects`/`--max-redirects`, `--max-body`; `http:` por ambiente no config; `insecure` no MCP.
+- [x] Bodies `form-urlencoded` e `multipart/form-data` (objeto JSON → campos), `--form`/`--file`. Arquivos só via `--file`, nunca a partir do body. O editor do TUI mantém o tipo do body.
+- [x] **cURL**: `send --output curl`, `lazyapi import curl`, `alt+c` no TUI, MCP `import_curl`/`export_curl`.
+- [x] **Import de Postman** (v2.0/v2.1: pastas → tags, auth → security schemes, variáveis → `.env.postman`, scripts mantidos com a camada `pm`) e **HAR** (só tráfego de API, um exemplo por status).
+- [x] Abas **Cookies** e **Timeline** (DNS/TCP/TLS/TTFB/download) na tela de resposta; `timing` e `cookies` no report.
+- [ ] `pm.sendRequest` (callback) na camada `pm`.
+- [ ] Import de environments do Postman (`*.postman_environment.json`) para `lazyapi.config.yml`.
+- [ ] Editor de campos de form no TUI (hoje o body form é editado como objeto JSON).
 
-## Fase 8 — Polimento da UI (P2)
+## Fase 8 — Polimento da UI (P2) ← próxima
 
 - [ ] Paleta de comandos (`ctrl+k`): buscar operação, trocar env, rodar testes, copiar como cURL.
+- [ ] Ver e rodar fluxos no TUI.
 - [ ] Tela do runner no TUI: rodar uma tag ou a spec inteira com progresso e lista navegável de falhas.
 - [ ] Histórico de requests com replay, e diff entre respostas ou contra o example salvo.
 - [ ] Filtro jq (`gojq`) na resposta.

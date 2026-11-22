@@ -12,9 +12,11 @@
 
 Scenarios across operations: write `flows/<name>.js` (lazyapi.send in order + test()); run with `lazyapi run <spec> --flow flows/<name>.js` or `--flows`. Every step is checked against the spec. A test script may `export function before(req)` to change the request (auth, signatures) before it is sent. Named environments (server, env file, vars, credentials incl. OAuth2) live in lazyapi.config.yml: `--env-name staging`.
 
+Import: `lazyapi import curl|postman|har <source> --into <spec>` (Postman scripts keep working via a `pm` compatibility layer). Export: `lazyapi send request <spec> --op <id> --output curl`. Forms: `--form k=v`, `--file name=path`. TLS/proxy: `--insecure`, `--ca-cert`, `--client-cert/--client-key`, `--proxy`, or `http:` in lazyapi.config.yml.
+
 No server yet? `lazyapi mock <spec>` serves the examples on http://127.0.0.1:4010 and validates requests (422). `Prefer: code=404` selects a declared response.
 
-MCP: `lazyapi mcp --root <dir>` exposes list_specs, list_operations, describe_operation, send_request, run_tests, run_flow, write_flow, read_test, write_test, validate_spec, script_api.
+MCP: `lazyapi mcp --root <dir>` exposes list_specs, list_operations, describe_operation, send_request, run_tests, run_flow, write_flow, read_test, write_test, validate_spec, script_api, import_curl, export_curl.
 
 ## Docs
 

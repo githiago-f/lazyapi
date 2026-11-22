@@ -29,6 +29,7 @@ type SendMsg struct {
 	// Auth and Vars come from the active named environment.
 	Auth map[string]model.AuthSecrets
 	Vars map[string]string
+	HTTP model.HTTPOptions
 }
 
 // ResultMsg carries a finished exchange back to the view that sent it.
@@ -48,6 +49,11 @@ func Exchange(ctx context.Context, msg SendMsg) tea.Cmd {
 func exchange(ctx context.Context, msg SendMsg) runner.OpResult {
 	req := msg.Request
 	req.Auth = model.ApplySecrets(req.Auth, msg.Auth)
+	client, err := msg.HTTP.Client()
+	if err != nil {
+		return runner.OpResult{Method: req.Method.Label(), Path: req.URI, Outcome: runner.Errored, Reason: err.Error()}
+	}
+	req.HTTPClient = client
 	in := runner.ExchangeInput{Request: req, Ref: req.OpenAPIRef, Auth: msg.Auth}
 	if req.Timeout == 0 {
 		in.Request.Timeout = model.DefaultTimeout

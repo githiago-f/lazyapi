@@ -21,6 +21,7 @@ Flags may appear before or after positional arguments.
 | `types` | Print the test script API ([Test Scripts](/scripting)) |
 | [`mcp`](/agents) | Serve these tools to AI agents over MCP |
 | [`mock`](/cli/mock) | Fake API from the spec's examples, with request validation |
+| [`import`](/cli/import) | Add operations from curl, Postman collections or HAR captures |
 | [`create file`](/cli/create) | Create a new OpenAPI spec template |
 | [`add request`](/cli/add) / [`add server`](/cli/add) | Add an operation or server |
 | [`remove request`](/cli/remove) | Remove an operation |

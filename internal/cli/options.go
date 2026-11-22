@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -60,6 +61,9 @@ type runFlags struct {
 	offline, reload, frozen *bool
 	noContract, dryRun      *bool
 	scriptTimeout           *time.Duration
+
+	http    model.HTTPOptions
+	maxBody *string
 }
 
 func registerRunFlags(fs *flag.FlagSet, scriptHelp string) *runFlags {
@@ -83,6 +87,15 @@ func registerRunFlags(fs *flag.FlagSet, scriptHelp string) *runFlags {
 	f.noContract = fs.Bool("no-contract", false, "skip validating responses against the OpenAPI schema")
 	f.dryRun = fs.Bool("dry-run", false, "print what would be sent without sending")
 	f.scriptTimeout = fs.Duration("script-timeout", script.DefaultTimeout, "maximum run time of a test script")
+
+	fs.BoolVar(&f.http.Insecure, "insecure", false, "skip TLS certificate verification")
+	fs.StringVar(&f.http.CACert, "ca-cert", "", "PEM file with extra trusted CA certificates")
+	fs.StringVar(&f.http.ClientCert, "client-cert", "", "PEM client certificate (mutual TLS)")
+	fs.StringVar(&f.http.ClientKey, "client-key", "", "PEM client key (mutual TLS)")
+	fs.StringVar(&f.http.Proxy, "proxy", "", "proxy URL (http, https or socks5); default: $HTTPS_PROXY/$HTTP_PROXY")
+	fs.BoolVar(&f.http.NoRedirects, "no-redirects", false, "do not follow redirects (3xx responses are checked as-is)")
+	fs.IntVar(&f.http.MaxRedirects, "max-redirects", 0, "maximum redirects to follow (default 10)")
+	f.maxBody = fs.String("max-body", "", "maximum response body size, e.g. 10MB (default 50MB)")
 	return f
 }
 
@@ -108,6 +121,15 @@ func (f *runFlags) options(specPath string) (runner.Options, error) {
 	}
 	server, envFile := selected.Server, selected.EnvFile
 
+	client, err := selected.HTTP.Merge(f.http).Client()
+	if err != nil {
+		return runner.Options{}, usageErr("%v", err)
+	}
+	maxBody, err := parseSize(*f.maxBody)
+	if err != nil {
+		return runner.Options{}, usageErr("--max-body: %v", err)
+	}
+
 	envMap, err := env.NewStore(envFile).Load()
 	if err != nil {
 		return runner.Options{}, runtimeErr(fmt.Errorf("error loading env file: %w", err))
@@ -123,6 +145,8 @@ func (f *runFlags) options(specPath string) (runner.Options, error) {
 	modules.AllowedHosts = splitList(*f.allowImport)
 
 	return runner.Options{
+		HTTPClient:    client,
+		MaxBody:       maxBody,
 		EnvName:       selected.Name,
 		Vars:          selected.Vars,
 		Auth:          selected.Auth,
@@ -195,4 +219,27 @@ func reportError(r runner.Report) error {
 	}
 	s := r.Summary
 	return &ExitError{Code: code, Err: fmt.Errorf("%d failed, %d errors (%d checks failed)", s.Failed, s.Errors, s.ChecksFailed)}
+}
+
+// parseSize reads sizes like "512", "10KB", "50MB", "1GB" ("" means 0).
+func parseSize(v string) (int64, error) {
+	v = strings.ToUpper(strings.TrimSpace(v))
+	if v == "" {
+		return 0, nil
+	}
+	mult := int64(1)
+	for _, u := range []struct {
+		suffix string
+		mult   int64
+	}{{"GB", 1 << 30}, {"MB", 1 << 20}, {"KB", 1 << 10}, {"B", 1}} {
+		if strings.HasSuffix(v, u.suffix) {
+			v, mult = strings.TrimSpace(strings.TrimSuffix(v, u.suffix)), u.mult
+			break
+		}
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("invalid size %q (use e.g. 10MB)", v)
+	}
+	return n * mult, nil
 }

@@ -47,6 +47,7 @@ type KeyMap struct {
 	OpenEditor key.Binding
 	SwitchEnv  key.Binding
 	Cancel     key.Binding
+	CopyCurl   key.Binding
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
@@ -58,7 +59,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		return [][]key.Binding{
 			{k.Next, k.Prev},
 			{k.Back, k.Save, k.SaveExample, k.CopyResponse, k.Quit, k.Kill},
-			{k.AddQueryParam, k.AddPathParam, k.AddHeader, k.AddAuth, k.DelAuth, k.RunTests, k.OpenEditor, k.SwitchEnv},
+			{k.AddQueryParam, k.AddPathParam, k.AddHeader, k.AddAuth, k.DelAuth, k.RunTests, k.OpenEditor, k.SwitchEnv, k.CopyCurl},
 		}
 	}
 
@@ -193,5 +194,9 @@ var DefaultKeyMap = KeyMap{
 	Cancel: key.NewBinding(
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "cancel request"),
+	),
+	CopyCurl: key.NewBinding(
+		key.WithKeys("alt+c"),
+		key.WithHelp("alt+c", "copy as cURL"),
 	),
 }

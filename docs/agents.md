@@ -32,6 +32,7 @@ Or with any client that reads an `mcpServers` config:
 | `send_request` | Send one operation (params, query, headers, body) and get request, response and every check |
 | `run_tests` | Run many operations. Only GET/HEAD/OPTIONS run unless `methods` is set (`["all"]` includes writes). Bodies are included only for operations that did not pass |
 | `run_flow` / `write_flow` | Write and run `flows/<name>.js` scenarios across operations; every step is checked against the spec |
+| `import_curl` / `export_curl` | Add an operation from a curl command, or get the exact request as curl |
 | `read_test` / `write_test` | Read or write an operation's JavaScript test script; `write_test` links it via `x-lazyapi-tests` and reports compile errors |
 | `validate_spec` | OpenAPI and LazyAPI checks (operationIds, responses, scripts compile) |
 | `script_api` | The TypeScript definitions of the script API |

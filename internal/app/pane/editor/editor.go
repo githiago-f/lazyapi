@@ -82,6 +82,9 @@ type RequestPane struct {
 	draftPath string
 
 	openAPIRef *model.OpenAPIRef
+	// bodyType is the media type of the loaded request body (kept on save
+	// and send; the Body tab edits only the content).
+	bodyType model.MimeType
 
 	envStore *env.Store
 
@@ -230,6 +233,7 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	rp.fileName = formData.FileName
 	rp.draftPath = formData.DraftPath
 	rp.openAPIRef = formData.OpenAPIRef
+	rp.bodyType = formData.Body.Type
 	rp.Method.Cursor = int(formData.Method)
 	rp.URI.TextInput.SetValue(formData.URI)
 
@@ -306,7 +310,7 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 		ServerURL:  rp.Server.Value(),
 		Servers:    rp.Server.Labels,
 		Body: model.Body{
-			Type: model.ApplicationJSON,
+			Type: rp.bodyTypeOrJSON(),
 			Raw:  bd.Value(),
 		},
 		Auth:    au.Value(),
@@ -316,6 +320,13 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 		Tests:   tp.Value(),
 		Env:     envMap,
 	}
+}
+
+func (rp RequestPane) bodyTypeOrJSON() model.MimeType {
+	if rp.bodyType == "" {
+		return model.ApplicationJSON
+	}
+	return rp.bodyType
 }
 
 // fingerprint identifies the persisted part of a request.
@@ -443,6 +454,7 @@ func (rp RequestPane) HelpBindings() []key.Binding {
 
 	return append(bindings,
 		config.DefaultKeyMap.Next,
+		config.DefaultKeyMap.CopyCurl,
 		config.DefaultKeyMap.Save,
 		config.DefaultKeyMap.SaveExample,
 		config.DefaultKeyMap.Back,

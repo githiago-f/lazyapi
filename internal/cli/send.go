@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/report"
 	"github.com/githiago-f/lazyapi/internal/runner"
@@ -22,10 +24,13 @@ const sendUsage = `usage: lazyapi send request <spec.yml> (<path> <method> | --o
   --op id             operation to send (instead of <path> <method>)
   --param k=v  --query k=v  --header k=v   (repeatable)
   --body value|@file  request body; @file reads it from a file, @- from stdin
+  --form k=v          form field (repeatable): form-urlencoded, or multipart with --file
+  --file name=path    multipart file part (repeatable)
   --server url|index  --env file  --timeout 30s
   --script file       test script (default: the operation's x-lazyapi-tests)
   --no-contract  --script-timeout d  --offline  --reload  --frozen-lockfile  --allow-import hosts
   --output pretty|json|junit|tap  --output-file path  --bodies failed|all|none (default all)
+  --output curl       print the request as a curl command instead of sending it
   --save-example      save the response as an example in the spec
   --dry-run           show the request without sending it
 
@@ -37,6 +42,9 @@ func SendRequest(args []string) error {
 	opFlag := fs.String("op", "", "operationId (or \"METHOD /path\") to send")
 	body := fs.String("body", "", "request body, @file or @- for stdin")
 	saveExample := fs.Bool("save-example", false, "save the response as an example in the spec")
+	form, files := kvFlag{}, kvFlag{}
+	fs.Var(form, "form", "form field name=value (repeatable); sends form-urlencoded or multipart")
+	fs.Var(files, "file", "multipart file part name=path (repeatable)")
 
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -44,6 +52,10 @@ func SendRequest(args []string) error {
 	}
 	if !flagSet(fs, "bodies") {
 		*f.bodies = string(report.BodiesAll) // a single request: show what came back
+	}
+	asCurl := *f.output == "curl"
+	if asCurl {
+		*f.output = report.Pretty
 	}
 	if err := f.validate(); err != nil {
 		return err
@@ -77,6 +89,28 @@ func SendRequest(args []string) error {
 			return usageErr("--body: %v", err)
 		}
 		opts.Body = &raw
+	}
+
+	if len(form) > 0 || len(files) > 0 {
+		if flagSet(fs, "body") {
+			return usageErr("use either --body or --form/--file")
+		}
+		if err := formBody(&opts, spec, ref, form, files); err != nil {
+			return err
+		}
+	}
+
+	if asCurl {
+		req, err := runner.Prepare(context.Background(), spec, file, ref, opts)
+		if err != nil {
+			return runtimeErr(err)
+		}
+		cmd, err := req.Curl(context.Background())
+		if err != nil {
+			return runtimeErr(err)
+		}
+		fmt.Println(cmd)
+		return nil
 	}
 
 	res, lockErr := runner.RunOne(context.Background(), spec, file, ref, opts)
@@ -223,4 +257,35 @@ func saveResponseExample(file string, ref model.OpenAPIRef, r *runner.ResponseIn
 		return fmt.Errorf("error saving example: %w", err)
 	}
 	return store.SaveSpec(file, spec)
+}
+
+// formBody turns --form/--file into a form body. The media type is the one
+// the operation declares (urlencoded or multipart); without a declaration,
+// files mean multipart and plain fields mean urlencoded.
+func formBody(opts *runner.Options, spec *openapi3.T, ref model.OpenAPIRef, form, files kvFlag) error {
+	declared, _ := store.BodyExample(store.FindOperation(spec, ref))
+	switch {
+	case strings.HasPrefix(declared, string(model.MultipartForm)):
+		opts.BodyType = model.MultipartForm
+	case strings.HasPrefix(declared, string(model.FormURLEncoded)) && len(files) == 0:
+		opts.BodyType = model.FormURLEncoded
+	case len(files) > 0:
+		opts.BodyType = model.MultipartForm
+	default:
+		opts.BodyType = model.FormURLEncoded
+	}
+	for name, path := range files {
+		if _, err := os.Stat(path); err != nil {
+			return usageErr("--file %s: %v", name, err)
+		}
+	}
+	fields := map[string]string(form)
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return usageErr("--form: %v", err)
+	}
+	raw := string(data)
+	opts.Body = &raw
+	opts.Files = files
+	return nil
 }

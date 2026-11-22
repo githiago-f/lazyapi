@@ -7,7 +7,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | Key | Action |
 |-----|--------|
 | `?` | Toggle help (ignored while typing in a field) |
-| `ctrl+v` | Switch environment: cycles `.env`, `.env.<name>`, `<name>.env` in the current directory, and "none" |
+| `ctrl+v` | Switch environment: the named environments of `lazyapi.config.yml` (or `.env*` files when there is no config), then "none" |
 | `esc` | Cancel the request in flight (while the spinner is shown) |
 | `ctrl+c` | Quit |
 
@@ -18,7 +18,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `↑`/`k`, `↓`/`j` | Move |
 | `enter` | Open in the editor |
 | `s` | Send the selected request. POST/PUT/PATCH/DELETE ask for confirmation |
-| `[` / `]` | Previous / next response tab (Body, Headers, Checks, Console) |
+| `[` / `]` | Previous / next response tab (Body, Headers, Cookies, Timeline, Checks, Console) |
 | `pgup` / `pgdown` | Scroll the response |
 | `o` | Cycle the server |
 | `/` | Filter by method, path, summary or tag (`esc` clears) |
@@ -39,6 +39,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `ctrl+o` | Save to the spec (definitions, test script) |
 | `ctrl+e` | Save the last response as an example in the spec |
 | `ctrl+x` | Open the Body or Tests tab in `$VISUAL` / `$EDITOR` |
+| `alt+c` | Copy the request as cURL (with the active environment's server and credentials) |
 | `esc` | Leave tab content, then back to the list |
 
 ### Tabs
@@ -57,7 +58,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 
 | Key | Action |
 |-----|--------|
-| `[` / `]` or `1`–`4` | Body / Headers / Checks / Console |
+| `[` / `]` or `1`–`6` | Body / Headers / Cookies / Timeline / Checks / Console |
 | `r` | Toggle raw / pretty body |
 | `/` | Search the response; `n` / `N` jump between matches |
 | `ctrl+y` | Copy the response body |
