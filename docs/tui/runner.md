@@ -34,4 +34,4 @@ History files live in the user cache directory (`~/.cache/lazyapi/history/` on L
 - bodies are stored as written in the editor, so <code v-pre>{{env.PASSWORD}}</code> stays a template;
 - console output and response cookies are dropped, and bodies over 256 KB are cut.
 
-Replaying a redacted header uses the operation's current value. Set `LAZYAPI_NO_HISTORY=1` to disable the history, or `LAZYAPI_HISTORY_DIR` to keep it somewhere else.
+Replaying a redacted header uses the operation's current value. `X` in the history deletes it (after `y`). Set `LAZYAPI_NO_HISTORY=1` to disable the history, or `LAZYAPI_HISTORY_DIR` to keep it somewhere else.
