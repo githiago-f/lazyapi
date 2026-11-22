@@ -85,7 +85,7 @@ func RunFlow(ctx context.Context, spec *openapi3.T, specPath, flowPath string, o
 	}
 	sctx.OnSend = func(ref model.OpenAPIRef, req model.Request, resp *script.Response, sendErr error) {
 		n := len(res.Steps) + 1
-		step := Step{Method: ref.Method, Path: ref.Path, URL: req.ResolvedURL()}
+		step := Step{Method: ref.Method, Path: ref.Path, URL: req.ResolvedURL(), Request: requestInfo(req)}
 		if op := store.FindOperation(spec, ref); op != nil {
 			step.OperationID = op.OperationID
 		}
@@ -96,6 +96,8 @@ func RunFlow(ctx context.Context, spec *openapi3.T, specPath, flowPath string, o
 			return // the script sees the error and decides; test() reports it
 		}
 		step.Status, step.DurationMs = resp.Status, resp.Duration.Milliseconds()
+		step.Response = &ResponseInfo{Status: resp.Status, StatusText: resp.StatusText, Headers: flattenHeader(resp.Header),
+			Body: resp.Body, DurationMs: step.DurationMs}
 		res.Steps = append(res.Steps, step)
 		if opts.NoContract {
 			return

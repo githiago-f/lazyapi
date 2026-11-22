@@ -89,6 +89,9 @@ type Step struct {
 	Status      int    `json:"status,omitempty"`
 	DurationMs  int64  `json:"durationMs"`
 	Error       string `json:"error,omitempty"`
+	// Request (credentials redacted) and Response of the step.
+	Request  *RequestInfo  `json:"request,omitempty"`
+	Response *ResponseInfo `json:"response,omitempty"`
 }
 
 // KindFlow marks results produced by a flow script.

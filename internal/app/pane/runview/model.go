@@ -51,7 +51,7 @@ var (
 	OpenKey     = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "open in editor"))
 	DetailKey   = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "list/details"))
 	BackKey     = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "stop/back"))
-	ResponseKey = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details"))
+	ResponseKey = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details · expand flow"))
 )
 
 var (
@@ -90,7 +90,8 @@ type Model struct {
 	err     error
 
 	onlyFailed  bool
-	cursor      int // index into visible()
+	cursor      int          // index into visible()
+	expanded    map[int]bool // flow results (by index) showing their steps
 	offset      int
 	detailFocus bool
 	detail      responses.Model
@@ -122,6 +123,7 @@ func (m *Model) Start(r Run) tea.Cmd {
 	m.run = r
 	m.id++
 	m.results = nil
+	m.expanded = nil
 	m.err = nil
 	m.cursor, m.offset = 0, 0
 	m.detailFocus = false
@@ -174,24 +176,67 @@ func (m *Model) layout() {
 
 func (m Model) headerHeight() int { return 2 }
 
-// visible returns the indices of results shown in the list.
-func (m Model) visible() []int {
-	var out []int
+// listRow is a line of the list: a result, or one step of an expanded flow.
+type listRow struct {
+	res  int
+	step int // -1: the result itself
+}
+
+// visible returns the rows shown in the list.
+func (m Model) visible() []listRow {
+	var out []listRow
 	for i, r := range m.results {
 		if m.onlyFailed && r.Outcome != runner.Failed && r.Outcome != runner.Errored {
 			continue
 		}
-		out = append(out, i)
+		out = append(out, listRow{res: i, step: -1})
+		if m.expanded[i] {
+			for s := range r.Steps {
+				out = append(out, listRow{res: i, step: s})
+			}
+		}
 	}
 	return out
 }
 
-func (m Model) selected() (runner.OpResult, bool) {
+func (m Model) selectedRow() (listRow, bool) {
 	v := m.visible()
 	if m.cursor < 0 || m.cursor >= len(v) {
+		return listRow{}, false
+	}
+	return v[m.cursor], true
+}
+
+func (m Model) selected() (runner.OpResult, bool) {
+	row, ok := m.selectedRow()
+	if !ok {
 		return runner.OpResult{}, false
 	}
-	return m.results[v[m.cursor]], true
+	if row.step >= 0 {
+		return stepResult(m.results[row.res], row.step), true
+	}
+	return m.results[row.res], true
+}
+
+// stepResult presents one step of a flow as a result of its own: its
+// request, response and the automatic checks of that step.
+func stepResult(flow runner.OpResult, i int) runner.OpResult {
+	st := flow.Steps[i]
+	r := runner.OpResult{OperationID: st.OperationID, Method: st.Method, Path: st.Path, Request: st.Request, Response: st.Response, Outcome: runner.Passed}
+	prefix := fmt.Sprintf("#%d ", i+1)
+	for _, c := range flow.Checks {
+		if name, ok := strings.CutPrefix(c.Name, prefix); ok {
+			c.Name = strings.TrimPrefix(strings.TrimPrefix(name, st.Method+" "+st.Path), " · ")
+			r.Checks = append(r.Checks, c)
+			if !c.Passed {
+				r.Outcome = runner.Failed
+			}
+		}
+	}
+	if st.Error != "" {
+		r.Outcome, r.Reason = runner.Errored, st.Error
+	}
+	return r
 }
 
 func (m *Model) showSelected() {
@@ -235,8 +280,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.elapsed = time.Since(m.started)
 		m.err = msg.err
 		// Jump to the first failure: that is what the user wants to see.
-		for i, idx := range m.visible() {
-			if r := m.results[idx]; r.Outcome == runner.Failed || r.Outcome == runner.Errored {
+		for i, row := range m.visible() {
+			if r := m.results[row.res]; row.step < 0 && (r.Outcome == runner.Failed || r.Outcome == runner.Errored) {
 				m.cursor = i
 				break
 			}
@@ -298,12 +343,12 @@ func (m Model) updateKeys(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case msg.String() == "G" || msg.String() == "end":
 		m.cursor = len(m.visible()) - 1
 	case key.Matches(msg, FailedKey):
-		current, ok := m.selected()
+		current, ok := m.selectedRow()
 		m.onlyFailed = !m.onlyFailed
 		m.cursor = 0
 		if ok {
-			for i, idx := range m.visible() {
-				if m.results[idx].Label() == current.Label() {
+			for i, row := range m.visible() {
+				if row == current {
 					m.cursor = i
 				}
 			}
@@ -318,6 +363,8 @@ func (m Model) updateKeys(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			ref := model.OpenAPIRef{FilePath: m.run.SpecPath, Path: r.Path, Method: r.Method}
 			return m, func() tea.Msg { return OpenOperationMsg{Ref: ref} }
 		}
+		return m, nil
+	case key.Matches(msg, ResponseKey) && m.toggleFlow():
 		return m, nil
 	case key.Matches(msg, ResponseKey), key.Matches(msg, DetailKey):
 		if _, ok := m.selected(); ok {
@@ -336,6 +383,20 @@ func (m Model) updateKeys(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	m.clamp()
 	m.showSelected()
 	return m, nil
+}
+
+// toggleFlow expands or collapses the selected flow; false when the row is
+// not a flow with steps.
+func (m *Model) toggleFlow() bool {
+	row, ok := m.selectedRow()
+	if !ok || row.step >= 0 || m.results[row.res].Kind != runner.KindFlow || len(m.results[row.res].Steps) == 0 {
+		return false
+	}
+	if m.expanded == nil {
+		m.expanded = map[int]bool{}
+	}
+	m.expanded[row.res] = !m.expanded[row.res]
+	return true
 }
 
 func (m *Model) clamp() {
@@ -419,15 +480,28 @@ func icon(o runner.Outcome) string {
 	}
 }
 
-func (m Model) row(r runner.OpResult, width int, selected bool) string {
+func (m Model) row(lr listRow, width int, selected bool) string {
+	r := m.results[lr.res]
+	if lr.step >= 0 {
+		r = stepResult(r, lr.step)
+	}
 	label := r.Label()
-	if r.Kind == runner.KindFlow {
+	switch {
+	case lr.step >= 0:
+		label = fmt.Sprintf("  ↳ %d. %s", lr.step+1, r.Label())
+	case r.Kind == runner.KindFlow && len(r.Steps) > 0 && m.expanded[lr.res]:
+		label = "▾ flow " + r.Path
+	case r.Kind == runner.KindFlow && len(r.Steps) > 0:
+		label = "▸ flow " + r.Path
+	case r.Kind == runner.KindFlow:
 		label = "flow " + r.Path
 	}
 	info := ""
 	switch {
 	case r.Response != nil:
 		info = fmt.Sprintf("%d · %dms", r.Response.Status, r.Response.DurationMs)
+	case lr.step >= 0 && r.Reason != "":
+		info = "error"
 	case r.Outcome == runner.Skipped:
 		info = "skipped"
 	case r.Kind == runner.KindFlow:
@@ -464,7 +538,7 @@ func (m Model) list() string {
 		lines = append(lines, dimStyle.Render(msg))
 	}
 	for i := m.offset; i < len(v) && i < m.offset+rows; i++ {
-		lines = append(lines, m.row(m.results[v[i]], w, i == m.cursor))
+		lines = append(lines, m.row(v[i], w, i == m.cursor))
 	}
 	style := borderOn
 	if m.detailFocus {

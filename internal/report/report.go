@@ -87,7 +87,31 @@ func FilterBodies(op runner.OpResult, bodies Bodies) runner.OpResult {
 		}
 		op.Response = &resp
 	}
+	if len(op.Steps) > 0 {
+		steps := make([]runner.Step, len(op.Steps))
+		for i, st := range op.Steps {
+			if st.Request != nil {
+				r := *st.Request
+				r.Body = bodyPolicy(r.Body, keep)
+				st.Request = &r
+			}
+			if st.Response != nil {
+				r := *st.Response
+				r.Body = bodyPolicy(r.Body, keep)
+				st.Response = &r
+			}
+			steps[i] = st
+		}
+		op.Steps = steps
+	}
 	return op
+}
+
+func bodyPolicy(body string, keep bool) string {
+	if keep {
+		return truncate(body)
+	}
+	return ""
 }
 
 func withBodies(r runner.Report, bodies Bodies) runner.Report {

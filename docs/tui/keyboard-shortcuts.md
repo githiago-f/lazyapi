@@ -75,7 +75,8 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | Key | Action |
 |-----|--------|
 | `↑`/`k`, `↓`/`j`, `g` / `G` | Move through the results |
-| `enter` / `tab` | Focus the result details (response tabs, search, jq); `tab`/`esc` back to the list |
+| `enter` | On a flow: expand / collapse its steps. Otherwise: focus the details |
+| `tab` | Focus the result details (response tabs, search, jq); `tab`/`esc` back to the list |
 | `F` | Show only failures |
 | `e` | Open the operation in the editor |
 | `R` | Run again |

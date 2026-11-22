@@ -34,7 +34,7 @@ Operations run in spec order within four groups: reads (`GET`/`HEAD`/`OPTIONS`),
 | `--flow <file>` | Run only this flow (repeatable); no operations are run |
 | `--flow-timeout <d>` | Maximum run time of one flow (default `5m`) |
 
-Flow results appear in the report with `"kind": "flow"`, `"method": "FLOW"`, the flow path, its `steps` and its checks.
+Flow results appear in the report with `"kind": "flow"`, `"method": "FLOW"`, the flow path, its `steps` (each with `request` and `response`, bodies following `--bodies`) and its checks.
 
 ## Execution
 
