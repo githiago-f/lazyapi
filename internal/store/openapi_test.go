@@ -1016,5 +1016,3 @@ func ParseSpecFromYAML(t *testing.T, yamlContent string) (*openapi3.T, error) {
 	}
 	return ParseSpec(tmpFile)
 }
-
-

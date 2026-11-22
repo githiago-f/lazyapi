@@ -226,8 +226,8 @@ func fullRequest() model.Request {
 			Raw:  `{"key":"value"}`,
 		},
 		Headers: map[string]string{
-			"X-Custom":  "header-value",
-			"X-Debug":   "true",
+			"X-Custom": "header-value",
+			"X-Debug":  "true",
 		},
 		Params: map[string]string{
 			"id": "42",
