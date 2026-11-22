@@ -257,3 +257,57 @@ func TestTUI_EscCancelsRequestInFlight(t *testing.T) {
 	tm.Send(press("esc"))
 	waitFor(t, tm, "request cancelled")
 }
+
+func TestTUI_FormBodyFields(t *testing.T) {
+	got := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		got <- r.Header.Get("Content-Type") + " " + r.PostForm.Encode()
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "auth.yml")
+	if err := os.WriteFile(spec, []byte(fmt.Sprintf(`openapi: 3.0.0
+info: {title: Auth, version: "1"}
+servers: [{url: %s}]
+paths:
+  /login:
+    post:
+      operationId: login
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            example: {user: ana, password: secret}
+      responses: {"200": {description: ok}}
+`, srv.URL)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm := start(t, spec)
+	waitFor(t, tm, "/login")
+	tm.Send(press("enter")) // open in the editor
+	waitFor(t, tm, "No response yet")
+
+	// tab ×4 → request tabs; → ×4 → Body; enter edits it.
+	for i := 0; i < 4; i++ {
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	}
+	for i := 0; i < 4; i++ {
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyRight})
+	}
+	tm.Send(press("enter"))
+	waitFor(t, tm, "Form fields", "password", "secret")
+
+	// Rows: password, user (spec examples are serialized with sorted keys). Edit the first value.
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyTab}) // password value
+	tm.Type("2")
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModAlt})
+	select {
+	case body := <-got:
+		if body != "application/x-www-form-urlencoded password=secret2&user=ana" {
+			t.Errorf("server got %q", body)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the form was not sent")
+	}
+}

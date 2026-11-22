@@ -7,6 +7,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -133,6 +134,12 @@ func parseEnvLine(line string) (key, value string, ok bool) {
 	}
 	key = strings.TrimSpace(parts[0])
 	val := strings.TrimSpace(parts[1])
+	// "double quoted" values may use Go/JSON escapes (\n, \", \\).
+	if len(val) >= 2 && val[0] == '"' && val[len(val)-1] == '"' {
+		if u, err := strconv.Unquote(val); err == nil {
+			return key, u, true
+		}
+	}
 	val = strings.Trim(val, `"'`)
 	return key, val, true
 }

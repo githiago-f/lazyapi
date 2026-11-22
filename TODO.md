@@ -54,9 +54,9 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 - [x] **cURL**: `send --output curl`, `lazyapi import curl`, `alt+c` no TUI, MCP `import_curl`/`export_curl`.
 - [x] **Import de Postman** (v2.0/v2.1: pastas → tags, auth → security schemes, variáveis → `.env.postman`, scripts mantidos com a camada `pm`) e **HAR** (só tráfego de API, um exemplo por status).
 - [x] Abas **Cookies** e **Timeline** (DNS/TCP/TLS/TTFB/download) na tela de resposta; `timing` e `cookies` no report.
-- [ ] `pm.sendRequest` (callback) na camada `pm`.
-- [ ] Import de environments do Postman (`*.postman_environment.json`) para `lazyapi.config.yml`.
-- [ ] Editor de campos de form no TUI (hoje o body form é editado como objeto JSON).
+- [x] `pm.sendRequest` (Fase 10).
+- [x] Import de environments do Postman (Fase 10).
+- [x] Editor de campos de form no TUI (Fase 10).
 
 ## Fase 8 — Polimento da UI (P2) ✅
 
@@ -76,9 +76,17 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 - [x] `export function after(res)`: roda depois dos testes, mesmo quando falham ou o script lança erro, com a API completa (`lazyapi.send` para apagar o que o teste criou). Vira o check `after() ran without errors`. Em fluxos, os requests do `after` aparecem como passos. O exemplo `createUser` apaga o usuário que cria.
 - [x] Testes end-to-end do TUI com `teatest` (`internal/app/tui_test.go`): o programa inteiro contra um `httptest`, cobrindo confirmação de envio destrutivo, filtro + envio, paleta → runner, run com escritas (y/N), `R` + `esc`, histórico + diff + replay, editor + `alt+enter`, troca de env nomeado e `esc` cancelando um request.
 
+## Fase 10 — Migração do Postman completa ✅
+
+- [x] `lazyapi import postman-env <env.json>`: valores em `.env.<nome>` (0600), ambiente novo no `lazyapi.config.yml` (criado se não existir, comentários preservados, nada sobrescrito), `server` tirado de `baseUrl`/`host`/…; `import postman --environment` resolve hosts `{{baseUrl}}` que só o environment define.
+- [x] Credenciais que são só referência (`Bearer {{token}}`, basic com variáveis, API key) vão para `auth:` do ambiente: o request importado já autentica. Segredos literais continuam fora do spec e do config.
+- [x] `pm.sendRequest(url | {url, method, header, body}, callback)` e `lazyapi.send("METHOD https://…")`: a URL é mapeada para a operação do spec (path params e query vêm da URL) e recebe os mesmos checks; URLs fora do spec são rejeitadas com dica.
+- [x] Aba Body com **campos de form** (urlencoded/multipart): linhas nome/valor, `ctrl+g` adiciona, nomes repetidos viram array, ordem preservada.
+- [x] `.env` aceita valores entre aspas duplas com escapes.
+
 ## Próximas ideias
 
-- `pm.sendRequest`; import de environments do Postman; editor de campos de form.
+- `formdata` (arquivos) no `pm.sendRequest`; runner de collection com iterações/data files (`pm.iterationData`).
 
 ## Contínuo — qualidade de código
 

@@ -55,6 +55,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `ctrl+q` | Params | Add query parameter |
 | `ctrl+p` | Params | Add path parameter |
 | `ctrl+g` | Headers | Add header |
+| `ctrl+g` | Body (form) | Add form field |
 | `ctrl+r` | Auth | Add auth scheme |
 | `del` / `⌫` | Auth | Delete the selected auth scheme |
 

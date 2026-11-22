@@ -146,13 +146,70 @@
     };
   }
 
+  function pmHeaders(h) {
+    var out = {};
+    if (!h) return out;
+    if (Array.isArray(h)) h.forEach(function (x) { if (x && x.key && !x.disabled) out[x.key] = String(x.value); });
+    else if (typeof h === "string") h.split("\n").forEach(function (line) { var i = line.indexOf(":"); if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim(); });
+    else Object.keys(h).forEach(function (k) { out[k] = String(h[k]); });
+    return out;
+  }
+  // pmBody converts a Postman body ({mode: raw|urlencoded|formdata}) to a
+  // lazyapi.send body.
+  function pmBody(b, headers) {
+    if (b === undefined || b === null) return undefined;
+    if (typeof b === "string") return b;
+    var fields = function (list) { var o = {}; (list || []).forEach(function (x) { if (x && x.key && !x.disabled) o[x.key] = x.value; }); return o; };
+    switch (b.mode) {
+      case "raw": return b.raw;
+      case "urlencoded":
+        if (!Object.keys(headers).some(function (k) { return k.toLowerCase() === "content-type"; })) headers["Content-Type"] = "application/x-www-form-urlencoded";
+        var o = fields(b.urlencoded);
+        return Object.keys(o).map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(o[k]); }).join("&");
+      case "formdata": throw new Error("pm.sendRequest: formdata bodies are not supported (file parts are only sent with --file)");
+      default: return b.raw !== undefined ? b.raw : b;
+    }
+  }
+  function wrapResponse(res) {
+    var wrapped = {
+      code: res.status,
+      status: String(res.statusText).replace(/^\d+\s*/, ""),
+      responseTime: res.time,
+      responseSize: res.body.length,
+      headers: headerList(res.headers),
+      json: function () { return res.json(); },
+      text: function () { return res.body; },
+    };
+    Object.defineProperty(wrapped, "to", { get: function () { return new Assertion(wrapped); } });
+    return wrapped;
+  }
+
   var current = null; // the request object while pm.__before runs
   var pm = {
     test: function (name, fn) { return global.test(name, fn); },
     expect: function (v) { return new Assertion(v); },
     environment: scope(), variables: scope(), collectionVariables: scope(), globals: scope(), iterationData: scope(),
     info: { eventName: "test", iteration: 0, iterationCount: 1, requestName: "" },
-    sendRequest: function () { throw new Error("pm.sendRequest is not supported: use lazyapi.send(operationId, options)"); },
+    // pm.sendRequest(url | {url, method, header, body}, callback): the URL is
+    // mapped to the spec operation it belongs to and sent with lazyapi.send,
+    // so it gets the same checks. The callback runs before sendRequest
+    // returns (scripts are synchronous); the response is also returned.
+    sendRequest: function (req, callback) {
+      var r = typeof req === "string" ? { url: req } : (req || {});
+      var url = typeof r.url === "string" ? r.url : (r.url && (r.url.raw || String(r.url))) || "";
+      var opts = { headers: pmHeaders(r.header), query: {} };
+      var body = pmBody(r.body, opts.headers);
+      if (body !== undefined) opts.body = body;
+      var err = null, res = null;
+      try {
+        res = wrapResponse(lazyapi.send(String(r.method || "GET").toUpperCase() + " " + scope().replaceIn(url), opts));
+      } catch (e) {
+        err = e;
+      }
+      if (typeof callback === "function") callback(err, res);
+      else if (err) throw err;
+      return res;
+    },
     __before: function (req, fn) {
       current = req;
       pm.info.eventName = "prerequest";
@@ -174,17 +231,7 @@
     get: function () {
       var res = global.response;
       if (!res) throw new Error("pm.response is not available before the response arrives");
-      var wrapped = {
-        code: res.status,
-        status: String(res.statusText).replace(/^\d+\s*/, ""),
-        responseTime: res.time,
-        responseSize: res.body.length,
-        headers: headerList(res.headers),
-        json: function () { return res.json(); },
-        text: function () { return res.body; },
-      };
-      Object.defineProperty(wrapped, "to", { get: function () { return new Assertion(wrapped); } });
-      return wrapped;
+      return wrapResponse(res);
     },
   });
   global.pm = pm;

@@ -45,6 +45,8 @@ lazyapi run api.yml --script all.js          # one script for every operation
 
 In the TUI, open the **Tests** tab and press `F5`.
 
+Besides an operationId or `"METHOD /path"`, `lazyapi.send` accepts a concrete URL: `lazyapi.send("GET " + env.get("base") + "/users/42?full=1")`. The URL is mapped to the operation it belongs to (path params and query come from it), so it gets the same checks, and the request goes to that host. URLs that are not an operation of the spec, on one of its servers, are rejected.
+
 ## Changing the request: `before(req)`
 
 A test script can export `before`, which runs **before** the request is sent. Use it to authenticate, sign or build the request:

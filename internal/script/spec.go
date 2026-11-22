@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/store"
 )
@@ -55,15 +57,32 @@ func ResolveTarget(spec *openapi3.T, specPath, target string) (model.OpenAPIRef,
 	return model.OpenAPIRef{}, fmt.Errorf("no operation with operationId %q (use \"METHOD /path\" or an existing operationId)", target)
 }
 
-// Send implements SendFunc.
+// Send implements SendFunc. target is an operationId, "METHOD /path", or
+// "METHOD https://host/concrete/path?q=1": a URL is mapped to the spec
+// operation it belongs to (path params and query come from the URL), so it
+// gets the same checks; a URL outside the spec is an error.
 func (c *SpecContext) Send(target string, opts SendOptions) (*Response, error) {
-	ref, err := ResolveTarget(c.Spec, c.SpecPath, target)
+	var (
+		ref    model.OpenAPIRef
+		server string // set for URL targets: send exactly where the URL points
+		err    error
+	)
+	method, rawURL, isPair := strings.Cut(strings.TrimSpace(target), " ")
+	rawURL = env.Resolve(strings.TrimSpace(rawURL), env.Context{Env: c.Env, Vars: c.Vars})
+	if isPair && strings.Contains(rawURL, "://") {
+		ref, server, err = c.resolveURL(method, rawURL, &opts)
+	} else {
+		ref, err = ResolveTarget(c.Spec, c.SpecPath, target)
+	}
 	if err != nil {
 		return nil, err
 	}
 	req := store.OperationToRequest(c.Spec, ref)
 	if c.ServerURL != "" {
 		req.ServerURL = c.ServerURL
+	}
+	if server != "" {
+		req.ServerURL = server
 	}
 	req.Env, req.Vars, req.Timeout = c.Env, c.Vars, c.Timeout
 	req.HTTPClient, req.MaxBody = c.HTTPClient, c.MaxBody
@@ -165,4 +184,57 @@ func hasHeader(h map[string]string, name string) bool {
 		}
 	}
 	return false
+}
+
+// resolveURL maps an absolute URL to an operation. The URL must be on the
+// context's server or one of the spec's servers; its path (without the
+// server's base path) must match an operation. Path params and query
+// parameters from the URL are added to opts (explicit options win).
+func (c *SpecContext) resolveURL(method, rawURL string, opts *SendOptions) (model.OpenAPIRef, string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return model.OpenAPIRef{}, "", fmt.Errorf("invalid URL %q", rawURL)
+	}
+	servers := []string{c.ServerURL}
+	for _, s := range c.Spec.Servers {
+		servers = append(servers, s.URL)
+	}
+	for _, s := range servers {
+		su, err := url.Parse(env.Resolve(s, env.Context{Env: c.Env, Vars: c.Vars}))
+		if s == "" || err != nil || !strings.EqualFold(su.Host, u.Host) {
+			continue
+		}
+		base := strings.TrimRight(su.Path, "/")
+		if !strings.HasPrefix(u.Path, base) {
+			continue
+		}
+		ref, params, ok := store.MatchPath(c.Spec, method, strings.TrimPrefix(u.Path, base))
+		if !ok {
+			continue
+		}
+		ref.FilePath = c.SpecPath
+		opts.Params = mergeMissing(opts.Params, params)
+		q := map[string]string{}
+		for k, vs := range u.Query() {
+			if len(vs) > 0 {
+				q[k] = vs[len(vs)-1]
+			}
+		}
+		opts.Query = mergeMissing(opts.Query, q)
+		return ref, u.Scheme + "://" + u.Host + base, nil
+	}
+	return model.OpenAPIRef{}, "", fmt.Errorf("%s %s is not an operation of the spec on one of its servers; add it (lazyapi import curl or lazyapi add request) so it is checked like the others", strings.ToUpper(method), u.Redacted())
+}
+
+// mergeMissing adds the entries of extra that dst does not have.
+func mergeMissing(dst, extra map[string]string) map[string]string {
+	if dst == nil {
+		dst = map[string]string{}
+	}
+	for k, v := range extra {
+		if _, ok := dst[k]; !ok {
+			dst[k] = v
+		}
+	}
+	return dst
 }

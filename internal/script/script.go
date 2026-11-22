@@ -110,7 +110,7 @@ type Result struct {
 	// AfterRan reports whether the script exported after() and it was called.
 	AfterRan  bool `json:"afterRan,omitempty"`
 	PassCount int  `json:"passed"`
-	FailCount   int          `json:"failed"`
+	FailCount int  `json:"failed"`
 }
 
 // Failed reports whether any test failed or the script errored.
