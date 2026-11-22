@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -272,15 +273,9 @@ func baseResult(t target) OpResult {
 	}
 }
 
-// execute runs one operation end to end.
-func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, opts Options,
-	envMap, vars map[string]string, single bool) OpResult {
-	res := baseResult(t)
-	if t.skipped != "" {
-		res.Outcome, res.Reason = Skipped, t.skipped
-		return res
-	}
-
+// buildRequest turns an operation plus the run options into the request to
+// send. A non-empty outcome means it cannot be sent (with the reason).
+func buildRequest(spec *openapi3.T, t target, opts Options, envMap, vars map[string]string, single bool) (model.Request, Outcome, string) {
 	req := store.OperationToRequest(spec, t.ref)
 	for k, v := range opts.Params {
 		if _, declared := req.Params[k]; declared || single {
@@ -307,20 +302,68 @@ func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, o
 	req.Auth = model.ApplySecrets(req.Auth, opts.Auth)
 
 	if missing := req.MissingPathParams(); len(missing) > 0 {
-		res.Reason = fmt.Sprintf("no value for path parameter(s) %s (pass --param %s=<value> or declare an example in the spec)",
+		reason := fmt.Sprintf("no value for path parameter(s) %s (pass --param %s=<value> or declare an example in the spec)",
 			strings.Join(missing, ", "), missing[0])
-		res.Outcome = Skipped
 		if single {
-			res.Outcome = Errored
+			return req, Errored, reason
 		}
-		return res
+		return req, Skipped, reason
 	}
 	if err := selectServer(&req, opts.Server); err != nil {
-		res.Outcome, res.Reason = Errored, err.Error()
-		return res
+		return req, Errored, err.Error()
 	}
 	if req.ServerURL == "" {
-		res.Outcome, res.Reason = Errored, "no server URL: the spec declares no servers; pass --server <url>"
+		return req, Errored, "no server URL: the spec declares no servers; pass --server <url>"
+	}
+	return req, "", ""
+}
+
+// Prepare builds the request RunOne would send, after the operation's
+// before(req) hook, without sending it (e.g. to export it as cURL).
+func Prepare(ctx context.Context, spec *openapi3.T, specPath string, ref model.OpenAPIRef, opts Options) (model.Request, error) {
+	ref.Method = strings.ToUpper(ref.Method)
+	op := store.FindOperation(spec, ref)
+	if op == nil {
+		return model.Request{}, fmt.Errorf("operation %s %s not found in %s", ref.Method, ref.Path, specPath)
+	}
+	envMap := opts.Env
+	if envMap == nil {
+		envMap = map[string]string{}
+	}
+	t := target{ref: ref, op: op}
+	req, outcome, reason := buildRequest(spec, t, opts, envMap, copyMap(opts.Vars), true)
+	if outcome != "" {
+		return req, errors.New(reason)
+	}
+	source, sopts, err := loadScript(spec, specPath, t, opts)
+	if err != nil || source == "" {
+		return req, err
+	}
+	data := script.ExecData{Request: req, Env: req.Env, Vars: req.Vars}
+	in := ExchangeInput{Spec: spec, SpecPath: specPath, Ref: &ref, Auth: opts.Auth}
+	in.bind(&data, req)
+	br := script.Before(source, data, sopts)
+	if br.Error != "" {
+		return req, errors.New(br.Error)
+	}
+	if br.Defined {
+		req = br.Request
+	}
+	return req, opts.Modules.SaveLock()
+}
+
+// execute runs one operation end to end.
+func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, opts Options,
+	envMap, vars map[string]string, single bool) OpResult {
+	res := baseResult(t)
+	if t.skipped != "" {
+		res.Outcome, res.Reason = Skipped, t.skipped
+		return res
+	}
+
+	req, outcome, reason := buildRequest(spec, t, opts, envMap, vars, single)
+	if outcome != "" {
+		res.Outcome, res.Reason = outcome, reason
 		return res
 	}
 

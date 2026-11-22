@@ -30,6 +30,7 @@ const sendUsage = `usage: lazyapi send request <spec.yml> (<path> <method> | --o
   --script file       test script (default: the operation's x-lazyapi-tests)
   --no-contract  --script-timeout d  --offline  --reload  --frozen-lockfile  --allow-import hosts
   --output pretty|json|junit|tap  --output-file path  --bodies failed|all|none (default all)
+  --output curl       print the request as a curl command instead of sending it
   --save-example      save the response as an example in the spec
   --dry-run           show the request without sending it
 
@@ -51,6 +52,10 @@ func SendRequest(args []string) error {
 	}
 	if !flagSet(fs, "bodies") {
 		*f.bodies = string(report.BodiesAll) // a single request: show what came back
+	}
+	asCurl := *f.output == "curl"
+	if asCurl {
+		*f.output = report.Pretty
 	}
 	if err := f.validate(); err != nil {
 		return err
@@ -93,6 +98,19 @@ func SendRequest(args []string) error {
 		if err := formBody(&opts, spec, ref, form, files); err != nil {
 			return err
 		}
+	}
+
+	if asCurl {
+		req, err := runner.Prepare(context.Background(), spec, file, ref, opts)
+		if err != nil {
+			return runtimeErr(err)
+		}
+		cmd, err := req.Curl(context.Background())
+		if err != nil {
+			return runtimeErr(err)
+		}
+		fmt.Println(cmd)
+		return nil
 	}
 
 	res, lockErr := runner.RunOne(context.Background(), spec, file, ref, opts)
