@@ -88,8 +88,17 @@ func TestRun_JSONOutput(t *testing.T) {
 			if op.Outcome != runner.Failed || op.Response == nil || op.Response.Body == "" {
 				t.Errorf("failed op should carry its body: %+v", op)
 			}
-			if len(op.Checks) == 0 || op.Checks[0].Kind != runner.CheckStatus || op.Checks[0].Message == "" {
+			var status *runner.Check
+			for i := range op.Checks {
+				if op.Checks[i].Kind == runner.CheckStatus {
+					status = &op.Checks[i]
+				}
+			}
+			if status == nil || status.Passed || status.Message == "" {
 				t.Errorf("status check = %+v", op.Checks)
+			}
+			if op.Checks[0].Kind != runner.CheckRequest || !op.Checks[0].Passed {
+				t.Errorf("request check should come first and pass: %+v", op.Checks)
 			}
 		case "getUser":
 			if op.Outcome != runner.Passed || op.Response.Body != "" {
@@ -120,7 +129,7 @@ func TestRun_JUnitAndTAP(t *testing.T) {
 	if xerr := xml.Unmarshal([]byte(out), &suites); xerr != nil {
 		t.Fatalf("invalid junit: %v\n%s", xerr, out)
 	}
-	if suites.Tests != 2 || suites.Skipped != 1 {
+	if suites.Tests != 3 || suites.Skipped != 1 {
 		t.Errorf("junit counts = %+v\n%s", suites, out)
 	}
 
@@ -130,7 +139,8 @@ func TestRun_JUnitAndTAP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"TAP version 14", "ok 1 - GET /items › status 200 is declared", "# SKIP method POST", "1..2"} {
+	for _, want := range []string{"TAP version 14", "ok 1 - GET /items › request matches the OpenAPI spec",
+		"ok 2 - GET /items › status 200 is declared", "# SKIP method POST", "1..3"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("TAP missing %q:\n%s", want, out)
 		}
@@ -294,5 +304,44 @@ func TestListDescribeValidate(t *testing.T) {
 	}
 	if !strings.Contains(out, "does not compile") || !strings.Contains(out, "no servers declared") {
 		t.Errorf("validate = %s", out)
+	}
+}
+
+func TestRun_RequestCheckFlagsInvalidParams(t *testing.T) {
+	srv := newHitServer(t, ok200)
+	spec := writeSpec(t, `openapi: "3.0.0"
+info: {title: t, version: "1"}
+paths:
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: integer}}
+        - {in: query, name: limit, required: true, schema: {type: integer, maximum: 10}}
+      responses:
+        "200": {description: OK}
+`)
+	out, err := captureStdout(t, func() error {
+		return SendRequest([]string{spec, "--op", "getOrder", "--server", srv.URL, "--param", "id=abc", "--query", "limit=50", "--output", "json"})
+	})
+	if ExitCode(err) != 1 {
+		t.Fatalf("exit = %d (%v)", ExitCode(err), err)
+	}
+	var res runner.OpResult
+	if jerr := json.Unmarshal([]byte(out), &res); jerr != nil {
+		t.Fatal(jerr)
+	}
+	c := res.Checks[0]
+	if c.Kind != runner.CheckRequest || c.Passed || !strings.Contains(c.Message, `path parameter "id"`) || !strings.Contains(c.Message, `query parameter "limit"`) {
+		t.Errorf("request check = %+v", c)
+	}
+	if len(srv.Hits()) != 1 {
+		t.Error("an invalid request is still sent (the server's answer is useful)")
+	}
+	// --no-contract disables both directions.
+	if _, err := captureStdout(t, func() error {
+		return SendRequest([]string{spec, "--op", "getOrder", "--server", srv.URL, "--param", "id=abc", "--query", "limit=50", "--no-contract"})
+	}); err != nil {
+		t.Errorf("--no-contract: %v", err)
 	}
 }

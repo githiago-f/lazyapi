@@ -10,25 +10,27 @@ Prioridades: **P0** bloqueia uso real · **P1** alto valor · **P2** polimento.
 | 2 | `1ad8ead` | Engine JS/TS (goja + esbuild), imports `https://` com `lazyapi.lock`, `expect`, `lazyapi.send`, contrato automático; Lua removido |
 | 3 | `a45e115` | `runner` estruturado, `run` com json/junit/tap, exit codes 0/1/2/3, `list`/`describe`/`validate`, servidor MCP |
 | 4 | `8131547` | UI: tela de resposta com abas e checks, highlight, busca, cancelamento, confirmação, envs, `$EDITOR`, rodapé de atalhos |
+| 5 | (este) | README, `lazyapi mock`, exemplos executáveis no CI, check `request`, `llms.txt`, skill de testes de API |
 
 **O que já funciona hoje:** um agent consegue descobrir, chamar, testar e validar uma API via MCP ou CLI JSON. Um humano consegue fazer o mesmo no TUI, vendo os mesmos checks.
 
-**O que ainda impede o uso real:** a documentação de entrada está errada, não existe nada executável "de fábrica" e cenários com autenticação ou várias etapas dão trabalho. Por isso a próxima fase é a 5.
+**O que ainda impede o uso real:** cenários com autenticação ou várias etapas dão trabalho (a ordem do `run` é a do spec: o `DELETE` roda antes do `GET` do mesmo path). Por isso a próxima fase é a 6.
 
 ---
 
-## Fase 5 — Fechar o ciclo de entrada (P0) ← próxima
+## Fase 5 — Fechar o ciclo de entrada (P0) ✅
 
 Objetivo: alguém (pessoa ou agent) clona o repositório e em 2 minutos roda testes de verdade, sem servidor externo.
 
-- [ ] **README reescrito.** Hoje diz que o smoke "não foi implementado" e não cita `run`, MCP nem JS. Incluir quickstart, `run --output json`, setup do MCP e link para `docs/scripting.md`.
-- [ ] **`lazyapi mock <spec>`**: servidor HTTP que responde com os examples do spec (status, headers, body) e valida o request recebido. Dá um alvo local para os examples, para o CI e para os próprios testes.
-- [ ] **`examples/` executável.** O spec atual aponta para `api.example.com`. Trocar por um spec com `tests/*.js`, `lazyapi.lock` e `.env.example` que passe contra o `lazyapi mock`, e adicionar esse cenário ao CI.
-- [ ] **Validação do request contra o spec** (params obrigatórios, body schema) antes de enviar, como check `request`. Pega o erro do lado do cliente, que é o caso mais comum quando um agent monta a chamada.
-- [ ] **`llms.txt`** no site de docs e uma **skill `.agents/skills/api-testing/`** com o fluxo list → describe → send → write_test → run.
-- [ ] Corrigir no AGENTS.md o item de código morto (`modal.go`/`view.go` já não existem).
+- [x] **README reescrito**: quickstart com mock, tabela de checks, testes JS, CLI, MCP, TUI.
+- [x] **`lazyapi mock <spec>`**: responde com os examples (ou `SchemaSample`), escolhe a resposta com `Prefer: code=`/`example=`, valida o request (422), aceita prefixo de `servers`, CORS preflight.
+- [x] **`examples/` executável**: API de usuários com 6 operações, `tests/*.js` (helpers, encadeamento com login, teste de 404 via `Prefer`) e `.env.example`. Roda no `go test` e num job do CI contra o mock, com report JUnit.
+- [x] **Check `request`**: o request enviado é validado contra o spec (params, body) no CLI, MCP e TUI; desligado por `--no-contract`.
+- [x] **`llms.txt`** (`docs/public/`) e skill **`.agents/skills/api-testing/`**.
+- [x] AGENTS.md: mock, check `request`, exemplos como teste; item de código morto removido.
+- [ ] `lazyapi.lock` de exemplo: os exemplos não usam import por URL, para o CI não depender de rede. Avaliar um exemplo opcional com cache.
 
-## Fase 6 — Cenários reais: auth e fluxos (P1)
+## Fase 6 — Cenários reais: auth e fluxos (P1) ← próxima
 
 Objetivo: validar APIs que exigem login e sequências de CRUD, que é onde testes por operação isolada não bastam.
 
@@ -54,7 +56,7 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 - [ ] Histórico de requests com replay, e diff entre respostas ou contra o example salvo.
 - [ ] Filtro jq (`gojq`) na resposta.
 - [ ] Destacar `{{env.X}}`/`{{var.X}}` não resolvidas, com autocomplete.
-- [ ] Gerar body sintético a partir do schema quando não há example.
+- [ ] Gerar body sintético a partir do schema quando não há example (usar `store.SchemaSample`, já usado pelo mock).
 
 ## Contínuo — qualidade de código
 

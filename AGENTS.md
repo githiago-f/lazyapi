@@ -38,6 +38,7 @@ internal/
     send.go                #   SendRequest: <path> <method> | --op, --body @file, --output json, --save-example
     inspect.go             #   ListOps, Describe, ValidateSpec
     mcp.go                 #   ServeMCP (`lazyapi mcp --root`), Version (set by goreleaser ldflags)
+    mock.go                #   ServeMock (`lazyapi mock <spec> --port 4010`)
     add.go / create.go / remove.go / server.go  # spec editing commands
   runner/                  # Executes operations → structured results (no printing)
     result.go              #   Outcome, Check (status|contract|test|script), OpResult, Report, Summarize, exit codes
@@ -45,6 +46,7 @@ internal/
   report/                  # Renders runner results: pretty (FormatOp/WriteSummary), json, junit, tap; body policy
   inspect/                 # ListOperations, Describe (with referenced schemas), Validate (OpenAPI + scripts compile)
   mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled) + Tools confined to a root dir
+  mock/                    # Mock server: routes spec paths, answers with examples or SchemaSample, validates requests (422), Prefer: code=/example=
   script/                  # JS/TS test engine: esbuild bundling + goja sandbox
     script.go              #   Run(source, ExecData, Options) → Result; native bridge; Format
     prelude.js             #   JS side of the API: test, expect matchers, console, LazyResponse
@@ -77,7 +79,7 @@ internal/
   inmath/                  # Math utilities
     counters.go            #   Circle() — wraps int within [min, max] (typo: Circle → Circle)
   model/                   # Core types
-    request.go             #   Request, OpenAPIRef, Send()/SendContext(), ResolvedURL, MissingPathParams (no bubbletea)
+    request.go             #   Request, OpenAPIRef, Send()/SendContext(), HTTPRequest (the exact *http.Request sent), ResolvedURL, MissingPathParams
     method.go              #   Method iota (POST=0..HEAD), MarshalYAML/UnmarshalYAML/Label
     body.go                #   Body {MimeType, Raw}, MimeType constants
     auth.go                #   AuthType iota, AuthScheme {all secrets + schema metadata}
@@ -93,8 +95,9 @@ internal/
                            #   DeleteRequestFile, LoadForDuplicate, SaveResponseExampleCmd
     filepath.go            #   Glob() with ** support (Globs type + Expand method)
     tests.go               #   x-lazyapi-tests: LoadOperationTests, SaveOperationTests, OperationTestsPath, TestScriptName (rejects .lua)
-    contract.go            #   ValidateResponse (openapi3filter), ResponseSchemaDeclared
-    examples.go            #   ParamExample, DeclaredStatuses, StatusDeclared, FindOperation
+    contract.go            #   ValidateRequest / ValidateResponse (openapi3filter, readable errors), ResponseSchemaDeclared
+    sample.go              #   SchemaSample — plausible value from a schema (example/default/enum/format/min)
+    examples.go            #   ParamExample, BodyExample, DeclaredStatuses, StatusDeclared, FindOperation
     openapi_test.go        #   Auth roundtrip tests using testdata fixtures
     testdata/              #   Static .yml fixtures (minimal.yml, global_security.yml, params.yml)
 ```
@@ -128,7 +131,7 @@ internal/
 - **Flag parsing** — every command uses the stdlib `flag` package via `newFlagSet` + `parseInterleaved` (flags allowed before/after positionals; unknown flags are errors). `main.go` still parses `--env` ad-hoc.
 - **CLI subcommands**: `run <file>`, `send request <file> (<path> <method> | --op id)`, `smoke tests` (alias of run), `list ops`, `describe`, `validate spec`, `types`, `mcp`, plus `create file`, `add request|server`, `remove request`. `main.go` dispatches anything in `cli.Commands`. See `docs/cli/`, `docs/scripting.md`, `docs/agents.md`.
 - **Run safety** — runs only `GET,HEAD,OPTIONS` unless `--methods` is given; skips operations whose path params have no value (never invents one); a status not declared in the operation's `responses` is a failed `status` check (exit 1).
-- **Execution** — all checks live in `internal/runner`: status declared → contract (`store.ValidateResponse`) → script. CLI and MCP only render `runner.Report`/`OpResult`. Never print from runner.
+- **Execution** — all checks live in `internal/runner`: request (`store.ValidateRequest` on `Request.HTTPRequest`, does not block sending) → status declared → contract (`store.ValidateResponse`) → script. `--no-contract` skips request + contract. CLI and MCP only render `runner.Report`/`OpResult`. Never print from runner.
 - **Exit codes** — 0 ok, 1 a check failed, 2 usage, 3 could not run (errors win over failures). Return `*cli.ExitError` (`usageErr`, `runtimeErr`) instead of plain errors from commands.
 - **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
@@ -155,6 +158,8 @@ go build -o lazyapi ./cmd/lazyapi
 ./lazyapi examples/openapi.yml       # TUI with spec preloaded
 ./lazyapi create file my-api.yml     # CLI
 ./lazyapi send request spec.yml /pets GET --server http://localhost:8080
+./lazyapi mock examples/openapi.yml &   # fake API on :4010
+./lazyapi run examples/openapi.yml --methods all
 go test ./...                        # Tests
 golangci-lint run                    # Lint (config: .golangci.yml)
 ```
@@ -168,7 +173,6 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - HTTP-method→string mapping repeated in 5 places (Method.Label, Method.UnmarshalYAML, methodFromLabel, RemoveOperationFromSpec, hardcoded strings).
 - Parameter-ref creation blocks duplicated between `AddOperationToSpec` and `ApplyRequestToOperation`.
 - `env.Load()` and `mergeDotenv()` share identical line-parsing logic.
-- Dead/stub code: `modal.go` (empty), `view.go` (unused).
 - `store` imports the UI package `app/pane/requests` (`RequestItem`); move the item data type to `model` to break the dependency.
 - bubbles viewport mispositions highlights on ANSI-colored content (`parseMatches` mixes stripped and raw offsets); the response view strips colors while a search is active.
 
@@ -176,6 +180,8 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - `scrollable.go` uses deprecated `msg.Type`, `tea.MouseWheelUp`, `tea.MouseWheelDown` — should migrate to `MouseAction`/`MouseButton`.
 
 ## Testing
+
+- **Examples are tests**: `internal/cli/examples_test.go` runs `examples/openapi.yml` + `examples/tests/*.js` against `mock.New` — keep them passing when changing the runner, script API or mock. CI also runs them against `lazyapi mock` and uploads a JUnit report.
 
 - **Test files** next to code (`internal/store/openapi_test.go`). CLI tests use `httptest` servers (`internal/cli/runner_test.go`). URL-import tests use an `httptest.NewTLSServer` fake CDN (`internal/script/modules_test.go`) — never hit the real network in tests.
 - **Fixtures** in `internal/store/testdata/` as `.yml` files. Use `fixturePath(name)`.

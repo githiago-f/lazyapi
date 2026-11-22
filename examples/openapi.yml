@@ -1,141 +1,178 @@
-components:
-    securitySchemes:
-        lazyapi_auth_0:
-            in: header
-            type: apiKey
-        lazyapi_auth_1:
-            scheme: basic
-            type: http
-info:
-    description: A sample OpenAPI spec for testing lazyapi
-    title: Example API
-    version: 1.0.0
 openapi: 3.0.0
-paths:
-    /sales:
-        post:
-            parameters:
-                - in: query
-                  name: field
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json: {}
-            responses:
-                "200":
-                    content:
-                        text/plain:
-                            example: |
-                                OK
-                    description: OK
-            summary: Create a sale
-            tags:
-                - Sales
-    /sales/{id}:
-        delete:
-            responses:
-                "200":
-                    description: OK
-            summary: Delete specified sale
-            tags:
-                - Sales
-        get:
-            responses:
-                "200":
-                    description: OK
-            summary: View a sale
-            tags:
-                - Sales
-        patch:
-            responses:
-                "200":
-                    description: OK
-            summary: Patch sale
-            tags:
-                - Sales
-    /users:
-        get:
-            operationId: listUsers
-            parameters:
-                - description: Maximum number of users to return
-                  in: query
-                  name: limit
-                  schema:
-                    type: integer
-                - description: Number of users to skip
-                  in: query
-                  name: offset
-                  schema:
-                    type: integer
-                - in: header
-                  name: l
-                  schema:
-                    type: string
-            requestBody:
-                content:
-                    application/json: {}
-            responses:
-                "200":
-                    description: A list of users
-            security:
-                - lazyapi_auth_0: []
-                - lazyapi_auth_1: []
-            summary: List all users
-            tags:
-                - Users
-        post:
-            operationId: createUser
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            properties:
-                                email:
-                                    type: string
-                                name:
-                                    type: string
-                            type: object
-            responses:
-                "201":
-                    description: User created
-            summary: Create a new user
-            tags:
-                - Users
-    /users/{id}:
-        delete:
-            operationId: deleteUser
-            parameters:
-                - in: path
-                  name: id
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "204":
-                    description: User deleted
-            summary: Delete a user
-            tags:
-                - Users
-        get:
-            operationId: getUser
-            parameters:
-                - description: The user ID
-                  in: path
-                  name: id
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: A single user
-            summary: Get a user by ID
-            tags:
-                - Users
+info:
+  title: Example Users API
+  version: 1.0.0
+  description: |
+    A runnable example for LazyAPI. Start the mock and run the tests:
+
+      lazyapi mock examples/openapi.yml &
+      lazyapi run examples/openapi.yml --methods all
+
 servers:
-    - description: Production
-      url: https://api.example.com/v1
-    - description: Staging
-      url: https://staging.example.com/v1
-    - description: Local development
-      url: http://localhost:3000
+  - url: http://127.0.0.1:4010
+    description: lazyapi mock (local)
+  - url: https://api.example.com/v1
+    description: production (illustrative)
+
+tags:
+  - name: system
+  - name: auth
+  - name: users
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Service health
+      tags: [system]
+      x-lazyapi-tests: tests/healthCheck.js
+      responses:
+        "200":
+          description: The service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [ok, degraded]}
+              example: {status: ok}
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Exchange credentials for a token
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Credentials"}
+            example: {email: ana@example.com, password: secret}
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties:
+                  token: {type: string}
+              example: {token: mock-token}
+        "401":
+          description: Wrong credentials
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+              example: {error: invalid credentials}
+
+  /users:
+    get:
+      operationId: listUsers
+      summary: List users
+      tags: [users]
+      x-lazyapi-tests: tests/listUsers.js
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+      responses:
+        "200":
+          description: A page of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/User"}
+              example:
+                - {id: 1, name: Ana Souza, email: ana@example.com, role: admin}
+                - {id: 2, name: Bruno Lima, email: bruno@example.com, role: member}
+    post:
+      operationId: createUser
+      summary: Create a user
+      tags: [users]
+      x-lazyapi-tests: tests/createUser.js
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NewUser"}
+            example: {name: Carla Dias, email: carla@example.com}
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+              example: {id: 3, name: Carla Dias, email: carla@example.com, role: member}
+        "422":
+          description: Invalid user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+
+  /users/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: {type: integer, minimum: 1}
+        example: 1
+    get:
+      operationId: getUser
+      summary: Get a user
+      tags: [users]
+      x-lazyapi-tests: tests/getUser.js
+      responses:
+        "200":
+          description: The user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+              example: {id: 1, name: Ana Souza, email: ana@example.com, role: admin}
+        "404":
+          description: No such user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+              example: {error: user not found}
+    delete:
+      operationId: deleteUser
+      summary: Delete a user
+      tags: [users]
+      responses:
+        "204": {description: Deleted}
+        "404":
+          description: No such user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+
+components:
+  schemas:
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string, format: email}
+        password: {type: string, minLength: 1}
+    NewUser:
+      type: object
+      required: [name, email]
+      properties:
+        name: {type: string, minLength: 1}
+        email: {type: string, format: email}
+    User:
+      allOf:
+        - $ref: "#/components/schemas/NewUser"
+        - type: object
+          required: [id, role]
+          properties:
+            id: {type: integer, minimum: 1}
+            role: {type: string, enum: [admin, member]}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}

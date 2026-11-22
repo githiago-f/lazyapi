@@ -1,0 +1,32 @@
+# LazyAPI
+
+> OpenAPI-driven API testing from the terminal. The OpenAPI spec is the source of truth; tests are JavaScript/TypeScript files next to it (linked per operation with `x-lazyapi-tests`). Every exchange is checked: request matches the spec, status is declared, response matches the schema, and the script's test() calls pass.
+
+## Validate an API (agent loop)
+
+1. `lazyapi list ops <spec> --json` — operations (operationId, method, path, tags, tests file)
+2. `lazyapi describe <spec> <operationId> --json` — parameters with examples, request/response schemas, referenced components
+3. `lazyapi send request <spec> --op <operationId> [--param k=v] [--body @file] --output json` — one call with all checks and the full response
+4. Write `tests/<operationId>.js` and set `x-lazyapi-tests` (or MCP `write_test`)
+5. `lazyapi run <spec> --output json` — exit 0 ok, 1 a check failed, 2 usage error, 3 could not run
+
+No server yet? `lazyapi mock <spec>` serves the examples on http://127.0.0.1:4010 and validates requests (422). `Prefer: code=404` selects a declared response.
+
+MCP: `lazyapi mcp --root <dir>` exposes list_specs, list_operations, describe_operation, send_request, run_tests, read_test, write_test, validate_spec, script_api.
+
+## Docs
+
+- [Agents and MCP](https://githiago-f.github.io/lazyapi/latest/agents): setup, tools, five-step loop
+- [Test scripts](https://githiago-f.github.io/lazyapi/latest/scripting): globals, matchers, imports, lockfile
+- [run](https://githiago-f.github.io/lazyapi/latest/cli/run): selection, parallelism, JSON report format
+- [send](https://githiago-f.github.io/lazyapi/latest/cli/send): single requests
+- [mock](https://githiago-f.github.io/lazyapi/latest/cli/mock): fake API from the spec
+- [describe / validate](https://githiago-f.github.io/lazyapi/latest/cli/inspect)
+- Script API types: run `lazyapi types`
+
+## Rules of thumb
+
+- `run` only sends GET/HEAD/OPTIONS unless `--methods all`.
+- Path params come from `--param` or spec examples; missing values skip (run) or fail (send) — never invented.
+- Imports: relative files inside the spec dir, or `https://` URLs (pinned in lazyapi.lock; use `--frozen-lockfile` in CI). Bare names like `zod` are rejected — use `https://esm.sh/zod@<version>`.
+- Scripts are synchronous; `lazyapi.send()` returns the response directly.

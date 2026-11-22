@@ -37,6 +37,10 @@ Or with any client that reads an `mcpServers` config:
 
 Tool failures (network errors, unknown operations) come back as results with `isError: true` and a readable message, so the agent can fix the call and retry.
 
+## A server to test against
+
+`lazyapi mock api.yml` serves the spec's examples and validates incoming requests (422 with the reason). Agents can build and check tests before the real API exists, or reach error paths with `Prefer: code=404`. See [mock](/cli/mock).
+
 ## CLI equivalents
 
 Agents without MCP can use the CLI with JSON output:

@@ -52,6 +52,7 @@ export default defineConfig({
             { text: "send", link: "/cli/send" },
             { text: "smoke", link: "/cli/smoke" },
             { text: "list / describe / validate", link: "/cli/inspect" },
+            { text: "mock", link: "/cli/mock" },
           ],
         },
       ],

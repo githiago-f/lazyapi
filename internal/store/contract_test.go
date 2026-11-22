@@ -86,3 +86,58 @@ func TestResponseSchemaDeclared(t *testing.T) {
 		t.Error("404/500 have no schema")
 	}
 }
+
+const requestSpec = `openapi: 3.0.0
+info: {title: t, version: "1"}
+paths:
+  /users/{id}:
+    put:
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: integer}}
+        - {in: query, name: dryRun, schema: {type: boolean}}
+        - {in: header, name: X-Request-Id, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties: {name: {type: string}, age: {type: integer, minimum: 0}}
+      responses:
+        "200": {description: OK}
+`
+
+func TestValidateRequest(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "spec.yml")
+	if err := os.WriteFile(p, []byte(requestSpec), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	spec, err := ParseSpec(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := model.OpenAPIRef{FilePath: p, Path: "/users/{id}", Method: "PUT"}
+	build := func(query, body string, withHeader bool) *http.Request {
+		req, _ := http.NewRequest("PUT", "http://x/users/1"+query, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if withHeader {
+			req.Header.Set("X-Request-Id", "r1")
+		}
+		return req
+	}
+
+	if err := ValidateRequest(spec, ref, build("", `{"name":"ana"}`, true), map[string]string{"id": "1"}); err != nil {
+		t.Errorf("valid request rejected: %v", err)
+	}
+
+	err = ValidateRequest(spec, ref, build("?dryRun=maybe", `{"age":-1}`, false), map[string]string{"id": "x"})
+	if err == nil {
+		t.Fatal("invalid request accepted")
+	}
+	for _, want := range []string{`path parameter "id"`, `query parameter "dryRun"`, `header parameter "X-Request-Id"`, "body", "name"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q: %v", want, err)
+		}
+	}
+}

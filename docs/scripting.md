@@ -76,7 +76,7 @@ Failure messages are explicit, e.g. `expected 404 to be 200` or `schema validati
 
 ## Automatic contract check
 
-`send` and `run` also validate every response that has a declared schema. The result is reported as `contract: response matches the OpenAPI schema`, even without a script. Use `--no-contract` to turn it off.
+`send`, `run` and the TUI also check, even without a script, that every request matches the operation (`request` check) and that every response with a declared schema matches it (`contract` check). Use `--no-contract` to turn both off.
 
 ## Imports
 

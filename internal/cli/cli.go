@@ -8,7 +8,7 @@ import (
 )
 
 // Commands lists the first words that select CLI mode instead of the TUI.
-var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "mcp", "help"}
+var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "mcp", "mock", "help"}
 
 // Run executes a CLI command and exits with its status code
 // (0 ok, 1 a check failed, 2 usage error, 3 something could not run).
@@ -97,6 +97,9 @@ func run(args []string) error {
 	case "mcp":
 		return ServeMCP(args[1:])
 
+	case "mock":
+		return ServeMock(args[1:])
+
 	default:
 		printUsage()
 		return usageErr("unknown command: %s", args[0])
@@ -120,8 +123,9 @@ Usage:
   lazyapi validate spec <spec.yml> [--json]         Validate the spec and its test scripts
   lazyapi types                                     Print the test script API (TypeScript definitions)
 
-  Agents
+  Agents and local development
   lazyapi mcp [--root dir]                          Serve the tools above over MCP (stdio)
+  lazyapi mock <spec.yml> [--port 4010]             Fake API from the spec's examples (validates requests)
 
   Editing
   lazyapi create file [name] [urls...]              Create a new OpenAPI template file

@@ -22,6 +22,7 @@ const (
 
 // Check kinds.
 const (
+	CheckRequest  = "request"  // the request sent matches the spec (params, body)
 	CheckStatus   = "status"   // status code declared in the spec
 	CheckContract = "contract" // response matches the OpenAPI schema
 	CheckTest     = "test"     // a test() in the script

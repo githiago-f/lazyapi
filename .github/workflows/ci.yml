@@ -49,3 +49,42 @@ jobs:
       - name: Test
         run: go test -race -count=1 ./...
 
+
+  examples:
+    name: Example API tests (against lazyapi mock)
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build -o lazyapi ./cmd/lazyapi
+
+      - name: Validate example spec
+        run: ./lazyapi validate spec examples/openapi.yml
+
+      - name: Start mock server
+        run: |
+          ./lazyapi mock examples/openapi.yml --port 4010 --quiet &
+          for i in $(seq 1 50); do curl -sf http://127.0.0.1:4010/health && exit 0; sleep 0.1; done
+          echo "mock did not start" && exit 1
+
+      - name: Run example tests
+        run: |
+          ./lazyapi run examples/openapi.yml --methods all --frozen-lockfile \
+            --output junit --output-file lazyapi-report.xml
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lazyapi-report
+          path: lazyapi-report.xml

@@ -320,6 +320,11 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 	}
 	res.Request = requestInfo(req)
 
+	inSpec := in.Spec != nil && in.Ref != nil && store.FindOperation(in.Spec, *in.Ref) != nil
+	if inSpec && !in.NoContract {
+		res.Checks = append(res.Checks, requestCheck(ctx, in.Spec, *in.Ref, req))
+	}
+
 	resp, body, elapsed, attempts, err := sendWithRetries(ctx, &req, in.Retries)
 	res.Attempts = attempts
 	if err != nil {
@@ -337,7 +342,6 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 		DurationMs: elapsed.Milliseconds(),
 	}
 
-	inSpec := in.Spec != nil && in.Ref != nil && store.FindOperation(in.Spec, *in.Ref) != nil
 	if inSpec {
 		ref := *in.Ref
 		declared := store.DeclaredStatuses(in.Spec, ref)
@@ -386,6 +390,26 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 
 	res.Outcome = outcomeFor(res.Checks)
 	return res
+}
+
+// requestCheck validates the request that is about to be sent against the
+// operation (parameters and body). It does not stop the request: the server's
+// answer to an invalid request is still useful.
+func requestCheck(ctx context.Context, spec *openapi3.T, ref model.OpenAPIRef, req model.Request) Check {
+	c := Check{Kind: CheckRequest, Name: "request matches the OpenAPI spec", Passed: true}
+	httpReq, err := req.HTTPRequest(ctx)
+	if err != nil {
+		c.Passed, c.Message = false, err.Error()
+		return c
+	}
+	params := make(map[string]string, len(req.Params))
+	for k, v := range req.Params {
+		params[k] = env.Resolve(v, env.Context{Env: req.Env, Vars: req.Vars})
+	}
+	if err := store.ValidateRequest(spec, ref, httpReq, params); err != nil {
+		c.Passed, c.Message = false, err.Error()
+	}
+	return c
 }
 
 func sendWithRetries(ctx context.Context, req *model.Request, retries int) (*http.Response, string, time.Duration, int, error) {
