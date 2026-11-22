@@ -135,7 +135,9 @@ declare const vars: KeyValueStore;
 declare const lazyapi: {
   /**
    * Sends another operation from the same spec and returns its response.
-   * target is an operationId or "METHOD /path".
+   * target is an operationId, "METHOD /path", or "METHOD https://host/users/42?x=1":
+   * a URL is mapped to the spec operation it belongs to (path params and query
+   * come from the URL) and sent to that host. A URL outside the spec is an error.
    */
   send(target: string, options?: SendOptions): LazyResponse;
 };
