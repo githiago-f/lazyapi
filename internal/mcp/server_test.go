@@ -143,7 +143,7 @@ func TestProtocol(t *testing.T) {
 		}
 	}
 	for _, want := range []string{"list_specs", "list_operations", "describe_operation", "send_request", "run_tests",
-		"run_flow", "write_flow", "read_test", "write_test", "validate_spec", "script_api"} {
+		"run_flow", "write_flow", "import_curl", "export_curl", "read_test", "write_test", "validate_spec", "script_api"} {
 		if !names[want] {
 			t.Errorf("missing tool %s", want)
 		}
@@ -317,5 +317,27 @@ const u = lazyapi.send("getUser", { params: { id: "1" } }); test("readable", () 
 	}
 	if _, text, isErr := c.tool("run_flow", map[string]any{"spec": "api/spec.yml", "flow": "../../etc/passwd"}); !isErr || !strings.Contains(text, "outside the server root") {
 		t.Errorf("flow path escape: %s", text)
+	}
+}
+
+func TestTools_Curl(t *testing.T) {
+	root := setupRoot(t, "https://api.example.com")
+	c := startServer(t, root)
+
+	res, text, isErr := c.tool("import_curl", map[string]any{"spec": "api/new.yml",
+		"command": `curl -X POST https://api.example.com/orders -H 'Authorization: Bearer x' -d '{"sku":"a"}'`})
+	if isErr || len(res["added"].([]any)) != 1 || res["added"].([]any)[0] != "POST /orders" {
+		t.Fatalf("import_curl = %s", text)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(root, "api", "new.yml")); strings.Contains(string(raw), "Bearer x") {
+		t.Error("credentials must not be copied")
+	}
+
+	out, text, isErr := c.tool("export_curl", map[string]any{"spec": "api/spec.yml", "operation": "getUser", "params": map[string]any{"id": "9"}})
+	if isErr || out["curl"] != "curl https://api.example.com/users/9" {
+		t.Errorf("export_curl = %s", text)
+	}
+	if _, text, isErr := c.tool("import_curl", map[string]any{"spec": "../x.yml", "command": "curl https://a.b"}); !isErr || !strings.Contains(text, "outside the server root") {
+		t.Errorf("import_curl confinement: %s", text)
 	}
 }

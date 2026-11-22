@@ -93,6 +93,10 @@ lazyapi run api.yml --methods all --flows           # operations, then every flo
 
 Flows run sequentially after the operations and share `env` and `vars` with them. `--flow-timeout` (default `5m`) bounds each flow. The report lists every step (method, path, status, time) and the checks.
 
+## Postman scripts
+
+Collections imported with [`lazyapi import postman`](/cli/import) keep their scripts. A built-in `pm` object provides `pm.test`, `pm.expect` (Chai-style chains), `pm.response`, `pm.request` and the variable scopes, so they run without changes. New scripts should prefer the native `test`/`expect` API.
+
 ## Editor support
 
 ```bash

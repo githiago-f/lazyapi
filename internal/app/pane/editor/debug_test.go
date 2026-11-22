@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/charmbracelet/x/ansi"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 func visible(s string) string {

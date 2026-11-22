@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 	"github.com/githiago-f/lazyapi/internal/app/pane/editor"
 	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
@@ -381,7 +382,7 @@ func (t Tui) applyEnv(msg *responses.SendMsg) {
 			msg.Request.ServerURL = u
 		}
 	}
-	msg.Auth, msg.Vars = e.Auth, e.Vars
+	msg.Auth, msg.Vars, msg.HTTP = e.Auth, e.Vars, e.HTTP
 }
 
 // serverFor resolves an environment's server: a URL, or an index into the
@@ -747,6 +748,8 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t, tea.Quit
 		case !capture && key.Matches(msg, config.DefaultKeyMap.SwitchEnv):
 			return t.switchEnv()
+		case config.DefaultConfig.Active == config.RequestEditor && key.Matches(msg, config.DefaultKeyMap.CopyCurl):
+			return t, t.copyCurl()
 		case config.DefaultConfig.Active == config.RequestEditor &&
 			key.Matches(msg, config.DefaultKeyMap.SaveExample):
 			statusCode, header, body := t.editor.LastResponse()
@@ -828,6 +831,24 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return t, cmd
+}
+
+// copyCurl puts the editor's request on the clipboard as a curl command,
+// with the active environment's server and credentials (before() hooks are
+// not run: they may send requests).
+func (t Tui) copyCurl() tea.Cmd {
+	msg := responses.SendMsg{Request: t.editor.GetAsRequestData()}
+	t.applyEnv(&msg)
+	req := msg.Request
+	req.Auth = model.ApplySecrets(req.Auth, msg.Auth)
+	cmd, err := req.Curl(context.Background())
+	if err != nil {
+		return notify("Cannot build curl: "+err.Error(), components.Error)
+	}
+	if err := clipboard.WriteAll(cmd); err != nil {
+		return notify("Clipboard unavailable: "+err.Error(), components.Error)
+	}
+	return notify("✓ Request copied as cURL", components.Success)
 }
 
 // resultNotification summarises a finished request.

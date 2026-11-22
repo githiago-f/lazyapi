@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -58,6 +59,9 @@ type Options struct {
 	Query   map[string]string // query params added to every request
 	Headers map[string]string // headers added to every request
 	Body    *string           // request body override (RunOne)
+	// BodyType overrides the media type; Files adds multipart file parts.
+	BodyType model.MimeType
+	Files    map[string]string
 	// EnvName is the named environment in use (reported only).
 	EnvName string
 	// Vars are the initial run variables ({{var.X}}).
@@ -67,6 +71,10 @@ type Options struct {
 
 	Filter  Filter
 	Timeout time.Duration // per request
+	// HTTPClient sends every request (nil: http.DefaultClient). MaxBody caps
+	// response bodies (0: model.DefaultMaxBody).
+	HTTPClient *http.Client
+	MaxBody    int64
 
 	ScriptPath    string               // overrides every operation's x-lazyapi-tests
 	Modules       *script.ModuleLoader // URL imports; nil disables them
@@ -265,15 +273,9 @@ func baseResult(t target) OpResult {
 	}
 }
 
-// execute runs one operation end to end.
-func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, opts Options,
-	envMap, vars map[string]string, single bool) OpResult {
-	res := baseResult(t)
-	if t.skipped != "" {
-		res.Outcome, res.Reason = Skipped, t.skipped
-		return res
-	}
-
+// buildRequest turns an operation plus the run options into the request to
+// send. A non-empty outcome means it cannot be sent (with the reason).
+func buildRequest(spec *openapi3.T, t target, opts Options, envMap, vars map[string]string, single bool) (model.Request, Outcome, string) {
 	req := store.OperationToRequest(spec, t.ref)
 	for k, v := range opts.Params {
 		if _, declared := req.Params[k]; declared || single {
@@ -289,24 +291,79 @@ func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, o
 	if opts.Body != nil {
 		req.Body.Raw = *opts.Body
 	}
+	if opts.BodyType != "" {
+		req.Body.Type = opts.BodyType
+	}
+	if len(opts.Files) > 0 {
+		req.Body.Files = opts.Files
+	}
 	req.Env, req.Vars, req.Timeout = envMap, vars, opts.Timeout
+	req.HTTPClient, req.MaxBody = opts.HTTPClient, opts.MaxBody
 	req.Auth = model.ApplySecrets(req.Auth, opts.Auth)
 
 	if missing := req.MissingPathParams(); len(missing) > 0 {
-		res.Reason = fmt.Sprintf("no value for path parameter(s) %s (pass --param %s=<value> or declare an example in the spec)",
+		reason := fmt.Sprintf("no value for path parameter(s) %s (pass --param %s=<value> or declare an example in the spec)",
 			strings.Join(missing, ", "), missing[0])
-		res.Outcome = Skipped
 		if single {
-			res.Outcome = Errored
+			return req, Errored, reason
 		}
-		return res
+		return req, Skipped, reason
 	}
 	if err := selectServer(&req, opts.Server); err != nil {
-		res.Outcome, res.Reason = Errored, err.Error()
-		return res
+		return req, Errored, err.Error()
 	}
 	if req.ServerURL == "" {
-		res.Outcome, res.Reason = Errored, "no server URL: the spec declares no servers; pass --server <url>"
+		return req, Errored, "no server URL: the spec declares no servers; pass --server <url>"
+	}
+	return req, "", ""
+}
+
+// Prepare builds the request RunOne would send, after the operation's
+// before(req) hook, without sending it (e.g. to export it as cURL).
+func Prepare(ctx context.Context, spec *openapi3.T, specPath string, ref model.OpenAPIRef, opts Options) (model.Request, error) {
+	ref.Method = strings.ToUpper(ref.Method)
+	op := store.FindOperation(spec, ref)
+	if op == nil {
+		return model.Request{}, fmt.Errorf("operation %s %s not found in %s", ref.Method, ref.Path, specPath)
+	}
+	envMap := opts.Env
+	if envMap == nil {
+		envMap = map[string]string{}
+	}
+	t := target{ref: ref, op: op}
+	req, outcome, reason := buildRequest(spec, t, opts, envMap, copyMap(opts.Vars), true)
+	if outcome != "" {
+		return req, errors.New(reason)
+	}
+	source, sopts, err := loadScript(spec, specPath, t, opts)
+	if err != nil || source == "" {
+		return req, err
+	}
+	data := script.ExecData{Request: req, Env: req.Env, Vars: req.Vars}
+	in := ExchangeInput{Spec: spec, SpecPath: specPath, Ref: &ref, Auth: opts.Auth}
+	in.bind(&data, req)
+	br := script.Before(source, data, sopts)
+	if br.Error != "" {
+		return req, errors.New(br.Error)
+	}
+	if br.Defined {
+		req = br.Request
+	}
+	return req, opts.Modules.SaveLock()
+}
+
+// execute runs one operation end to end.
+func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, opts Options,
+	envMap, vars map[string]string, single bool) OpResult {
+	res := baseResult(t)
+	if t.skipped != "" {
+		res.Outcome, res.Reason = Skipped, t.skipped
+		return res
+	}
+
+	req, outcome, reason := buildRequest(spec, t, opts, envMap, vars, single)
+	if outcome != "" {
+		res.Outcome, res.Reason = outcome, reason
 		return res
 	}
 
@@ -354,7 +411,8 @@ func (in ExchangeInput) bind(data *script.ExecData, req model.Request) {
 		return
 	}
 	sctx := &script.SpecContext{Spec: in.Spec, SpecPath: in.SpecPath, ServerURL: req.ServerURL,
-		Env: req.Env, Vars: req.Vars, Timeout: req.Timeout, Auth: in.Auth}
+		Env: req.Env, Vars: req.Vars, Timeout: req.Timeout, Auth: in.Auth,
+		HTTPClient: req.HTTPClient, MaxBody: req.MaxBody}
 	sctx.Bind(data)
 }
 
@@ -409,7 +467,8 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 		res.Checks = append(res.Checks, requestCheck(ctx, in.Spec, *in.Ref, req))
 	}
 
-	resp, body, elapsed, attempts, err := sendWithRetries(ctx, &req, in.Retries)
+	resp, body, timing, attempts, err := sendWithRetries(ctx, &req, in.Retries)
+	elapsed := timing.Total
 	res.Attempts = attempts
 	if err != nil {
 		res.Outcome, res.Reason = Errored, "request failed: "+err.Error()
@@ -424,6 +483,8 @@ func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 		Headers:    flattenHeader(resp.Header),
 		Body:       body,
 		DurationMs: elapsed.Milliseconds(),
+		Timing:     newTimingInfo(timing),
+		Cookies:    cookiesOf(resp),
 	}
 
 	if inSpec {
@@ -492,24 +553,22 @@ func requestCheck(ctx context.Context, spec *openapi3.T, ref model.OpenAPIRef, r
 	return c
 }
 
-func sendWithRetries(ctx context.Context, req *model.Request, retries int) (*http.Response, string, time.Duration, int, error) {
+func sendWithRetries(ctx context.Context, req *model.Request, retries int) (*http.Response, string, model.Timing, int, error) {
 	var (
-		resp    *http.Response
-		body    string
-		err     error
-		elapsed time.Duration
+		resp   *http.Response
+		body   string
+		err    error
+		timing model.Timing
 	)
 	for attempt := 1; ; attempt++ {
-		start := time.Now()
-		resp, body, err = req.SendContext(ctx)
-		elapsed = time.Since(start)
+		resp, body, timing, err = req.SendTimed(ctx)
 		retryable := err != nil || resp.StatusCode >= 500
 		if !retryable || attempt > retries || ctx.Err() != nil {
-			return resp, body, elapsed, attempt, err
+			return resp, body, timing, attempt, err
 		}
 		select {
 		case <-ctx.Done():
-			return resp, body, elapsed, attempt, err
+			return resp, body, timing, attempt, err
 		case <-time.After(time.Duration(attempt) * 250 * time.Millisecond):
 		}
 	}
@@ -665,4 +724,38 @@ func (e *emitter) done(i int, r OpResult) {
 		e.next++
 		e.fn(r)
 	}
+}
+
+func newTimingInfo(t model.Timing) *TimingInfo {
+	ms := func(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
+	return &TimingInfo{DNSMs: ms(t.DNS), ConnectMs: ms(t.Connect), TLSMs: ms(t.TLS), TTFBMs: ms(t.TTFB),
+		TotalMs: ms(t.Total), Reused: t.Reused}
+}
+
+func cookiesOf(resp *http.Response) []CookieInfo {
+	var out []CookieInfo
+	for _, c := range resp.Cookies() {
+		ci := CookieInfo{Name: c.Name, Value: c.Value, Domain: c.Domain, Path: c.Path,
+			HTTPOnly: c.HttpOnly, Secure: c.Secure, SameSite: sameSite(c.SameSite)}
+		if !c.Expires.IsZero() {
+			ci.Expires = c.Expires.UTC().Format(time.RFC3339)
+		}
+		if c.MaxAge > 0 {
+			ci.MaxAge = c.MaxAge
+		}
+		out = append(out, ci)
+	}
+	return out
+}
+
+func sameSite(s http.SameSite) string {
+	switch s {
+	case http.SameSiteLaxMode:
+		return "Lax"
+	case http.SameSiteStrictMode:
+		return "Strict"
+	case http.SameSiteNoneMode:
+		return "None"
+	}
+	return ""
 }

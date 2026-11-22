@@ -3,6 +3,7 @@ package script
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -24,6 +25,10 @@ type SpecContext struct {
 
 	// Auth fills credentials by security scheme name (lazyapi.config.yml).
 	Auth map[string]model.AuthSecrets
+
+	// HTTPClient and MaxBody are applied to every request (nil/0: defaults).
+	HTTPClient *http.Client
+	MaxBody    int64
 
 	// OnSend, when set, observes every lazyapi.send() call: the operation,
 	// the final request and either the response or the error.
@@ -61,6 +66,7 @@ func (c *SpecContext) Send(target string, opts SendOptions) (*Response, error) {
 		req.ServerURL = c.ServerURL
 	}
 	req.Env, req.Vars, req.Timeout = c.Env, c.Vars, c.Timeout
+	req.HTTPClient, req.MaxBody = c.HTTPClient, c.MaxBody
 	req.Auth = model.ApplySecrets(req.Auth, c.Auth)
 	for k, v := range opts.Params {
 		req.Params[k] = v

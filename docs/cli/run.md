@@ -50,6 +50,12 @@ Flow results appear in the report with `"kind": "flow"`, `"method": "FLOW"`, the
 | `--retries <N>` | Retry network errors and 5xx responses up to N times (backoff 250ms × attempt) |
 | `--bail` | Stop after the first failed or errored operation; the rest are reported as skipped |
 | `--dry-run` | Resolve every request without sending |
+| `--insecure` | Skip TLS certificate verification |
+| `--ca-cert <pem>` | Extra trusted CA certificates |
+| `--client-cert <pem>` / `--client-key <pem>` | Mutual TLS |
+| `--proxy <url>` | http, https or socks5 proxy (default: `$HTTPS_PROXY`/`$HTTP_PROXY`) |
+| `--no-redirects` / `--max-redirects <n>` | Return 3xx responses as-is / limit redirect chains (default 10) |
+| `--max-body <size>` | Maximum response body, e.g. `10MB` (default `50MB`) |
 
 With `--parallel 1` (the default), `vars.set()` in one operation's script is visible to the next operations.
 
@@ -84,7 +90,9 @@ Sensitive request headers (`Authorization`, `Cookie`, anything containing `token
       "outcome": "failed", "attempts": 1, "testsFile": "tests/getUser.js",
       "request":  { "method": "GET", "url": "https://api.example.com/users/1" },
       "response": { "status": 200, "statusText": "200 OK", "headers": {"Content-Type": "application/json"},
-                    "body": "{\"id\":\"1\"}", "durationMs": 41 },
+                    "body": "{\"id\":\"1\"}", "durationMs": 41,
+                    "timing": { "dnsMs": 1.2, "connectMs": 3.4, "tlsMs": 12.1, "ttfbMs": 20.3, "totalMs": 41.0, "reusedConnection": false },
+                    "cookies": [{ "name": "session", "value": "abc", "path": "/", "httpOnly": true }] },
       "checks": [
         { "kind": "request",  "name": "request matches the OpenAPI spec", "passed": true },
         { "kind": "status",   "name": "status 200 is declared", "passed": true },

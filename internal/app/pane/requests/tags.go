@@ -40,8 +40,8 @@ func NewTagsOverlay(item RequestItem) TagsOverlay {
 	copy(tags, item.Tags)
 
 	return TagsOverlay{
-		item: &item,
-		tags: tags,
+		item:  &item,
+		tags:  tags,
 		input: t,
 	}
 }
