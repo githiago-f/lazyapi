@@ -7,6 +7,19 @@
 //   - https:// modules: import { z } from "https://esm.sh/zod@3.23.8";
 // URL imports are cached and pinned in lazyapi.lock next to the spec.
 // Scripts run synchronously in a sandbox without filesystem or process access.
+//
+// An operation's test script may also export a hook that runs BEFORE the
+// request is sent, to change it (auth, signatures, generated bodies):
+//
+//   export function before(req: BeforeRequest): void | BeforeRequest {
+//     req.headers.Authorization = "Bearer " + lazyapi.send("login").json().token;
+//   }
+//
+// The rest of the file (top level and test() calls) runs after the response.
+//
+// Flows (flows/*.js next to the spec) are scripts without an implicit
+// request: they call lazyapi.send() in order and assert with test(). Every
+// call made by a flow is checked against the spec automatically.
 
 /** The request that was sent (templates resolved). */
 interface LazyRequest {
@@ -22,6 +35,19 @@ interface LazyRequest {
   readonly body: string;
   /** Parses the request body as JSON. */
   json<T = any>(): T;
+}
+
+/** The request passed to before(req). Change it in place, or return a new object. */
+interface BeforeRequest {
+  readonly method: string;
+  /** Resolved URL (server + path params) at the time before() runs. */
+  readonly url: string;
+  readonly path: string;
+  headers: Record<string, string>;
+  query: Record<string, string>;
+  params: Record<string, string>;
+  /** A string is sent as-is; any other value is JSON-encoded. */
+  body: unknown;
 }
 
 interface LazyResponse {

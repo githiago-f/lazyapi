@@ -1,8 +1,17 @@
 import { login, bearer } from "./helpers.js";
 
+// Runs before the request is sent: authenticate it.
+export function before(req) {
+  Object.assign(req.headers, bearer(login()));
+}
+
 test("returns the requested user", () => {
   expect(response).toHaveStatus(200);
   expect(response.json()).toHaveProperty("id", Number(request.params.id));
+});
+
+test("the request was authenticated by before()", () => {
+  expect(request.headers.authorization).toMatch(/^Bearer /);
 });
 
 test("unknown users answer 404 with an error body", () => {
@@ -11,9 +20,4 @@ test("unknown users answer 404 with an error body", () => {
   expect(missing).toHaveStatus(404);
   expect(missing).toMatchSchema();
   expect(missing.json().error).toContain("not found");
-});
-
-test("works with a token from login", () => {
-  const res = lazyapi.send("getUser", { params: { id: request.params.id }, headers: bearer(login()) });
-  expect(res).toHaveStatus(200);
 });

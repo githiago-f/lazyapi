@@ -73,6 +73,7 @@ export default defineConfig({
             { text: "Environment Variables", link: "/environment-variables" },
             { text: "Configuration", link: "/configuration" },
             { text: "Test Scripts", link: "/scripting" },
+            { text: "Environments & Auth", link: "/environments" },
             { text: "AI Agents (MCP)", link: "/agents" },
           ],
         },

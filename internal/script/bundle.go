@@ -44,9 +44,14 @@ func Bundle(source string, opts Options) (string, error) {
 			Sourcefile: filepath.Base(name),
 			Loader:     loaderFor(name),
 		},
-		Bundle:    true,
-		Write:     false,
-		Format:    api.FormatIIFE,
+		Bundle: true,
+		Write:  false,
+		// CommonJS assigns module.exports before the module body runs, so the
+		// before() export is reachable even when the top level throws (it
+		// usually reads `response`, which does not exist yet in that phase).
+		Format:    api.FormatCommonJS,
+		Banner:    map[string]string{"js": "(function (module, exports) {"},
+		Footer:    map[string]string{"js": "})(__lazyapi_module, __lazyapi_module.exports);"},
 		Platform:  api.PlatformNeutral,
 		Target:    api.ES2017,
 		Sourcemap: api.SourceMapInline,

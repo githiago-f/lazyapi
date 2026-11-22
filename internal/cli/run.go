@@ -19,11 +19,17 @@ Selection:
   --grep regex        only operations whose "METHOD /path operationId summary" matches
 
 Execution:
+  --env-name name     environment from lazyapi.config.yml (server, env file, vars, credentials)
   --server url|index  --env file  --param k=v  --query k=v  --header k=v  --timeout 30s
   --parallel N        run N operations concurrently (env/vars are isolated per operation)
   --retries N         retry network errors and 5xx responses N times
   --bail              stop after the first failed or errored operation
   --dry-run           show what would be sent
+
+Flows:
+  --flows             also run every flows/*.js next to the spec (after the operations)
+  --flow file         run only this flow (repeatable); no operations are run
+  --flow-timeout 5m   maximum run time of one flow
 
 Checks:
   --script file       test script for every operation (default: each x-lazyapi-tests)
@@ -46,6 +52,10 @@ func RunTests(args []string) error {
 	parallel := fs.Int("parallel", 1, "operations to run concurrently")
 	retries := fs.Int("retries", 0, "retries for network errors and 5xx responses")
 	bail := fs.Bool("bail", false, "stop after the first failure")
+	var flows listFlag
+	fs.Var(&flows, "flow", "run only this flow script (repeatable)")
+	allFlows := fs.Bool("flows", false, "also run every flows/*.js next to the spec, after the operations")
+	flowTimeout := fs.Duration("flow-timeout", runner.DefaultFlowTimeout, "maximum run time of one flow")
 
 	pos, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -81,7 +91,23 @@ func RunTests(args []string) error {
 		Grep:    re,
 	}
 	opts.Parallel, opts.Retries, opts.Bail = *parallel, *retries, *bail
+	opts.FlowTimeout = *flowTimeout
+	switch {
+	case len(flows) > 0:
+		// Targeted: run just these flows, no operations.
+		opts.Flows = flows
+		opts.SkipOperations = true
+	case *allFlows:
+		found, err := runner.FindFlows(file)
+		if err != nil {
+			return runtimeErr(err)
+		}
+		opts.Flows = found
+	}
 	if f.prettyToStdout() {
+		if opts.EnvName != "" {
+			fmt.Printf("Environment: %s\n\n", opts.EnvName)
+		}
 		opts.OnResult = func(r runner.OpResult) { report.WriteOp(os.Stdout, r) }
 	}
 

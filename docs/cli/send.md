@@ -15,6 +15,7 @@ lazyapi send request <spec.yml> --op <operationId> [flags]
 | `--param k=v` | Path parameter (repeatable). Defaults to the spec's example; a missing value is an error |
 | `--query k=v`, `--header k=v` | Query parameter / header (repeatable) |
 | `--body <value\|@file\|@->` | Request body: literal, read from a file, or from stdin |
+| `--env-name <name>` | Named environment from [`lazyapi.config.yml`](/environments) |
 | `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first) |
 | `--env <file>` | `.env` file for <code v-pre>{{env.X}}</code> |
 | `--timeout <d>` | Request timeout (default `30s`) |

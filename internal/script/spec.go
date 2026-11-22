@@ -21,6 +21,13 @@ type SpecContext struct {
 	Env       map[string]string
 	Vars      map[string]string
 	Timeout   time.Duration
+
+	// Auth fills credentials by security scheme name (lazyapi.config.yml).
+	Auth map[string]model.AuthSecrets
+
+	// OnSend, when set, observes every lazyapi.send() call: the operation,
+	// the final request and either the response or the error.
+	OnSend func(ref model.OpenAPIRef, req model.Request, resp *Response, err error)
 }
 
 // ResolveTarget finds an operation by operationId or "METHOD /path".
@@ -54,6 +61,7 @@ func (c *SpecContext) Send(target string, opts SendOptions) (*Response, error) {
 		req.ServerURL = c.ServerURL
 	}
 	req.Env, req.Vars, req.Timeout = c.Env, c.Vars, c.Timeout
+	req.Auth = model.ApplySecrets(req.Auth, c.Auth)
 	for k, v := range opts.Params {
 		req.Params[k] = v
 	}
@@ -78,25 +86,38 @@ func (c *SpecContext) Send(target string, opts SendOptions) (*Response, error) {
 		}
 	}
 	if missing := req.MissingPathParams(); len(missing) > 0 {
-		return nil, fmt.Errorf("missing path parameter(s) %s (pass them in options.params)", strings.Join(missing, ", "))
+		err := fmt.Errorf("missing path parameter(s) %s (pass them in options.params)", strings.Join(missing, ", "))
+		c.observe(ref, req, nil, err)
+		return nil, err
 	}
 	if req.ServerURL == "" {
-		return nil, fmt.Errorf("no server URL for %s", target)
+		err := fmt.Errorf("no server URL for %s", target)
+		c.observe(ref, req, nil, err)
+		return nil, err
 	}
 
 	start := time.Now()
 	httpResp, body, err := req.Send()
 	if err != nil {
+		c.observe(ref, req, nil, err)
 		return nil, err
 	}
-	return &Response{
+	resp := &Response{
 		Status:     httpResp.StatusCode,
 		StatusText: httpResp.Status,
 		Header:     httpResp.Header,
 		Body:       body,
 		Duration:   time.Since(start),
 		Ref:        &ref,
-	}, nil
+	}
+	c.observe(ref, req, resp, nil)
+	return resp, nil
+}
+
+func (c *SpecContext) observe(ref model.OpenAPIRef, req model.Request, resp *Response, err error) {
+	if c.OnSend != nil {
+		c.OnSend(ref, req, resp, err)
+	}
 }
 
 // Contract implements ContractFunc.

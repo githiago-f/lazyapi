@@ -108,11 +108,7 @@ func (r *Request) SendContext(parent context.Context) (*http.Response, string, e
 		return nil, "", err
 	}
 
-	client := http.DefaultClient
-	if r.HTTPClient != nil {
-		client = r.HTTPClient
-	}
-	response, err := client.Do(req)
+	response, err := r.client().Do(req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -155,28 +151,53 @@ func (r *Request) HTTPRequest(ctx context.Context) (*http.Request, error) {
 		req.Header.Set("Content-Type", string(r.Body.Type))
 	}
 
+	// Credentials are only applied when they have a value, so an empty scheme
+	// does not clobber an Authorization header set explicitly (or by before()).
 	for _, scheme := range r.Auth {
 		switch scheme.Type {
 		case AuthBasic:
-			auth := env.Resolve(scheme.Username, tctx) + ":" + env.Resolve(scheme.Password, tctx)
-			encoded := base64.StdEncoding.EncodeToString([]byte(auth))
-			req.Header.Set("Authorization", "Basic "+encoded)
+			user, pass := env.Resolve(scheme.Username, tctx), env.Resolve(scheme.Password, tctx)
+			if user != "" || pass != "" {
+				encoded := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
+				req.Header.Set("Authorization", "Basic "+encoded)
+			}
 		case AuthBearer:
-			req.Header.Set("Authorization", "Bearer "+env.Resolve(scheme.Token, tctx))
+			if token := env.Resolve(scheme.Token, tctx); token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
 		case AuthAPIKey:
 			keyValue := env.Resolve(scheme.KeyValue, tctx)
+			if keyValue == "" {
+				continue
+			}
 			switch scheme.KeyIn {
 			case "header":
 				req.Header.Set(scheme.KeyName, keyValue)
 			case "query":
 				q.Set(scheme.KeyName, keyValue)
+			case "cookie":
+				req.AddCookie(&http.Cookie{Name: scheme.KeyName, Value: keyValue})
 			}
 		case AuthOAuth2:
-			if scheme.AccessToken != "" {
-				req.Header.Set("Authorization", "Bearer "+env.Resolve(scheme.AccessToken, tctx))
+			token := env.Resolve(scheme.AccessToken, tctx)
+			if token == "" {
+				var err error
+				if token, err = oauthToken(ctx, r.client(), scheme, tctx); err != nil {
+					return nil, err
+				}
+			}
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
 			}
 		}
 	}
 	req.URL.RawQuery = q.Encode()
 	return req, nil
+}
+
+func (r *Request) client() *http.Client {
+	if r.HTTPClient != nil {
+		return r.HTTPClient
+	}
+	return http.DefaultClient
 }

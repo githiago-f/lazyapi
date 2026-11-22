@@ -20,7 +20,7 @@ func TestExamplesPassAgainstMock(t *testing.T) {
 	defer srv.Close()
 
 	out, err := captureStdout(t, func() error {
-		return RunTests([]string{specPath, "--server", srv.URL, "--methods", "all", "--frozen-lockfile"})
+		return RunTests([]string{specPath, "--server", srv.URL, "--methods", "all", "--flows", "--frozen-lockfile"})
 	})
 	if err != nil {
 		t.Fatalf("examples failed: %v\n%s", err, out)

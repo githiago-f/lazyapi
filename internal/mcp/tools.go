@@ -14,6 +14,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/inspect"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/project"
 	"github.com/githiago-f/lazyapi/internal/report"
 	"github.com/githiago-f/lazyapi/internal/runner"
 	"github.com/githiago-f/lazyapi/internal/script"
@@ -91,6 +92,7 @@ var toolList = []tool{
 			"headers":     strMap("Request headers"),
 			"body":        map[string]any{"description": "Request body: a string is sent as-is, anything else is JSON-encoded"},
 			"env_file":    str("Environment file for {{env.NAME}} templates, relative to the root"),
+			"env_name":    str("Named environment from lazyapi.config.yml (server, env file, vars, credentials)"),
 			"no_contract": boolean("Skip response schema validation"),
 			"dry_run":     boolean("Resolve the request without sending it"),
 		}),
@@ -101,20 +103,46 @@ var toolList = []tool{
 		Description: "Run many operations with their checks and return a report with a summary and per-operation results. " +
 			"Only GET, HEAD and OPTIONS run unless methods is set (use [\"all\"] to include writes). Bodies are included for operations that did not pass.",
 		InputSchema: obj([]string{"spec"}, map[string]any{
-			"spec":        specArg,
-			"server":      str("Server URL, or index into the spec's servers"),
-			"methods":     strList(`Methods to run, or ["all"]. Default: GET, HEAD, OPTIONS`),
-			"tags":        strList("Only operations with one of these tags"),
-			"operations":  strList(`Only these operations (operationId or "METHOD /path")`),
-			"grep":        str("Regular expression over \"METHOD /path operationId summary\""),
-			"params":      strMap("Path parameters for every operation that declares them"),
-			"headers":     strMap("Headers added to every request"),
-			"env_file":    str("Environment file, relative to the root"),
-			"no_contract": boolean("Skip response schema validation"),
-			"bail":        boolean("Stop after the first failure"),
-			"dry_run":     boolean("List what would be sent without sending"),
+			"spec":          specArg,
+			"server":        str("Server URL, or index into the spec's servers"),
+			"methods":       strList(`Methods to run, or ["all"]. Default: GET, HEAD, OPTIONS`),
+			"tags":          strList("Only operations with one of these tags"),
+			"operations":    strList(`Only these operations (operationId or "METHOD /path")`),
+			"grep":          str("Regular expression over \"METHOD /path operationId summary\""),
+			"params":        strMap("Path parameters for every operation that declares them"),
+			"headers":       strMap("Headers added to every request"),
+			"env_file":      str("Environment file, relative to the root"),
+			"no_contract":   boolean("Skip response schema validation"),
+			"bail":          boolean("Stop after the first failure"),
+			"dry_run":       boolean("List what would be sent without sending"),
+			"include_flows": boolean("Also run every flows/*.js next to the spec, after the operations"),
 		}),
 		call: (*Tools).runTests,
+	},
+	{
+		Name: "run_flow",
+		Description: "Run a flow script (flows/<name>.js): several operations in order via lazyapi.send(), sharing vars. " +
+			"Every request is checked (request, status, contract) and test() calls are reported. Returns steps and checks.",
+		InputSchema: obj([]string{"spec", "flow"}, map[string]any{
+			"spec":        specArg,
+			"flow":        str("Flow file relative to the root (e.g. api/flows/checkout.js), or a name under the spec's flows/ directory"),
+			"server":      str("Server URL, or index into the spec's servers"),
+			"env_file":    str("Environment file, relative to the root"),
+			"env_name":    str("Named environment from lazyapi.config.yml"),
+			"no_contract": boolean("Skip request/response schema checks for each step"),
+		}),
+		call: (*Tools).runFlow,
+	},
+	{
+		Name: "write_flow",
+		Description: "Create or replace flows/<name>.js next to the spec. A flow calls lazyapi.send(operationId, {params, query, headers, body}) " +
+			"in order and asserts with test()/expect(); use vars.set/get to pass ids between steps. Returns the path and any compile error.",
+		InputSchema: obj([]string{"spec", "name", "source"}, map[string]any{
+			"spec":   specArg,
+			"name":   str("Flow name, e.g. user-lifecycle (letters, digits, - and _)"),
+			"source": str("Flow script source"),
+		}),
+		call: (*Tools).writeFlow,
 	},
 	{
 		Name:        "read_test",
@@ -285,6 +313,7 @@ type runArgs struct {
 	Query      map[string]string `json:"query"`
 	Headers    map[string]string `json:"headers"`
 	EnvFile    string            `json:"env_file"`
+	EnvName    string            `json:"env_name"`
 	NoContract bool              `json:"no_contract"`
 	DryRun     bool              `json:"dry_run"`
 }
@@ -300,12 +329,19 @@ func (t *Tools) options(a runArgs) (string, runner.Options, error) {
 			return "", runner.Options{}, err
 		}
 	}
-	envMap, err := env.NewStore(envPath).Load()
+	sel, err := project.Resolve(specPath, a.EnvName, a.Server, envPath)
+	if err != nil {
+		return "", runner.Options{}, err
+	}
+	envMap, err := env.NewStore(sel.EnvFile).Load()
 	if err != nil {
 		return "", runner.Options{}, fmt.Errorf("loading env file: %w", err)
 	}
 	return specPath, runner.Options{
-		Server:        a.Server,
+		EnvName:       sel.Name,
+		Vars:          sel.Vars,
+		Auth:          sel.Auth,
+		Server:        sel.Server,
 		Env:           envMap,
 		Params:        a.Params,
 		Query:         a.Query,
@@ -370,11 +406,12 @@ func (t *Tools) sendRequest(ctx context.Context, args json.RawMessage) (any, err
 func (t *Tools) runTests(ctx context.Context, args json.RawMessage) (any, error) {
 	var a struct {
 		runArgs
-		Methods    []string `json:"methods"`
-		Tags       []string `json:"tags"`
-		Operations []string `json:"operations"`
-		Grep       string   `json:"grep"`
-		Bail       bool     `json:"bail"`
+		Methods      []string `json:"methods"`
+		Tags         []string `json:"tags"`
+		Operations   []string `json:"operations"`
+		Grep         string   `json:"grep"`
+		Bail         bool     `json:"bail"`
+		IncludeFlows bool     `json:"include_flows"`
 	}
 	if err := decode(args, &a); err != nil {
 		return nil, err
@@ -394,6 +431,11 @@ func (t *Tools) runTests(ctx context.Context, args json.RawMessage) (any, error)
 		}
 	}
 	opts.Bail = a.Bail
+	if a.IncludeFlows {
+		if opts.Flows, err = runner.FindFlows(specPath); err != nil {
+			return nil, err
+		}
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	rep, lockErr := runner.Run(ctx, spec, specPath, opts)
@@ -501,4 +543,77 @@ func (t *Tools) validateSpec(_ context.Context, args json.RawMessage) (any, erro
 	v := inspect.Validate(specPath)
 	v.Spec = t.rel(specPath)
 	return v, nil
+}
+
+var flowName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+func (t *Tools) runFlow(ctx context.Context, args json.RawMessage) (any, error) {
+	var a struct {
+		runArgs
+		Flow string `json:"flow"`
+	}
+	if err := decode(args, &a); err != nil {
+		return nil, err
+	}
+	specPath, opts, err := t.options(a.runArgs)
+	if err != nil {
+		return nil, err
+	}
+	flowPath := a.Flow
+	if flowName.MatchString(strings.TrimSuffix(flowPath, ".js")) {
+		flowPath = filepath.Join(filepath.Dir(specPath), runner.FlowsDir, strings.TrimSuffix(flowPath, ".js")+".js")
+	} else if flowPath, err = t.path(a.Flow); err != nil {
+		return nil, err
+	}
+	spec, err := store.ParseSpec(specPath)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, runner.DefaultFlowTimeout)
+	defer cancel()
+	vars := map[string]string{}
+	for k, v := range opts.Vars {
+		vars[k] = v
+	}
+	res := runner.RunFlow(ctx, spec, specPath, flowPath, opts, opts.Env, vars)
+	if err := opts.Modules.SaveLock(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (t *Tools) writeFlow(_ context.Context, args json.RawMessage) (any, error) {
+	var a struct {
+		Spec   string `json:"spec"`
+		Name   string `json:"name"`
+		Source string `json:"source"`
+	}
+	if err := decode(args, &a); err != nil {
+		return nil, err
+	}
+	name := strings.TrimSuffix(a.Name, ".js")
+	if !flowName.MatchString(name) {
+		return nil, fmt.Errorf("invalid flow name %q: use letters, digits, - and _", a.Name)
+	}
+	specPath, err := t.path(a.Spec)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(filepath.Dir(specPath), runner.FlowsDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, name+".js")
+	if err := os.WriteFile(path, []byte(a.Source), 0o644); err != nil {
+		return nil, err
+	}
+	out := map[string]any{"path": t.rel(path), "saved": true}
+	specDir, _ := filepath.Abs(filepath.Dir(specPath))
+	modules := script.NewModuleLoader(specDir)
+	if _, err := script.Bundle(a.Source, script.Options{Filename: path, ResolveDir: dir, Root: specDir, Modules: modules}); err != nil {
+		out["compileError"] = err.Error()
+	} else if err := modules.SaveLock(); err != nil {
+		out["compileError"] = err.Error()
+	}
+	return out, nil
 }

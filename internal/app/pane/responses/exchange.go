@@ -26,6 +26,9 @@ type SendMsg struct {
 	// Script is the test script to run; nil means "the operation's saved
 	// script" (the preview), a pointer to "" means none.
 	Script *string
+	// Auth and Vars come from the active named environment.
+	Auth map[string]model.AuthSecrets
+	Vars map[string]string
 }
 
 // ResultMsg carries a finished exchange back to the view that sent it.
@@ -44,13 +47,19 @@ func Exchange(ctx context.Context, msg SendMsg) tea.Cmd {
 
 func exchange(ctx context.Context, msg SendMsg) runner.OpResult {
 	req := msg.Request
-	in := runner.ExchangeInput{Request: req, Ref: req.OpenAPIRef}
+	req.Auth = model.ApplySecrets(req.Auth, msg.Auth)
+	in := runner.ExchangeInput{Request: req, Ref: req.OpenAPIRef, Auth: msg.Auth}
 	if req.Timeout == 0 {
 		in.Request.Timeout = model.DefaultTimeout
 	}
-	if in.Request.Vars == nil {
-		in.Request.Vars = map[string]string{}
+	vars := map[string]string{}
+	for k, v := range msg.Vars {
+		vars[k] = v
 	}
+	for k, v := range in.Request.Vars {
+		vars[k] = v
+	}
+	in.Request.Vars = vars
 
 	var modules *script.ModuleLoader
 	if req.FileName != "" {

@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -343,5 +344,235 @@ paths:
 		return SendRequest([]string{spec, "--op", "getOrder", "--server", srv.URL, "--param", "id=abc", "--query", "limit=50", "--no-contract"})
 	}); err != nil {
 		t.Errorf("--no-contract: %v", err)
+	}
+}
+
+const authSpec = `openapi: "3.0.0"
+info: {title: t, version: "1"}
+paths:
+  /login:
+    post:
+      operationId: login
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: object, required: [token], properties: {token: {type: string}}}
+  /secret:
+    get:
+      operationId: getSecret
+      x-lazyapi-tests: tests/secret.js
+      responses:
+        "200": {description: OK}
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200": {description: OK}
+    delete:
+      operationId: clearItems
+      responses:
+        "204": {description: Cleared}
+`
+
+// tokenServer requires the token issued by /login on /secret.
+func tokenServer(t *testing.T) *hitServer {
+	return newHitServer(t, func(r *http.Request) int {
+		switch r.URL.Path {
+		case "/secret":
+			if r.Header.Get("Authorization") != "Bearer abc" {
+				return http.StatusUnauthorized
+			}
+		case "/items":
+			if r.Method == http.MethodDelete {
+				return http.StatusNoContent
+			}
+		case "/teapot":
+			return http.StatusTeapot
+		}
+		return http.StatusOK
+	})
+}
+
+func TestRun_BeforeAuthenticatesRequest(t *testing.T) {
+	srv := tokenServer(t)
+	// hitServer answers {"ok":true}; the login token comes from a fixed body.
+	spec := writeSpec(t, authSpec)
+	writeTestScript(t, spec, "secret.js", `
+export function before(req) {
+  lazyapi.send("login");               // a real call, checked like any other
+  req.headers.Authorization = "Bearer " + env.get("TOKEN");
+}
+test("authorized", () => expect(response).toHaveStatus(200));
+`)
+	envFile := filepath.Join(filepath.Dir(spec), ".env")
+	if err := os.WriteFile(envFile, []byte("TOKEN=abc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := captureStdout(t, func() error {
+		return SendRequest([]string{spec, "--op", "getSecret", "--server", srv.URL, "--env", envFile})
+	}); err != nil {
+		t.Fatalf("before() should authenticate the request: %v", err)
+	}
+	hits := strings.Join(srv.Hits(), ",")
+	if hits != "POST /login,GET /secret" {
+		t.Errorf("hits = %s", hits)
+	}
+
+	// A throwing before() fails the operation and does not send it.
+	writeTestScript(t, spec, "secret.js", `export function before() { throw new Error("no credentials"); }`)
+	out, err := captureStdout(t, func() error {
+		return SendRequest([]string{spec, "--op", "getSecret", "--server", srv.URL, "--output", "json"})
+	})
+	if ExitCode(err) != 1 || !strings.Contains(out, "before(): Error: no credentials") {
+		t.Errorf("throwing before: %v\n%s", err, out)
+	}
+	if strings.Count(strings.Join(srv.Hits(), ","), "GET /secret") != 1 {
+		t.Error("the request must not be sent when before() fails")
+	}
+}
+
+func TestRun_OrdersReadsBeforeDeletes(t *testing.T) {
+	srv := tokenServer(t)
+	spec := writeSpec(t, authSpec)
+	writeTestScript(t, spec, "secret.js", `test("x", () => {});`)
+	if _, err := captureStdout(t, func() error {
+		return RunTests([]string{spec, "--server", srv.URL, "--methods", "GET,DELETE", "--no-contract"})
+	}); ExitCode(err) > 1 {
+		t.Fatal(err)
+	}
+	hits := srv.Hits()
+	if hits[len(hits)-1] != "DELETE /items" {
+		t.Errorf("DELETE should run last: %v", hits)
+	}
+}
+
+func TestRun_Flows(t *testing.T) {
+	srv := tokenServer(t)
+	spec := writeSpec(t, authSpec)
+	dir := filepath.Join(filepath.Dir(spec), "flows")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, src string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	good := write("a_good.js", `
+const items = lazyapi.send("listItems");
+test("items listed", () => expect(items).toHaveStatus(200));
+lazyapi.send("clearItems");
+`)
+	write("b_bad.js", `
+// /login declares a token schema: {"ok":true} breaks the contract.
+lazyapi.send("login");
+`)
+
+	out, err := captureStdout(t, func() error {
+		return RunTests([]string{spec, "--server", srv.URL, "--flow", good, "--output", "json"})
+	})
+	if err != nil {
+		t.Fatalf("good flow: %v\n%s", err, out)
+	}
+	var rep runner.Report
+	if jerr := json.Unmarshal([]byte(out), &rep); jerr != nil {
+		t.Fatal(jerr)
+	}
+	if len(rep.Operations) != 1 || rep.Operations[0].Kind != runner.KindFlow || len(rep.Operations[0].Steps) != 2 {
+		t.Fatalf("--flow runs only that flow: %+v", rep.Operations)
+	}
+	if rep.Operations[0].Path != "flows/a_good.js" || rep.Operations[0].Steps[1].Status != 204 {
+		t.Errorf("flow result = %+v", rep.Operations[0])
+	}
+
+	out, err = captureStdout(t, func() error {
+		return RunTests([]string{spec, "--server", srv.URL, "--flows", "--op", "listItems", "--output", "json"})
+	})
+	if ExitCode(err) != 1 {
+		t.Fatalf("bad flow should fail: %v", err)
+	}
+	if jerr := json.Unmarshal([]byte(out), &rep); jerr != nil {
+		t.Fatal(jerr)
+	}
+	if len(rep.Operations) != 3 || rep.Operations[2].Outcome != runner.Failed ||
+		!strings.Contains(out, "#1 POST /login · response matches the OpenAPI schema") {
+		t.Errorf("--flows = operations + every flow; contract checked per step:\n%s", out)
+	}
+
+	// No assertions and no requests is a failure, not a silent pass.
+	empty := write("c_empty.js", `const x = 1;`)
+	if _, err := captureStdout(t, func() error {
+		return RunTests([]string{spec, "--server", srv.URL, "--flow", empty})
+	}); ExitCode(err) != 1 {
+		t.Errorf("empty flow should fail: %v", err)
+	}
+}
+
+func TestRun_NamedEnvironment(t *testing.T) {
+	var gotAuth, gotTenant string
+	srv := newHitServer(t, func(r *http.Request) int {
+		gotAuth, gotTenant = r.Header.Get("Authorization"), r.URL.Query().Get("tenant")
+		if gotAuth != "Bearer from-env-file" {
+			return http.StatusUnauthorized
+		}
+		return http.StatusOK
+	})
+	spec := writeSpec(t, `openapi: "3.0.0"
+info: {title: t, version: "1"}
+servers: [{url: "http://127.0.0.1:1"}]
+security: [{bearerAuth: []}]
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+paths:
+  /me:
+    get:
+      operationId: me
+      parameters:
+        - {in: query, name: tenant, required: true, schema: {type: string}}
+      responses:
+        "200": {description: OK}
+`)
+	dir := filepath.Dir(spec)
+	if err := os.WriteFile(filepath.Join(dir, ".env.staging"), []byte("API_TOKEN=from-env-file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := fmt.Sprintf(`default: broken
+environments:
+  broken:
+    server: http://127.0.0.1:1
+  staging:
+    server: %s
+    env: .env.staging
+    vars: {tenant: acme}
+    auth:
+      bearerAuth: {token: "{{env.API_TOKEN}}"}
+`, srv.URL)
+	if err := os.WriteFile(filepath.Join(dir, "lazyapi.config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := captureStdout(t, func() error {
+		return SendRequest([]string{spec, "--op", "me", "--env-name", "staging", "--query", "tenant={{var.tenant}}", "--output", "json"})
+	})
+	if err != nil {
+		t.Fatalf("staging: %v\n%s", err, out)
+	}
+	if gotAuth != "Bearer from-env-file" || gotTenant != "acme" {
+		t.Errorf("auth=%q tenant=%q", gotAuth, gotTenant)
+	}
+
+	// Without --env-name the default (broken) environment is used...
+	out, err = captureStdout(t, func() error { return RunTests([]string{spec, "--output", "json"}) })
+	if ExitCode(err) != 3 || !strings.Contains(out, `"environment": "broken"`) {
+		t.Errorf("default env: %v\n%s", err, out)
+	}
+	// ...and an unknown name is a usage error listing the options.
+	if err := RunTests([]string{spec, "--env-name", "prod"}); ExitCode(err) != 2 || !strings.Contains(err.Error(), "broken, staging") {
+		t.Errorf("unknown env: %v", err)
 	}
 }

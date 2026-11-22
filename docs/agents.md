@@ -31,9 +31,12 @@ Or with any client that reads an `mcpServers` config:
 | `describe_operation` | Parameters with examples, request/response schemas, referenced components, security, current test script |
 | `send_request` | Send one operation (params, query, headers, body) and get request, response and every check |
 | `run_tests` | Run many operations. Only GET/HEAD/OPTIONS run unless `methods` is set (`["all"]` includes writes). Bodies are included only for operations that did not pass |
+| `run_flow` / `write_flow` | Write and run `flows/<name>.js` scenarios across operations; every step is checked against the spec |
 | `read_test` / `write_test` | Read or write an operation's JavaScript test script; `write_test` links it via `x-lazyapi-tests` and reports compile errors |
 | `validate_spec` | OpenAPI and LazyAPI checks (operationIds, responses, scripts compile) |
 | `script_api` | The TypeScript definitions of the script API |
+
+`send_request`, `run_tests` and `run_flow` accept `env_name` to use a named environment from `lazyapi.config.yml` (server, env file, variables and credentials).
 
 Tool failures (network errors, unknown operations) come back as results with `isError: true` and a readable message, so the agent can fix the call and retry.
 

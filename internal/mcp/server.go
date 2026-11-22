@@ -21,7 +21,10 @@ Typical loop: list_specs → list_operations → describe_operation → send_req
 (inspect status, body and failed checks) → write_test (a JavaScript test script
 saved next to the spec) → run_tests. Every response is validated against the
 OpenAPI schema automatically. Call script_api for the test script reference.
-run_tests only runs GET/HEAD/OPTIONS unless "methods" says otherwise.`
+run_tests only runs GET/HEAD/OPTIONS unless "methods" says otherwise.
+For scenarios across operations (login → create → read → delete) write a flow
+with write_flow and run it with run_flow. A test script may export
+before(req) to change the request (e.g. add auth) before it is sent.`
 
 type request struct {
 	JSONRPC string          `json:"jsonrpc"`

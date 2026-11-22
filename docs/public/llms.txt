@@ -10,9 +10,11 @@
 4. Write `tests/<operationId>.js` and set `x-lazyapi-tests` (or MCP `write_test`)
 5. `lazyapi run <spec> --output json` — exit 0 ok, 1 a check failed, 2 usage error, 3 could not run
 
+Scenarios across operations: write `flows/<name>.js` (lazyapi.send in order + test()); run with `lazyapi run <spec> --flow flows/<name>.js` or `--flows`. Every step is checked against the spec. A test script may `export function before(req)` to change the request (auth, signatures) before it is sent. Named environments (server, env file, vars, credentials incl. OAuth2) live in lazyapi.config.yml: `--env-name staging`.
+
 No server yet? `lazyapi mock <spec>` serves the examples on http://127.0.0.1:4010 and validates requests (422). `Prefer: code=404` selects a declared response.
 
-MCP: `lazyapi mcp --root <dir>` exposes list_specs, list_operations, describe_operation, send_request, run_tests, read_test, write_test, validate_spec, script_api.
+MCP: `lazyapi mcp --root <dir>` exposes list_specs, list_operations, describe_operation, send_request, run_tests, run_flow, write_flow, read_test, write_test, validate_spec, script_api.
 
 ## Docs
 
@@ -21,6 +23,7 @@ MCP: `lazyapi mcp --root <dir>` exposes list_specs, list_operations, describe_op
 - [run](https://githiago-f.github.io/lazyapi/latest/cli/run): selection, parallelism, JSON report format
 - [send](https://githiago-f.github.io/lazyapi/latest/cli/send): single requests
 - [mock](https://githiago-f.github.io/lazyapi/latest/cli/mock): fake API from the spec
+- [Environments & Auth](https://githiago-f.github.io/lazyapi/latest/environments): lazyapi.config.yml, credentials, OAuth2
 - [describe / validate](https://githiago-f.github.io/lazyapi/latest/cli/inspect)
 - Script API types: run `lazyapi types`
 

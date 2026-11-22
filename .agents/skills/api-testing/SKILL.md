@@ -29,7 +29,14 @@ Prefer the MCP tools when the `lazyapi` MCP server is connected (`list_operation
    });
    ```
    Globals: `request`, `response`, `env`, `vars`, `lazyapi.send(op, {params, query, headers, body})`, `test`, `expect`, `console`. Full API: `lazyapi types`.
-6. **Run everything**: `lazyapi run <spec> --output json`. Exit codes: 0 all passed · 1 a check failed · 2 usage error · 3 could not run.
+6. **Scenarios across operations** (login → create → read → delete): write `flows/<name>.js` (MCP `write_flow`), which calls `lazyapi.send()` in order and asserts with `test()`. Every step is checked against the spec. Run it with `lazyapi run <spec> --flow flows/<name>.js` (MCP `run_flow`).
+7. **Run everything**: `lazyapi run <spec> --flows --output json`. Exit codes: 0 all passed · 1 a check failed · 2 usage error · 3 could not run.
+
+## Auth
+
+- Prefer `lazyapi.config.yml` environments (`--env-name`, MCP `env_name`). They supply the server, env file and credentials per security scheme (bearer token, basic, API key, OAuth2 client credentials/password, fetched automatically).
+- For custom schemes (signatures, tokens from a login call), `export function before(req)` in the test script and set `req.headers`. It runs before the request is sent.
+- Never write secrets into the spec or scripts. Use `{{env.NAME}}` from an env file.
 
 ## Rules
 

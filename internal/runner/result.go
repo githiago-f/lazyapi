@@ -54,8 +54,24 @@ type ResponseInfo struct {
 	DurationMs int64             `json:"durationMs"`
 }
 
-// OpResult is the result of one operation.
+// Step is one lazyapi.send() call made by a flow.
+type Step struct {
+	OperationID string `json:"operationId,omitempty"`
+	Method      string `json:"method"`
+	Path        string `json:"path"`
+	URL         string `json:"url"`
+	Status      int    `json:"status,omitempty"`
+	DurationMs  int64  `json:"durationMs"`
+	Error       string `json:"error,omitempty"`
+}
+
+// KindFlow marks results produced by a flow script.
+const KindFlow = "flow"
+
+// OpResult is the result of one operation (or one flow, Kind "flow").
 type OpResult struct {
+	Kind        string            `json:"kind,omitempty"`
+	Steps       []Step            `json:"steps,omitempty"`
 	OperationID string            `json:"operationId,omitempty"`
 	Method      string            `json:"method"`
 	Path        string            `json:"path"`
@@ -89,10 +105,11 @@ type Summary struct {
 
 // Report is the result of a run.
 type Report struct {
-	Spec       string     `json:"spec"`
-	StartedAt  time.Time  `json:"startedAt"`
-	Summary    Summary    `json:"summary"`
-	Operations []OpResult `json:"operations"`
+	Spec        string     `json:"spec"`
+	Environment string     `json:"environment,omitempty"`
+	StartedAt   time.Time  `json:"startedAt"`
+	Summary     Summary    `json:"summary"`
+	Operations  []OpResult `json:"operations"`
 }
 
 // Exit codes shared by every command.
