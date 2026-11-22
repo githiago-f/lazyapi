@@ -35,6 +35,15 @@ jobs:
       - name: Verify Modules
         run: go mod verify
 
+      - name: Formatting
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
+          if [ -n "$unformatted" ]; then
+            echo "::error::run gofmt -w on these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Go Vet
         run: go vet ./...
 
@@ -47,7 +56,31 @@ jobs:
         run: go build ./...
 
       - name: Test
-        run: go test -race -count=1 ./...
+        run: |
+          set -o pipefail
+          go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./... | tee test.log
+
+      - name: Coverage
+        env:
+          MIN_COVERAGE: "55"
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub("%", "", $3); print $3}')
+          {
+            echo "### Coverage: ${total}% (minimum ${MIN_COVERAGE}%)"
+            echo
+            echo '| Package | Coverage |'
+            echo '|---|---|'
+            awk '/coverage: [0-9]/ { pkg = ($1 == "ok") ? $2 : $1; for (i = 1; i <= NF; i++) if ($i == "coverage:") printf "| %s | %s |\n", pkg, $(i+1) }' test.log | sed 's#github.com/githiago-f/lazyapi/##' | sort
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "total coverage: ${total}%"
+          awk -v t="$total" -v m="$MIN_COVERAGE" 'BEGIN { exit (t + 0 < m + 0) }' || { echo "::error::coverage ${total}% is below ${MIN_COVERAGE}%"; exit 1; }
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
 
 
   examples:
