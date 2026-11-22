@@ -75,6 +75,11 @@ internal/
     text.go                #   Text wraps textarea.Model
     title_bar.go           #   TitleBar — top bar with config.Name()
     view.go                #   View — generic bordered content (unused)
+    field.go               #   Field — one-line input: textinput state, own rendering (syntax.Template/URL), completion menu (Completing())
+    code.go                #   CodeEditor — own line buffer (no textarea): highlight, gutter, pairs, indent, undo, JSON validate/format, completions
+    menu.go                #   Completion — menu state (Move/Apply) and rendering
+    syntax/                #   Line = runes + Kind per rune: Code (chroma), MarkTemplates, URL, Render(window, cursor)
+    complete/              #   Pure completion: Templates ({{ and $name), Script (response., expect()., lazyapi., pm.)
     scrollable/            #   Scrollable model wrapper with pgup/pgdown/mouse
       scrollable.go
     tabs/                  #   Tabbed container
@@ -164,7 +169,8 @@ internal/
 - `ctrl+k` palette: `Tui.paletteCommands()` (internal/app/commands.go) builds the commands; their `Msg` goes back through `Tui.Update`. Add new actions there.
 - Runs with writes (every method) and flows go through `Tui.confirmRun` (y/N), like destructive sends through `Tui.confirm`.
 - History is recorded on every `responses.ResultMsg` (`ResultMsg.Request` is the unresolved request). Never store `Request.Env`, auth secrets or resolved bodies.
-- `components.TemplateNames` feeds `{{` completions in every `components.Field` (→ accepts); `Tui.missingRefs()` lists references without a value for the editor help bar.
+- `components.TemplateSource` (the TUI's `templateSource`: env file keys + environment vars to offer, the whole env to resolve) feeds completions and template colors in every Field and CodeEditor. While a menu is open (`Completing()`), tab/esc/arrows belong to it: containers (grid, auth, docs, editor URI, tabs) must check `Completing()` before using those keys (`menuKey`). `Tui.missingRefs()` lists references without a value for the editor help bar.
+- Do not use `textarea` for code: it re-renders the whole content on every key (slow past a few hundred lines) and its legacy `MaxHeight` (99) truncates content. Use `components.CodeEditor`.
 - `store.SampleBody`/`FillSampleBody` (schema → body) are for the editor only; `run` must never invent bodies.
 
 ## TUI Request Flow
