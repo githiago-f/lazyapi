@@ -256,9 +256,10 @@ func inStringOrComment(text []rune, pos int) bool {
 	for i := lineStart; i < pos; i++ {
 		r := text[i]
 		if quote != 0 {
-			if r == '\\' {
+			switch r {
+			case '\\':
 				i++
-			} else if r == quote {
+			case quote:
 				quote = 0
 			}
 			continue
