@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -479,4 +480,52 @@ paths:
 	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
 	tm.Send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(10*time.Second))
+}
+
+func TestTUI_PaletteRunsWithDataFile(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "api.yml")
+	if err := os.WriteFile(spec, []byte(fmt.Sprintf(`openapi: 3.0.0
+info: {title: API, version: "1"}
+servers: [{url: %s}]
+paths:
+  /users/{id}:
+    get:
+      parameters: [{in: path, name: id, required: true, schema: {type: string}, example: "{{env.id}}"}]
+      responses: {"200": {description: ok}}
+`, srv.URL)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.MkdirAll(filepath.Join(dir, "data"), 0o755)
+	if err := os.WriteFile(filepath.Join(dir, "data", "users.csv"), []byte("id\n7\n8\n9\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name": "not data"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm := start(t, spec)
+	waitFor(t, tm, "/users/{id}")
+	tm.Send(press("ctrl+k"))
+	tm.Type("users.csv read")
+	waitFor(t, tm, "data/users.csv → read-only operations")
+	tm.Send(press("enter"))
+	waitFor(t, tm, "finished")
+	out := finalScreen(t, tm)
+	if !strings.Contains(out, "✓ 3 passed") || !strings.Contains(out, "[#3]") {
+		t.Errorf("runner:\n%s", out)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(paths, ",") != "/users/7,/users/8,/users/9" {
+		t.Errorf("paths = %v", paths)
+	}
 }
