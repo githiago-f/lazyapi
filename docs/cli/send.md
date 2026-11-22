@@ -16,7 +16,7 @@ lazyapi send request <spec.yml> --op <operationId> [flags]
 | `--query k=v`, `--header k=v` | Query parameter / header (repeatable) |
 | `--body <value\|@file\|@->` | Request body: literal, read from a file, or from stdin |
 | `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first) |
-| `--env <file>` | `.env` file for `{{env.X}}` |
+| `--env <file>` | `.env` file for <code v-pre>{{env.X}}</code> |
 | `--timeout <d>` | Request timeout (default `30s`) |
 | `--script <file>` | Test script; overrides the operation's `x-lazyapi-tests` |
 | `--no-contract` | Skip the response schema check |
