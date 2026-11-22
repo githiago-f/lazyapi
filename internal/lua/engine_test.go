@@ -2,6 +2,7 @@ package lua
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/githiago-f/lazyapi/internal/model"
@@ -240,7 +241,7 @@ tests["Resp header exists"] = response.header("Content-Type"):find("json") ~= ni
 
 func TestRunScript_JSONDecode(t *testing.T) {
 	data := ExecData{
-		Request: model.Request{Method: model.GET, URI: "/test"},
+		Request:     model.Request{Method: model.GET, URI: "/test"},
 		HasResponse: true,
 		RespBody:    `{"items":[1,2,3],"count":3}`,
 	}
@@ -284,5 +285,67 @@ func TestFormatOutput_NoTests(t *testing.T) {
 
 	if result.Output == "" {
 		t.Error("expected non-empty output")
+	}
+}
+
+func TestRunScript_ResultsKeepOrderAndDuplicates(t *testing.T) {
+	script := `
+tests["c"] = true
+tests["a"] = false
+tests["b"] = true
+tests["a"] = true
+`
+	result := RunScript(script, ExecData{})
+
+	want := []TestResult{
+		{Name: "c", Passed: true},
+		{Name: "a", Passed: false, Message: "expected truthy value, got false"},
+		{Name: "b", Passed: true},
+		{Name: "a", Passed: true},
+	}
+	if len(result.Results) != len(want) {
+		t.Fatalf("got %d results, want %d: %+v", len(result.Results), len(want), result.Results)
+	}
+	for i, w := range want {
+		if result.Results[i] != w {
+			t.Errorf("result[%d] = %+v, want %+v", i, result.Results[i], w)
+		}
+	}
+	if result.PassCount != 3 || result.FailCount != 1 {
+		t.Errorf("counts = %d/%d, want 3/1", result.PassCount, result.FailCount)
+	}
+}
+
+func TestRunScript_TestFunctionReportsMessage(t *testing.T) {
+	script := `
+test("status is 201", function()
+  assert(response.status() == 201, "expected 201, got " .. response.status())
+end)
+`
+	result := RunScript(script, ExecData{HasResponse: true, RespStatus: 500})
+
+	if len(result.Results) != 1 {
+		t.Fatalf("got %d results, want 1", len(result.Results))
+	}
+	got := result.Results[0]
+	if got.Passed {
+		t.Fatal("expected failure")
+	}
+	if !strings.Contains(got.Message, "expected 201, got 500") {
+		t.Errorf("message = %q, want assertion text", got.Message)
+	}
+	if strings.Contains(got.Message, "stack traceback") {
+		t.Errorf("message should not include traceback: %q", got.Message)
+	}
+}
+
+func TestRunScript_TestsTableReadable(t *testing.T) {
+	script := `
+tests["first"] = true
+tests["second"] = tests["first"]
+`
+	result := RunScript(script, ExecData{})
+	if result.PassCount != 2 {
+		t.Fatalf("PassCount = %d, want 2 (%+v)", result.PassCount, result.Results)
 	}
 }

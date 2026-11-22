@@ -18,7 +18,7 @@ internal/
         header.go          #     Header key/value pairs (n+a to add)
         params.go          #     Query + Path params (n+q / n+p to add)
         auth.go            #     Auth schemes (n+a / x+a to add/remove)
-        tests.go           #     Stub — returns "Tests" string
+        tests.go           #     Tests tab — Lua script editor, F5 runs it; default template is not persisted
         field.go           #     paramField helper (name+value pair)
       requests/            #   Request browser (compact list + preview + tags)
         list.go            #     RequestList — custom compact list with filter, tag grouping, scroll
@@ -31,12 +31,16 @@ internal/
     formatter.go           #   BuildContent, FormatContent — status/headers/body formatting
   cli/                     # CLI commands (create, remove, add, send, smoke)
     cli.go                 #   Run() dispatcher + printUsage
+    flags.go               #   stdlib flag helpers: parseInterleaved, kvFlag (--param k=v), splitList
+    runner.go              #   shared send/smoke helpers: selectServer, operationScript, runTests
     add.go                 #   AddRequest, AddServer
     create.go              #   CreateFile
     remove.go              #   RemoveRequest
-    send.go                #   SendRequest (parses --server, --env, --save-example ad-hoc)
+    send.go                #   SendRequest (--server, --env, --param/--query/--header, --script, --timeout, --save-example)
     server.go              #   AddServer
-    smoke.go               #   SmokeTests (not implemented — prints stub message)
+    smoke.go               #   SmokeTests (--methods, --tag, --op, --param, --dry-run; status checked vs spec)
+  lua/                     # Embedded Lua test engine (gopher-lua)
+    engine.go              #   RunScript(script, ExecData) → ScriptResult (ordered results + failure messages)
   components/              # Reusable UI components
     button.go              #   Button with click debounce
     field.go               #   Field wraps textinput.Model
@@ -78,8 +82,10 @@ internal/
                            #   OpenRequestFile, OpenDraftFile, SaveTempFile, SaveFile,
                            #   DeleteRequestFile, LoadForDuplicate, SaveResponseExampleCmd
     filepath.go            #   Glob() with ** support (Globs type + Expand method)
+    tests.go               #   x-lazyapi-tests: LoadOperationTests, SaveOperationTests, TestScriptName
+    examples.go            #   ParamExample, DeclaredStatuses, StatusDeclared, FindOperation
     openapi_test.go        #   Auth roundtrip tests using testdata fixtures
-    testdata/              #   Static .yml fixtures (minimal.yml, global_security.yml)
+    testdata/              #   Static .yml fixtures (minimal.yml, global_security.yml, params.yml)
 ```
 
 ## Key Types
@@ -98,16 +104,21 @@ internal/
 `internal/store/` — data access. Core functions are synchronous; `tea.Cmd` wrappers in `file_system.go` for TUI.
 
 - **OpenAPI as source of truth** — every `.yml`/`.yaml` file parsed as OpenAPI 3.x via `openapi3.Loader`. `IsOpenAPIFile()` checks for `openapi` or `swagger` root keys via YAML unmarshal.
+- **Test scripts** — persisted as files next to the spec (default `tests/<operationId|method_path>.lua`) and referenced per operation by the `x-lazyapi-tests` extension. Paths must stay inside the spec directory. `OperationToRequest` loads them into `Request.Tests`; `SaveFile` writes them via `SaveOperationTests`. The CLI never reads test scripts from temp files.
+- **Errors** — `tea.Cmd` wrappers return `store.ErrorMsg{Message}` on failure; the TUI shows it as a notification. Never return `tea.Quit`/`tea.Println` as a `tea.Msg` and never `panic` in store code.
 - **Temp/draft files** — stored in `os.TempDir()/lazyapi/<sanitized-abs-path>/`. Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
-- **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]requests.RequestItem` with Tags), `OperationToRequest`, `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
+- **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]requests.RequestItem` with Tags), `OperationToRequest` (pre-fills path params and required query/header params from spec examples), `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
 - **`Glob`** — custom double-star (`**`) glob in `filepath.go` using `strings.Split` + `filepath.Walk`.
 
 ## TUI vs CLI
 
 - **TUI** (`lazyapi` with no subcommand) — interactive bubbletea UI. Default mode.
 - **CLI** (`lazyapi create|remove|add|send|smoke ...`) — headless commands. Dispatch: `cmd/lazyapi/main.go` checks `os.Args[1]`; known verbs → `cli.Run()`, else → `tea.NewProgram(app.NewTui(...))`.
-- **Flag parsing** — ad-hoc manual loop in `main.go`, `send.go`, and `smoke.go`. No `flag` package.
-- **CLI subcommands**: `create file [name] [servers...]`, `add request <file> <path> <method>`, `add server <file> <url>`, `remove request <file> <method> <path>`, `send request <file> <path> <method> [--server url] [--env file] [--save-example]`, `smoke tests <file> [--server url] [--env file]` (stub).
+- **Flag parsing** — `send`/`smoke` use the stdlib `flag` package via `newFlagSet` + `parseInterleaved` (flags allowed before/after positionals; unknown flags are errors). `main.go` still parses `--env` ad-hoc.
+- **CLI subcommands**: `create file [name] [servers...]`, `add request <file> <path> <method>`, `add server <file> <url>`, `remove request <file> <method> <path>`, `send request <file> <path> <method> [flags]`, `smoke tests <file> [flags]`. See `docs/cli/`.
+- **Smoke safety** — runs only `GET,HEAD,OPTIONS` unless `--methods` is given; skips operations whose path params have no value (never invents one); a status not declared in the operation's `responses` counts as an error.
+- **Exit status** — `cli.Run` exits 1 on any error, including failed tests and undeclared statuses.
+- **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
 
 ## Editor Field Cycle
 
@@ -130,8 +141,6 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 ## Known Issues (from code review)
 
 ### Errors (will cause bugs)
-- **`store.LoadForDuplicate`** closes the draft file before reading from it.
-- **`store.SaveFile` (else branch)** closes the created file before encoding YAML to it.
 - **param/header styling** in `View()` resets `lipgloss.Style` each frame, making focus highlighting fragile.
 
 ### Warnings (design debt)
@@ -140,7 +149,7 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - `env.Load()` and `mergeDotenv()` share identical line-parsing logic.
 - TUI auto-saves on every Update (window resize, mouse move, keystroke).
 - Path-param URL substitution iterates a map (non-deterministic order).
-- Dead/stub code: `modal.go` (empty), `tests.go` (stub), `view.go` (unused).
+- Dead/stub code: `modal.go` (empty), `view.go` (unused), `responses/` pane, `model/response.go`.
 - Preview panel auto-sends on `s` without confirmation.
 
 ### Linter (3 deprecations)
@@ -148,7 +157,7 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 
 ## Testing
 
-- **Test files** next to code (`internal/store/openapi_test.go`).
+- **Test files** next to code (`internal/store/openapi_test.go`). CLI tests use `httptest` servers (`internal/cli/runner_test.go`).
 - **Fixtures** in `internal/store/testdata/` as `.yml` files. Use `fixturePath(name)`.
 - **Avoid `/tmp`** — use `t.TempDir()` for file roundtrips.
 - **Pattern** — roundtrip (marshal → write → read → unmarshal → verify), not UI interaction.
