@@ -264,17 +264,69 @@ func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, o
 	if source != "" {
 		res.TestsFile = relToSpec(specPath, sopts.Filename)
 	}
-	res.Request = requestInfo(req)
 
 	if opts.DryRun {
+		res.Request = requestInfo(req)
 		res.Outcome = Planned
 		return res
 	}
 
-	resp, body, elapsed, attempts, err := sendWithRetries(ctx, &req, opts.Retries)
+	ref := t.ref
+	return exchange(ctx, res, ExchangeInput{
+		Spec: spec, SpecPath: specPath, Ref: &ref, Request: req,
+		Script: source, ScriptOptions: sopts,
+		NoContract: opts.NoContract, Retries: opts.Retries,
+	})
+}
+
+// ExchangeInput is a fully built request plus what to check it against.
+type ExchangeInput struct {
+	Spec     *openapi3.T // nil: no status/contract checks, no lazyapi.send
+	SpecPath string
+	Ref      *model.OpenAPIRef // nil for requests that are not in the spec (drafts)
+	Request  model.Request     // Env/Vars/Timeout/ServerURL already set
+
+	Script        string // test script source; "" for none
+	ScriptOptions script.Options
+	NoContract    bool
+	Retries       int
+}
+
+// Exchange sends an already-built request — e.g. one edited in the TUI — and
+// runs the same checks as Run: declared status, contract and script.
+func Exchange(ctx context.Context, in ExchangeInput) OpResult {
+	res := OpResult{Method: in.Request.Method.Label(), Path: in.Request.URI, Summary: in.Request.About.Summary}
+	if in.Spec != nil && in.Ref != nil {
+		if op := store.FindOperation(in.Spec, *in.Ref); op != nil {
+			res.OperationID, res.Tags = op.OperationID, op.Tags
+		}
+	}
+	if missing := in.Request.MissingPathParams(); len(missing) > 0 {
+		res.Outcome = Errored
+		res.Reason = "no value for path parameter(s) " + strings.Join(missing, ", ")
+		return res
+	}
+	if in.Request.ServerURL == "" {
+		res.Outcome, res.Reason = Errored, "no server URL"
+		return res
+	}
+	return exchange(ctx, res, in)
+}
+
+func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
+	req := in.Request
+	if in.Script != "" && in.ScriptOptions.Filename != "" && in.SpecPath != "" {
+		res.TestsFile = relToSpec(in.SpecPath, in.ScriptOptions.Filename)
+	}
+	res.Request = requestInfo(req)
+
+	resp, body, elapsed, attempts, err := sendWithRetries(ctx, &req, in.Retries)
 	res.Attempts = attempts
 	if err != nil {
 		res.Outcome, res.Reason = Errored, "request failed: "+err.Error()
+		if ctx.Err() == context.Canceled {
+			res.Reason = "request cancelled"
+		}
 		return res
 	}
 	res.Response = &ResponseInfo{
@@ -285,39 +337,44 @@ func execute(ctx context.Context, spec *openapi3.T, specPath string, t target, o
 		DurationMs: elapsed.Milliseconds(),
 	}
 
-	declared := store.DeclaredStatuses(spec, t.ref)
-	statusCheck := Check{Kind: CheckStatus, Name: fmt.Sprintf("status %d is declared", resp.StatusCode),
-		Passed: store.StatusDeclared(declared, resp.StatusCode)}
-	if !statusCheck.Passed {
-		if len(declared) == 0 {
-			statusCheck.Message = "the operation declares no responses, so only statuses below 400 are accepted"
-		} else {
-			statusCheck.Message = "declared: " + strings.Join(declared, ", ")
+	inSpec := in.Spec != nil && in.Ref != nil && store.FindOperation(in.Spec, *in.Ref) != nil
+	if inSpec {
+		ref := *in.Ref
+		declared := store.DeclaredStatuses(in.Spec, ref)
+		statusCheck := Check{Kind: CheckStatus, Name: fmt.Sprintf("status %d is declared", resp.StatusCode),
+			Passed: store.StatusDeclared(declared, resp.StatusCode)}
+		if !statusCheck.Passed {
+			if len(declared) == 0 {
+				statusCheck.Message = "the operation declares no responses, so only statuses below 400 are accepted"
+			} else {
+				statusCheck.Message = "declared: " + strings.Join(declared, ", ")
+			}
+		}
+		res.Checks = append(res.Checks, statusCheck)
+
+		if !in.NoContract && store.ResponseSchemaDeclared(in.Spec, ref, resp.StatusCode) {
+			c := Check{Kind: CheckContract, Name: "response matches the OpenAPI schema", Passed: true}
+			if err := store.ValidateResponse(in.Spec, ref, resp.StatusCode, resp.Header, []byte(body)); err != nil {
+				c.Passed, c.Message = false, err.Error()
+			}
+			res.Checks = append(res.Checks, c)
 		}
 	}
-	res.Checks = append(res.Checks, statusCheck)
 
-	if !opts.NoContract && store.ResponseSchemaDeclared(spec, t.ref, resp.StatusCode) {
-		c := Check{Kind: CheckContract, Name: "response matches the OpenAPI schema", Passed: true}
-		if err := store.ValidateResponse(spec, t.ref, resp.StatusCode, resp.Header, []byte(body)); err != nil {
-			c.Passed, c.Message = false, err.Error()
-		}
-		res.Checks = append(res.Checks, c)
-	}
-
-	if source != "" {
-		ref := t.ref
+	if in.Script != "" {
 		data := script.ExecData{
 			Request: req,
 			Response: &script.Response{Status: resp.StatusCode, StatusText: resp.Status, Header: resp.Header,
-				Body: body, Duration: elapsed, Ref: &ref},
-			Env:  envMap,
-			Vars: vars,
+				Body: body, Duration: elapsed, Ref: in.Ref},
+			Env:  req.Env,
+			Vars: req.Vars,
 		}
-		sctx := &script.SpecContext{Spec: spec, SpecPath: specPath, ServerURL: req.ServerURL,
-			Env: envMap, Vars: vars, Timeout: opts.Timeout}
-		sctx.Bind(&data)
-		sr := script.Run(source, data, sopts)
+		if in.Spec != nil {
+			sctx := &script.SpecContext{Spec: in.Spec, SpecPath: in.SpecPath, ServerURL: req.ServerURL,
+				Env: req.Env, Vars: req.Vars, Timeout: req.Timeout}
+			sctx.Bind(&data)
+		}
+		sr := script.Run(in.Script, data, in.ScriptOptions)
 		for _, tr := range sr.Results {
 			res.Checks = append(res.Checks, Check{Kind: CheckTest, Name: tr.Name, Passed: tr.Passed, Message: tr.Message})
 		}

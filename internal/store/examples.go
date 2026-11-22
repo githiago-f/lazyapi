@@ -109,3 +109,68 @@ func FindOperation(spec *openapi3.T, ref model.OpenAPIRef) *openapi3.Operation {
 	}
 	return pathItem.GetOperation(strings.ToUpper(ref.Method))
 }
+
+// BodyExample returns the media type and example body declared for an
+// operation's request body. JSON media types are preferred; the example comes
+// from the media type's example, its first named example, or the schema's
+// example. raw is "" when nothing is declared.
+func BodyExample(op *openapi3.Operation) (mediaType, raw string) {
+	if op == nil || op.RequestBody == nil || op.RequestBody.Value == nil {
+		return "", ""
+	}
+	content := op.RequestBody.Value.Content
+	types := make([]string, 0, len(content))
+	for mt := range content {
+		types = append(types, mt)
+	}
+	slices.SortFunc(types, func(a, b string) int {
+		aj, bj := strings.Contains(a, "json"), strings.Contains(b, "json")
+		switch {
+		case aj && !bj:
+			return -1
+		case bj && !aj:
+			return 1
+		}
+		return strings.Compare(a, b)
+	})
+	for _, mt := range types {
+		m := content[mt]
+		if m == nil {
+			continue
+		}
+		var ex any
+		switch {
+		case m.Example != nil:
+			ex = m.Example
+		case len(m.Examples) > 0:
+			names := make([]string, 0, len(m.Examples))
+			for name := range m.Examples {
+				names = append(names, name)
+			}
+			slices.Sort(names)
+			for _, name := range names {
+				if e := m.Examples[name]; e != nil && e.Value != nil && e.Value.Value != nil {
+					ex = e.Value.Value
+					break
+				}
+			}
+		case m.Schema != nil && m.Schema.Value != nil && m.Schema.Value.Example != nil:
+			ex = m.Schema.Value.Example
+		}
+		if ex == nil {
+			if mediaType == "" {
+				mediaType = mt
+			}
+			continue
+		}
+		if s, ok := ex.(string); ok && !strings.Contains(mt, "json") {
+			return mt, s
+		}
+		data, err := json.MarshalIndent(ex, "", "  ")
+		if err != nil {
+			continue
+		}
+		return mt, string(data)
+	}
+	return mediaType, ""
+}

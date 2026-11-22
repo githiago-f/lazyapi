@@ -1,21 +1,26 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	overlay "github.com/rmhubbert/bubbletea-overlay"
 	"github.com/githiago-f/lazyapi/internal/app/pane/editor"
 	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
+	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/runner"
 	"github.com/githiago-f/lazyapi/internal/store"
+	overlay "github.com/rmhubbert/bubbletea-overlay"
 )
 
 type viewKeyMap struct {
@@ -23,7 +28,7 @@ type viewKeyMap struct {
 	full  [][]key.Binding
 }
 
-func (v viewKeyMap) ShortHelp() []key.Binding { return v.short }
+func (v viewKeyMap) ShortHelp() []key.Binding  { return v.short }
 func (v viewKeyMap) FullHelp() [][]key.Binding { return v.full }
 
 type Tui struct {
@@ -35,12 +40,20 @@ type Tui struct {
 	help        help.Model
 	requestList requests.RequestList
 	preview     requests.PreviewModel
+	previewResp responses.Model
 	tagsOverlay *requests.TagsOverlay
 	editor      *editor.RequestPane
 	prompt      components.PromptModel
 	envStore    *env.Store
 
 	notes components.Notifications
+
+	// cancelSend aborts the request in flight (nil when idle).
+	cancelSend context.CancelFunc
+	// confirm holds a destructive request waiting for y/n.
+	confirm *responses.SendMsg
+
+	width, height int
 
 	showHelp     bool
 	defaultFile  string
@@ -54,16 +67,35 @@ func selectedChanged(p requests.PreviewModel, selected requests.RequestItem) boo
 	return p.CurrentItemURI() != selected.URI || p.CurrentItemMethod() != selected.Method
 }
 
+var (
+	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Peach))
+	titleInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Subtext0))
+	titleEnvStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Crust)).Background(lipgloss.Color(config.Teal)).Padding(0, 1)
+	titleNoEnv     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1)).Background(lipgloss.Color(config.Surface0)).Padding(0, 1)
+	confirmStyle   = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(config.Red)).
+			Background(lipgloss.Color(config.Surface0)).
+			Padding(1, 2)
+	helpBarStyle = lipgloss.NewStyle().Padding(0, 1)
+)
+
 func NewTui(defaultFile string, envFile string) Tui {
+	h := help.New()
+	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender))
+	h.Styles.ShortDesc = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
+	h.Styles.ShortSeparator = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Surface2))
+
 	tui := Tui{
 		defaultFile: defaultFile,
 		titleBar: components.TitleBar{
 			Style: lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), false, false, true, false),
 		},
-		help: help.New(),
+		help:        h,
 		requestList: requests.NewRequestList(),
 		preview:     requests.NewPreview(),
+		previewResp: responses.New("Press s to send this request · Enter to open it in the editor"),
 		prompt:      components.Prompt(""),
 		envStore:    env.NewStore(envFile),
 		notes:       components.NewNotifications(),
@@ -71,8 +103,29 @@ func NewTui(defaultFile string, envFile string) Tui {
 
 	tui.editor = editor.New(tui.currentRequest)
 	tui.editor.SetEnvStore(tui.envStore)
+	tui.titleBar.Title = tui.title()
 
 	return tui
+}
+
+// title shows the app, the spec in use and the active environment.
+func (t Tui) title() string {
+	parts := []string{titleStyle.Render(">_ lazyapi")}
+	spec := t.defaultFile
+	if spec == "" && len(t.openAPIFiles) == 1 {
+		spec = t.openAPIFiles[0]
+	}
+	switch {
+	case spec != "":
+		parts = append(parts, titleInfoStyle.Render(filepath.Base(spec)))
+	case len(t.openAPIFiles) > 1:
+		parts = append(parts, titleInfoStyle.Render(fmt.Sprintf("%d specs", len(t.openAPIFiles))))
+	}
+	envLabel := titleNoEnv.Render("env: none · ctrl+v")
+	if p := t.envStore.Path(); p != "" {
+		envLabel = titleEnvStyle.Render("env: " + env.Label(p))
+	}
+	return strings.Join(parts, titleInfoStyle.Render("  ·  ")) + "   " + envLabel
 }
 
 func renderHelpList(bindings []key.Binding) string {
@@ -106,62 +159,76 @@ func renderHelpList(bindings []key.Binding) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
+func (t Tui) keyMap() viewKeyMap {
+	var vkm viewKeyMap
+	switch config.DefaultConfig.Active {
+	case config.RequestList:
+		vkm.short = []key.Binding{
+			config.DefaultKeyMap.SendRequest, config.DefaultKeyMap.Select, config.DefaultKeyMap.Filter,
+			config.DefaultKeyMap.CreateNew, config.DefaultKeyMap.SwitchEnv, config.DefaultKeyMap.HelpToggle,
+			config.DefaultKeyMap.Quit,
+		}
+	case config.RequestEditor:
+		vkm.short = t.editor.HelpBindings()
+		if !t.editor.CapturesKeys() {
+			vkm.short = append(vkm.short, config.DefaultKeyMap.HelpToggle)
+		}
+	}
+	if t.cancelSend != nil {
+		vkm.short = append([]key.Binding{config.DefaultKeyMap.Cancel}, vkm.short...)
+	}
+	vkm.full = config.DefaultKeyMap.FullHelp()
+	return vkm
+}
+
 func (t Tui) View() tea.View {
 	var currentView string
-	var vkm viewKeyMap
+	vkm := t.keyMap()
 
 	switch config.DefaultConfig.Active {
 	case config.RequestList:
 		listView := t.requestList.View().Content
-		previewView := t.preview.View().Content
+		right := t.preview.View().Content
+		if t.preview.HasItem() {
+			right = lipgloss.JoinVertical(lipgloss.Left, right, lipgloss.NewStyle().PaddingLeft(1).Render(t.previewResp.View()))
+		}
 
 		if t.tagsOverlay != nil {
 			ov := t.tagsOverlay.View().Content
 			cursorY := t.requestList.CursorPosY()
 			_, titleBarHeight := lipgloss.Size(t.titleBar.View().Content)
 			yOff := titleBarHeight + cursorY
-			currentView = overlay.Composite(ov, listView+"\n"+previewView, overlay.Left, overlay.Top, 0, yOff)
+			currentView = overlay.Composite(ov, listView+"\n"+right, overlay.Left, overlay.Top, 0, yOff)
 		} else {
-			split := lipgloss.JoinHorizontal(lipgloss.Top, listView, previewView)
-			currentView = split
+			currentView = lipgloss.JoinHorizontal(lipgloss.Top, listView, right)
 		}
-
-		vkm.short = t.requestList.HelpBindings()
-		vkm.full = config.DefaultKeyMap.FullHelp()
 
 	case config.RequestEditor:
 		currentView = t.editor.View().Content
-		bindings := t.editor.HelpBindings()
-		if len(bindings) > 0 {
-			vkm.short = bindings
-		} else {
-			vkm.short = []key.Binding{
-				config.DefaultKeyMap.Back,
-				config.DefaultKeyMap.Save,
-				config.DefaultKeyMap.SaveExample,
-				config.DefaultKeyMap.Next,
-				config.DefaultKeyMap.Prev,
-			}
-		}
-		vkm.full = config.DefaultKeyMap.FullHelp()
 	}
 
-	base := lipgloss.JoinVertical(
-		lipgloss.Left,
-		t.prompt.View().Content,
-		t.titleBar.View().Content,
-		currentView,
-	)
+	helpBar := helpBarStyle.Width(t.width).Render(t.help.ShortHelpView(vkm.ShortHelp()))
+	_, contentHeight := t.contentSize()
+	currentView = lipgloss.NewStyle().Height(contentHeight).MaxHeight(contentHeight).Render(currentView)
+
+	sections := []string{t.titleBar.View().Content, currentView, helpBar}
+	if p := t.prompt.View().Content; p != "" {
+		sections = append([]string{p}, sections...)
+	}
+	base := lipgloss.JoinVertical(lipgloss.Left, sections...)
 
 	if t.notes.Visible() {
-		base = overlay.Composite(
-			t.notes.View().Content,
-			base,
-			overlay.Center,
-			overlay.Top,
-			0,
-			1,
-		)
+		base = overlay.Composite(t.notes.View().Content, base, overlay.Center, overlay.Top, 0, 1)
+	}
+
+	if t.confirm != nil {
+		req := t.confirm.Request
+		box := confirmStyle.Render(fmt.Sprintf("%s\n\n%s %s\n%s\n\n%s",
+			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Red)).Render("Send a request that may change data?"),
+			req.Method.Label(), req.ResolvedURL(), titleInfoStyle.Render("env: "+env.Label(t.envStore.Path())),
+			lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Render("y")+" send   "+
+				lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Render("any other key")+" cancel"))
+		base = overlay.Composite(box, base, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if t.showHelp {
@@ -190,6 +257,12 @@ func (t Tui) View() tea.View {
 	}
 }
 
+// contentSize is the area between the title bar and the help bar.
+func (t Tui) contentSize() (int, int) {
+	_, titleBarHeight := lipgloss.Size(t.titleBar.View().Content)
+	return t.width, max(0, t.height-titleBarHeight-1)
+}
+
 func (t Tui) Init() tea.Cmd {
 	if t.defaultFile != "" {
 		if !store.IsOpenAPIFile(t.defaultFile) {
@@ -211,11 +284,102 @@ func (t Tui) Init() tea.Cmd {
 	)
 }
 
+func notify(message string, kind components.NotificationType) tea.Cmd {
+	return func() tea.Msg { return components.ShowNotificationMsg{Message: message, Type: kind} }
+}
+
+// startSend sends msg with a cancellable context and shows the spinner.
+func (t Tui) startSend(msg responses.SendMsg) (Tui, tea.Cmd) {
+	if t.cancelSend != nil {
+		t.cancelSend()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.cancelSend = cancel
+	var spin tea.Cmd
+	switch msg.Source {
+	case responses.FromEditor:
+		var rp editor.RequestPane
+		rp, spin = t.editor.StartSending()
+		t.editor = &rp
+	case responses.FromPreview:
+		spin = t.previewResp.StartSending()
+	}
+	return t, tea.Batch(spin, responses.Exchange(ctx, msg))
+}
+
+// previewSendMsg builds the request for the item selected in the list,
+// including unsaved edits and spec examples.
+func (t Tui) previewSendMsg() (*responses.SendMsg, error) {
+	item := t.preview.Item()
+	if item == nil {
+		return nil, nil
+	}
+	if item.OpenAPIRef == nil {
+		return nil, fmt.Errorf("drafts are sent from the editor: press enter to open it")
+	}
+	req, err := store.LoadRequest(*item.OpenAPIRef)
+	if err != nil {
+		return nil, err
+	}
+	if u := t.preview.CurrentServerURL(); u != "" {
+		req.ServerURL = u
+	}
+	req.Env, _ = t.envStore.Load()
+	return &responses.SendMsg{Source: responses.FromPreview, Request: req}, nil
+}
+
+// switchEnv cycles through the env files in the working directory.
+func (t Tui) switchEnv() (Tui, tea.Cmd) {
+	options := append([]string{""}, env.Discover(".")...)
+	if p := t.envStore.Path(); p != "" && !slices.Contains(options, p) {
+		options = append(options, p)
+	}
+	idx := slices.Index(options, t.envStore.Path())
+	next := options[(idx+1)%len(options)]
+	t.envStore.SetPath(next)
+	t.titleBar.Title = t.title()
+	if len(options) == 1 {
+		return t, notify("No .env files in this directory (.env, .env.<name>, <name>.env)", components.Info)
+	}
+	return t, notify("Environment: "+env.Label(next), components.Info)
+}
+
+// capturesKeys reports whether a text input owns the keyboard, so global
+// shortcuts (q, ?, s, ctrl+v) must not fire.
+func (t Tui) capturesKeys() bool {
+	switch config.DefaultConfig.Active {
+	case config.RequestList:
+		return t.requestList.Filtering()
+	case config.RequestEditor:
+		return t.editor.CapturesKeys()
+	}
+	return false
+}
+
 func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		subModel tea.Model
 		cmd      tea.Cmd
 	)
+
+	// A destructive request waits for confirmation: y sends, anything else cancels.
+	if t.confirm != nil {
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+			pending := *t.confirm
+			t.confirm = nil
+			if keyMsg.String() == "y" || keyMsg.String() == "Y" {
+				return t.startSend(pending)
+			}
+			return t, notify("Request not sent", components.Info)
+		}
+	}
+
+	// esc cancels a request in flight (before it reaches any pane).
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok && t.cancelSend != nil && key.Matches(keyMsg, config.DefaultKeyMap.Cancel) {
+		t.cancelSend()
+		t.cancelSend = nil
+		return t, nil
+	}
 
 	// When tag overlay is open, route keyboard events to it.
 	// Ctrl+C still quits. Lifecycle/resize messages pass through.
@@ -238,11 +402,12 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case store.RequestFilesMsg:
 		t.openAPIFiles = msg.Paths
+		t.titleBar.Title = t.title()
 		return t, store.LoadRequestsList(msg.Paths)
 
 	case store.LoadedRequestListMsg:
 		t.requestList = t.requestList.SetItems(msg.Items)
-		if len(msg.Items) > 0 {
+		if len(msg.Items) > 0 && !t.preview.HasItem() {
 			first := msg.Items[0]
 			servers, serverURL := store.LoadServers(first.FileName)
 			t.preview.SetItem(first, servers, serverURL)
@@ -261,16 +426,14 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			target = t.openAPIFiles[0]
 		}
 		if target == "" {
-			return t, nil
+			return t, notify("No OpenAPI spec loaded: start lazyapi with a spec file", components.Error)
 		}
 		servers, serverURL := store.LoadServers(target)
 		envMap, _ := t.envStore.Load()
 		req := model.Request{
 			FileName:  target,
-			URI:       "",
 			Method:    model.GET,
-			About:     model.About{},
-			Body:      model.Body{Type: model.ApplicationJSON, Raw: ""},
+			Body:      model.Body{Type: model.ApplicationJSON},
 			Headers:   map[string]string{},
 			Params:    map[string]string{},
 			Query:     map[string]string{},
@@ -292,17 +455,39 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, tea.Batch(
 			store.DeleteRequestFile(msg.Item),
 			store.LoadRequestsList(t.openAPIFiles),
-			func() tea.Msg {
-				return components.ShowNotificationMsg{
-					Message: "Request deleted",
-					Type:    components.Info,
-				}
-			},
+			notify("Request deleted", components.Info),
 		)
 
 	case requests.SendRequestMsg:
-		cmd = t.preview.Send()
-		return t, cmd
+		send, err := t.previewSendMsg()
+		if err != nil {
+			return t, notify(err.Error(), components.Error)
+		}
+		if send == nil {
+			return t, nil
+		}
+		if !slices.Contains(runner.SafeMethods, send.Request.Method.Label()) {
+			t.confirm = send
+			return t, nil
+		}
+		return t.startSend(*send)
+
+	case responses.SendMsg:
+		return t.startSend(msg)
+
+	case responses.ResultMsg:
+		t.cancelSend = nil
+		switch msg.Source {
+		case responses.FromEditor:
+			rp := t.editor.SetResult(msg)
+			if config.DefaultConfig.Active == config.RequestEditor {
+				rp = rp.FocusResponse()
+			}
+			t.editor = &rp
+		case responses.FromPreview:
+			t.previewResp.SetResult(msg.Result)
+		}
+		return t, resultNotification(msg.Result)
 
 	case requests.EditTagsMsg:
 		item, ok := t.requestList.SelectedItem()
@@ -342,21 +527,17 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, nil
 
 	case store.ErrorMsg:
-		var noteCmd tea.Cmd
-		t.notes, noteCmd = t.notes.Update(components.ShowNotificationMsg{
-			Message: msg.Message,
-			Type:    components.Error,
-		})
-		return t, noteCmd
+		return t, notify(msg.Message, components.Error)
+
+	case store.FileSaved:
+		return t, notify("✓ Saved to "+filepath.Base(msg.Path), components.Success)
+
+	case store.RequestDeleted:
+		return t, nil
 
 	case store.TagsUpdatedMsg:
 		if !msg.Success {
-			var noteCmd tea.Cmd
-			t.notes, noteCmd = t.notes.Update(components.ShowNotificationMsg{
-				Message: "Failed to update tags: " + msg.Error,
-				Type:    components.Error,
-			})
-			return t, noteCmd
+			return t, notify("Failed to update tags: "+msg.Error, components.Error)
 		}
 
 	case store.DuplicateData:
@@ -393,72 +574,42 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return t, nil
 
 	case editor.CloseRequestPaneMsg:
+		// Save first, then reload the list so it reflects the saved spec.
+		cmd = store.LoadRequestsList(t.openAPIFiles)
 		if msg.SaveToFile {
-			cmd = tea.Batch(
-				store.SaveFile(t.editor.GetAsRequestData()),
-				store.LoadRequestsList(t.openAPIFiles),
-			)
+			cmd = tea.Sequence(store.SaveFile(t.editor.GetAsRequestData()), cmd)
+		}
+		if t.cancelSend != nil {
+			t.cancelSend()
+			t.cancelSend = nil
 		}
 		t.editor.Reset()
 		config.DefaultConfig.Active = config.RequestList
 		return t, cmd
 
-	case model.SuccessMsg:
-		if config.DefaultConfig.Active == config.RequestEditor {
-			rp := t.editor.SetResponse(msg.StatusCode, msg.Status, msg.Header, msg.Body)
-			rp = rp.FocusResponse()
-			t.editor = &rp
-			var noteCmd tea.Cmd
-			t.notes, noteCmd = t.notes.Update(components.ShowNotificationMsg{
-				Message: fmt.Sprintf("✓ %d %s", msg.StatusCode, msg.Status),
-				Type:    components.Success,
-			})
-			return t, noteCmd
-		}
-		t.preview.SetResponse(msg.StatusCode, msg.Status, msg.Header, msg.Body)
-
-	case model.FailureMsg:
-		if config.DefaultConfig.Active == config.RequestEditor {
-			rp := t.editor.SetResponseError(msg.Message)
-			rp = rp.FocusResponse()
-			t.editor = &rp
-			var noteCmd tea.Cmd
-			t.notes, noteCmd = t.notes.Update(components.ShowNotificationMsg{
-				Message: fmt.Sprintf("✗ %s", msg.Message),
-				Type:    components.Error,
-			})
-			return t, noteCmd
-		}
-		t.preview.SetResponseError(msg.Message)
-
 	case tea.WindowSizeMsg:
-		_, titleBarHeight := lipgloss.Size(t.titleBar.View().Content)
+		t.width, t.height = msg.Width, msg.Height
 		t.titleBar.Width = msg.Width
-		t.help.SetWidth(msg.Width)
+		t.help.SetWidth(msg.Width - 2)
+		_, contentHeight := t.contentSize()
 
 		listWidth := int(float64(msg.Width) * 0.35)
 		previewWidth := msg.Width - listWidth
 
-		t.requestList.SetSize(listWidth, msg.Height-titleBarHeight-1)
+		t.requestList.SetSize(listWidth, contentHeight)
+		t.preview.SetSize(previewWidth, contentHeight)
+		t.previewResp.SetSize(previewWidth-2, contentHeight-t.preview.HeaderHeight())
 
-		t.preview.SetSize(previewWidth, msg.Height-titleBarHeight-1)
-		t.preview.SetViewportSize(previewWidth-2, msg.Height-titleBarHeight-14)
-
-		subModel, _ = t.editor.Update(msg)
+		subModel, _ = t.editor.Update(tea.WindowSizeMsg{Width: msg.Width, Height: contentHeight})
 		ptr := subModel.(editor.RequestPane)
 		t.editor = &ptr
+		return t, nil
 
 	case store.ExampleSavedMsg:
-		if config.DefaultConfig.Active == config.RequestEditor {
-			if msg.Success {
-				rp := t.editor.SetResponseFeedback("✓ Saved as example")
-				t.editor = &rp
-			} else {
-				rp := t.editor.SetResponseError(msg.Error)
-				t.editor = &rp
-			}
-			return t, nil
+		if msg.Success {
+			return t, notify("✓ Response saved as an example in the spec", components.Success)
 		}
+		return t, notify(msg.Error, components.Error)
 
 	case editor.TestsResultMsg:
 		if config.DefaultConfig.Active == config.RequestEditor {
@@ -468,7 +619,8 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
-		if key.Matches(msg, config.DefaultKeyMap.HelpToggle) {
+		capture := t.capturesKeys()
+		if !capture && key.Matches(msg, config.DefaultKeyMap.HelpToggle) {
 			t.showHelp = !t.showHelp
 			return t, nil
 		}
@@ -477,16 +629,32 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return t, nil
 		}
 		switch {
-		case config.DefaultConfig.Active == config.PageIndex(0) && key.Matches(msg, config.DefaultKeyMap.Quit):
-			return t, tea.Quit
 		case key.Matches(msg, config.DefaultKeyMap.Kill):
 			return t, tea.Quit
+		case !capture && config.DefaultConfig.Active == config.RequestList && key.Matches(msg, config.DefaultKeyMap.Quit):
+			return t, tea.Quit
+		case !capture && key.Matches(msg, config.DefaultKeyMap.SwitchEnv):
+			return t.switchEnv()
 		case config.DefaultConfig.Active == config.RequestEditor &&
 			key.Matches(msg, config.DefaultKeyMap.SaveExample):
 			statusCode, header, body := t.editor.LastResponse()
 			ref := t.editor.CurrentRef()
-			if ref != nil && statusCode > 0 {
+			switch {
+			case ref == nil:
+				return t, notify("Save the request to the spec before saving examples", components.Info)
+			case statusCode == 0:
+				return t, notify("Send the request first", components.Info)
+			default:
 				return t, store.SaveResponseExampleCmd(*ref, statusCode, header, body)
+			}
+		case config.DefaultConfig.Active == config.RequestList && !capture:
+			// Response tabs and scrolling for the preview.
+			switch msg.String() {
+			case "[", "]", "pgup", "pgdown":
+				t.previewResp.Focus()
+				t.previewResp, cmd = t.previewResp.Update(msg)
+				t.previewResp.Blur()
+				return t, cmd
 			}
 		}
 
@@ -511,10 +679,19 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = noteCmd
 	}
 
+	// Spinner ticks and mouse wheel for the preview response.
+	if !isKey(msg) {
+		var pcmd tea.Cmd
+		t.previewResp, pcmd = t.previewResp.Update(msg)
+		cmd = tea.Batch(cmd, pcmd)
+	}
+
 	switch config.DefaultConfig.Active {
 	case config.RequestList:
-		subModel, cmd = t.requestList.Update(msg)
+		var lcmd tea.Cmd
+		subModel, lcmd = t.requestList.Update(msg)
 		t.requestList, _ = subModel.(requests.RequestList)
+		cmd = tea.Batch(cmd, lcmd)
 
 		selected, ok := t.requestList.SelectedItem()
 		if ok && (!t.preview.HasItem() || selectedChanged(t.preview, selected)) {
@@ -525,13 +702,41 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			t.preview.SetItem(selected, servers, serverURL)
+			t.previewResp.Clear()
+			_, contentHeight := t.contentSize()
+			t.previewResp.SetSize(t.width-int(float64(t.width)*0.35)-2, contentHeight-t.preview.HeaderHeight())
 		}
 
 	case config.RequestEditor:
-		subModel, cmd = t.editor.Update(msg)
+		var ecmd tea.Cmd
+		subModel, ecmd = t.editor.Update(msg)
 		ptr, _ := subModel.(editor.RequestPane)
 		t.editor = &ptr
+		cmd = tea.Batch(cmd, ecmd)
 	}
 
 	return t, cmd
+}
+
+// resultNotification summarises a finished request.
+func resultNotification(r runner.OpResult) tea.Cmd {
+	if r.Response == nil {
+		return notify("✗ "+r.Reason, components.Error)
+	}
+	failed := 0
+	for _, c := range r.Checks {
+		if !c.Passed {
+			failed++
+		}
+	}
+	text := fmt.Sprintf("%d · %d ms", r.Response.Status, r.Response.DurationMs)
+	if failed > 0 {
+		return notify(fmt.Sprintf("✗ %s · %d check(s) failed", text, failed), components.Error)
+	}
+	return notify("✓ "+text, components.Success)
+}
+
+func isKey(msg tea.Msg) bool {
+	_, ok := msg.(tea.KeyPressMsg)
+	return ok
 }

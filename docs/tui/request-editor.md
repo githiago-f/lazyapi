@@ -8,14 +8,12 @@ Open a request from the list to enter the editor. It shows the request details a
 ┌───────────────────────────────────────────┐
 │ Method    Server URL    URI       [Send]  │
 ├───────────────────────────────────────────┤
-│ [Doc] [Params] [Auth] [Header] [Body] [Tests] │
-├───────────────────────────────────────────┤
-│                                           │
-│  Tab Content                              │
-│                                           │
-├───────────────────────────────────────────┤
-│  Response Preview                         │
-└───────────────────────────────────────────┘
+├─────────────────────┬─────────────────────┤
+│ Docs Params Auth    │ 200 OK · 41 ms · ✓ 3│
+│ Headers Body Tests  │ Body Headers Checks │
+│                     │                     │
+│  Tab content        │  Response           │
+└─────────────────────┴─────────────────────┘
 ```
 
 ## Top controls
@@ -23,7 +21,9 @@ Open a request from the list to enter the editor. It shows the request details a
 - **Method** — select from GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD
 - **Server URL** — picked from the spec's `servers` list
 - **URI** — the endpoint path, with `&#123;&#123;env.X&#125;&#125;` support
-- **Send** — press `Enter` on the Send button to execute the request
+- **Send** — press `Enter` on the Send button, or `alt+enter` from any field. The response, status/contract checks and test results appear on the right ([Response View](./response-preview.md))
+
+Opening an operation pre-fills path parameters, required query/header parameters and the request body from the spec's examples. Bodies can be edited in `$EDITOR` with `ctrl+x`.
 
 ## Tabs
 
@@ -64,7 +64,7 @@ Select the type from the dropdown.
 
 A JavaScript/TypeScript editor for the operation's test script (see [Test Scripts](../scripting.md)). Scripts can use `request`, `response`, `env`, `vars`, `lazyapi.send()`, `test()` and `expect()`, and may import relative files or `https://` modules.
 
-Press `F5` to run the script against the last response. Results, failure messages and `console` output appear below the editor. When you save (`Ctrl+S`), the script is written to `tests/<operationId>.js` next to the spec and linked through `x-lazyapi-tests`.
+Press `F5` to run the script against the last response. Results, failure messages and `console` output appear below the editor. When you save (`ctrl+o`), the script is written to `tests/<operationId>.js` next to the spec and linked through `x-lazyapi-tests`.
 
 ```js
 test("status is 200", () => expect(response).toHaveStatus(200));
@@ -81,6 +81,6 @@ test("has an id", () => expect(response.json()).toHaveProperty("id"));
 
 ## Saving
 
-- `Ctrl+S` — saves changes back to the spec (Summary, Description, param definitions, body content type, auth schemes)
+- `ctrl+o` — saves changes back to the spec (Summary, Description, param definitions, body content type, auth schemes, test script)
 - `Ctrl+E` — saves the last response as an example in the spec
 - Runtime values (body content, header values, param values) are saved to session temp files

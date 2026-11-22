@@ -60,6 +60,16 @@ func NewStore(filepath string) *Store {
 	return &Store{filepath: filepath}
 }
 
+// Path returns the env file in use ("" means system environment only).
+func (s *Store) Path() string { return s.filepath }
+
+// SetPath switches to another env file and drops the cache.
+func (s *Store) SetPath(path string) {
+	s.filepath = path
+	s.env = nil
+	s.hash = ""
+}
+
 // Load returns the current environment map, re-reading the file only if its
 // content has changed since the last call. Thread-safe for single-goroutine
 // TUI use (bubbletea is single-threaded).

@@ -149,11 +149,9 @@ func OperationToRequest(spec *openapi3.T, ref model.OpenAPIRef) model.Request {
 		}
 	}
 
-	if op.RequestBody != nil && op.RequestBody.Value != nil {
-		for contentType := range op.RequestBody.Value.Content {
-			req.Body.Type = model.MimeType(contentType)
-			break
-		}
+	if mediaType, example := BodyExample(op); mediaType != "" {
+		req.Body.Type = model.MimeType(mediaType)
+		req.Body.Raw = example
 	}
 
 	for _, s := range spec.Servers {

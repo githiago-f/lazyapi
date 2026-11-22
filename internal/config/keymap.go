@@ -36,13 +36,17 @@ type KeyMap struct {
 	CopyResponse key.Binding
 
 	// Tab-specific actions (editor)
-	AddQueryParam  key.Binding
-	AddPathParam   key.Binding
-	AddHeader      key.Binding
-	AddAuth        key.Binding
-	DelAuth        key.Binding
+	AddQueryParam key.Binding
+	AddPathParam  key.Binding
+	AddHeader     key.Binding
+	AddAuth       key.Binding
+	DelAuth       key.Binding
 
 	RunTests key.Binding
+
+	OpenEditor key.Binding
+	SwitchEnv  key.Binding
+	Cancel     key.Binding
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
@@ -54,15 +58,15 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		return [][]key.Binding{
 			{k.Next, k.Prev},
 			{k.Back, k.Save, k.SaveExample, k.CopyResponse, k.Quit, k.Kill},
-			{k.AddQueryParam, k.AddPathParam, k.AddHeader, k.AddAuth, k.DelAuth, k.RunTests},
+			{k.AddQueryParam, k.AddPathParam, k.AddHeader, k.AddAuth, k.DelAuth, k.RunTests, k.OpenEditor, k.SwitchEnv},
 		}
 	}
 
-		return [][]key.Binding{
-			{k.Select, k.Up, k.Down, k.Filter, k.CreateNew},
-			{k.Duplicate, k.Delete, k.Quit, k.Kill},
-			{k.SendRequest, k.EditTags, k.CycleServer},
-		}
+	return [][]key.Binding{
+		{k.Select, k.Up, k.Down, k.Filter, k.CreateNew},
+		{k.Duplicate, k.Delete, k.Quit, k.Kill},
+		{k.SendRequest, k.EditTags, k.CycleServer, k.SwitchEnv},
+	}
 }
 
 var DefaultKeyMap = KeyMap{
@@ -177,5 +181,17 @@ var DefaultKeyMap = KeyMap{
 	RunTests: key.NewBinding(
 		key.WithKeys("f5"),
 		key.WithHelp("f5", "run tests"),
+	),
+	OpenEditor: key.NewBinding(
+		key.WithKeys("ctrl+x"),
+		key.WithHelp("ctrl+x", "open in $EDITOR"),
+	),
+	SwitchEnv: key.NewBinding(
+		key.WithKeys("ctrl+v"),
+		key.WithHelp("ctrl+v", "switch env"),
+	),
+	Cancel: key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "cancel request"),
 	),
 }

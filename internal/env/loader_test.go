@@ -517,3 +517,28 @@ func TestLoadWithRealisticEnv(t *testing.T) {
 		t.Log("export prefix preserved as part of key")
 	}
 }
+
+func TestStoreSetPathAndDiscover(t *testing.T) {
+	dir := t.TempDir()
+	for name, content := range map[string]string{".env": "A=1\n", ".env.staging": "A=2\n", "prod.env": "A=3\n", "notes.txt": ""} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := Discover(dir)
+	if len(files) != 3 || filepath.Base(files[0]) != ".env" || filepath.Base(files[1]) != ".env.staging" {
+		t.Fatalf("Discover = %v", files)
+	}
+
+	s := NewStore(files[0])
+	if m, _ := s.Load(); m["A"] != "1" {
+		t.Errorf("A = %q", m["A"])
+	}
+	s.SetPath(files[1])
+	if m, _ := s.Load(); m["A"] != "2" || s.Path() != files[1] {
+		t.Errorf("after SetPath A = %q", m["A"])
+	}
+	if Label("") != "no env" || Label(files[2]) != "prod.env" {
+		t.Error("Label")
+	}
+}

@@ -37,7 +37,7 @@ All keybindings are defined in `internal/config/keymap.go` and can be remapped i
 | Back | `Esc` |
 | Next field | `Tab` |
 | Prev field | `Shift+Tab` |
-| Save | `Ctrl+S` |
+| Save | `ctrl+o` |
 | Save example | `Ctrl+E` |
 | New request | `Ctrl+N` |
 | Duplicate | `d` |

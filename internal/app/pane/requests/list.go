@@ -58,12 +58,12 @@ type CursorPosMsg struct {
 }
 
 type RequestList struct {
-	items    []RequestItem
-	groups   []TagGroup
-	filtered []RequestItem
+	items          []RequestItem
+	groups         []TagGroup
+	filtered       []RequestItem
 	filteredGroups []TagGroup
-	cursor   int
-	scroll   int
+	cursor         int
+	scroll         int
 
 	filter    textinput.Model
 	filtering bool
@@ -74,7 +74,7 @@ type RequestList struct {
 
 func NewRequestList() RequestList {
 	f := textinput.New()
-	f.Placeholder = "type / to filter..."
+	f.Placeholder = "press / to filter by path, method, tag or summary"
 	f.Prompt = "🔍 "
 	f.CharLimit = 100
 
@@ -136,7 +136,11 @@ func (rl RequestList) SelectedItem() (RequestItem, bool) {
 func (rl *RequestList) SetSize(w, h int) {
 	rl.width = w
 	rl.height = h
+	rl.filter.SetWidth(max(1, w-4))
 }
+
+// Filtering reports whether the filter input is capturing keys.
+func (rl RequestList) Filtering() bool { return rl.filtering }
 
 func (rl RequestList) SetItems(items []RequestItem) RequestList {
 	items = dedupItems(items)
@@ -194,7 +198,7 @@ func (rl RequestList) Init() tea.Cmd {
 
 var (
 	cursorMark = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Peach)).SetString("▸")
-	paneBg = lipgloss.NewStyle().Background(lipgloss.Color(config.Base))
+	paneBg     = lipgloss.NewStyle().Background(lipgloss.Color(config.Base))
 )
 
 func (rl RequestList) View() tea.View {
@@ -382,5 +386,3 @@ func (rl *RequestList) clampScroll() {
 		rl.scroll = maxScroll
 	}
 }
-
-

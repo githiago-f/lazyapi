@@ -24,11 +24,12 @@ internal/
         list.go            #     RequestList — custom compact list with filter, tag grouping, scroll
         group.go           #     GroupByTags — groups items by first OpenAPI tag
         item.go            #     RequestItem (Method, URI, About, Tags, RenderCompact)
-        preview.go         #     PreviewModel — request info, send action, response viewport
+        preview.go         #     PreviewModel — request header only (the TUI renders the response below it)
         tags.go            #     TagsOverlay — cursor-positioned tag editor (add/delete/change)
-      responses/           #   Response preview (stub — not used; editor uses viewport.Model directly)
-  response/                # Shared response formatting
-    formatter.go           #   BuildContent, FormatContent — status/headers/body formatting
+      responses/           #   Response view shared by editor and list preview
+        model.go           #     Model — status line, tabs (Body/Headers/Checks/Console), raw toggle, search, spinner
+        format.go          #     Pretty (json.Indent, no HTML escaping), Highlight (chroma catppuccin-mocha), HumanSize
+        exchange.go        #     SendMsg / ResultMsg, Exchange(ctx, SendMsg) → runner.Exchange with the spec as context
   cli/                     # CLI commands — thin wrappers over runner/inspect/report/mcp
     cli.go                 #   Commands list, run() dispatcher, printUsage
     options.go             #   ExitError + ExitCode (0/1/2/3), runFlags shared by run/send, writeReport
@@ -76,12 +77,11 @@ internal/
   inmath/                  # Math utilities
     counters.go            #   Circle() — wraps int within [min, max] (typo: Circle → Circle)
   model/                   # Core types
-    request.go             #   Request, OpenAPIRef, Send(), RunRequest() tea.Cmd
+    request.go             #   Request, OpenAPIRef, Send()/SendContext(), ResolvedURL, MissingPathParams (no bubbletea)
     method.go              #   Method iota (POST=0..HEAD), MarshalYAML/UnmarshalYAML/Label
     body.go                #   Body {MimeType, Raw}, MimeType constants
     auth.go                #   AuthType iota, AuthScheme {all secrets + schema metadata}
     about.go               #   About {Summary, Description}
-    response.go            #   Response {StatusCode, Body} (unused)
   store/                   # File system + OpenAPI spec operations
     openapi.go             #   ParseSpec, SaveSpec, ListOperations, OperationToRequest,
                            #   AddOperationToSpec, RemoveOperationFromSpec,
@@ -101,7 +101,7 @@ internal/
 
 ## Key Types
 
-- **`model.Request`** — Central data type: URI, Method, Body, Headers, Params, Query, About, ServerURL, Servers, OpenAPIRef, DraftPath, FileName, Env, Vars, Auth. Has `Send()` (synchronous) and `RunRequest()` (wraps Send in `tea.Cmd`).
+- **`model.Request`** — Central data type: URI, Method, Body, Headers, Params, Query, About, ServerURL, Servers, OpenAPIRef, DraftPath, FileName, Env, Vars, Auth, Tests, Timeout. `Send()`/`SendContext()` are synchronous; the TUI sends through `responses.Exchange` (runner checks) — never call Send from Update.
 - **`model.Method`** — iota enum (POST=0, GET, PATCH, PUT, DELETE, OPTIONS, HEAD). `MarshalYAML`/`UnmarshalYAML` for lowercase strings. `Label()` returns uppercase.
 - **`model.OpenAPIRef`** — `{FilePath, Path, Method}` referencing an OpenAPI operation.
 - **`model.About`** — `{Summary, Description}` for operation documentation.
@@ -133,6 +133,14 @@ internal/
 - **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
 
+## TUI Request Flow
+
+- Editor (Send button, `alt+enter`, `F5` without a response) and list (`s`) emit `responses.SendMsg`. `Tui.startSend` owns a cancellable context (`esc` cancels), shows the spinner and runs `responses.Exchange` → `runner.Exchange` (status, contract, script checks). The result comes back as `responses.ResultMsg{Source}`.
+- List sends use `store.LoadRequest(ref)` (temp edits, else spec with examples). Non-safe methods (POST/PUT/PATCH/DELETE) go through a y/N confirmation overlay.
+- `Tui.capturesKeys()` (list filter, editor URI/tab content, response search) disables global shortcuts like `q`, `?`, `ctrl+v`.
+- Environment: `ctrl+v` cycles `env.Discover(".")` via `env.Store.SetPath`; the title bar shows spec and env.
+- `pane/requests` must not import `responses`/`runner` (store imports `requests` → import cycle). The TUI composes preview header + `previewResp`.
+
 ## Editor Field Cycle
 
 The editor (`RequestPane`) has 6 top-level fields cycled by Tab/Shift+Tab: `method → server → uri → [send button] → reqTabs → response → method → ...`
@@ -160,10 +168,9 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - HTTP-method→string mapping repeated in 5 places (Method.Label, Method.UnmarshalYAML, methodFromLabel, RemoveOperationFromSpec, hardcoded strings).
 - Parameter-ref creation blocks duplicated between `AddOperationToSpec` and `ApplyRequestToOperation`.
 - `env.Load()` and `mergeDotenv()` share identical line-parsing logic.
-- TUI auto-saves on every Update (window resize, mouse move, keystroke).
-- Path-param URL substitution iterates a map (non-deterministic order).
-- Dead/stub code: `modal.go` (empty), `view.go` (unused), `responses/` pane, `model/response.go`.
-- Preview panel auto-sends on `s` without confirmation.
+- Dead/stub code: `modal.go` (empty), `view.go` (unused).
+- `store` imports the UI package `app/pane/requests` (`RequestItem`); move the item data type to `model` to break the dependency.
+- bubbles viewport mispositions highlights on ANSI-colored content (`parseMatches` mixes stripped and raw offsets); the response view strips colors while a search is active.
 
 ### Linter (3 deprecations)
 - `scrollable.go` uses deprecated `msg.Type`, `tea.MouseWheelUp`, `tea.MouseWheelDown` — should migrate to `MouseAction`/`MouseButton`.
