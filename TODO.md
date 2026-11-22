@@ -69,7 +69,7 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 - [x] Body sintético a partir do schema no editor quando não há example (`store.SampleBody`; `run` nunca inventa body).
 - [ ] Destacar as referências dentro do próprio campo (cor no texto). Hoje os componentes de input do bubbles não aceitam estilo por trecho.
 - [x] Limpar o histórico pelo TUI (`X` com confirmação).
-- [ ] Rodar um único passo de um fluxo / ver o request de cada passo no detalhe.
+- [x] Ver o request e a resposta de cada passo de um fluxo (runner: `enter` expande; JSON: `steps[].request/response`).
 
 ## Fase 9 — Testes repetíveis e TUI testado ✅
 

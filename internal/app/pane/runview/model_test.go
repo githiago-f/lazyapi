@@ -117,3 +117,52 @@ func TestRunView(t *testing.T) {
 		}
 	}
 }
+
+func TestRunViewFlowSteps(t *testing.T) {
+	m := New()
+	m.SetSize(140, 24)
+	m.id = 1
+	flow := runner.OpResult{Kind: runner.KindFlow, Method: "FLOW", Path: "flows/signup.js", Outcome: runner.Failed,
+		Steps: []runner.Step{
+			{Method: "POST", Path: "/users", Status: 201,
+				Request:  &runner.RequestInfo{Method: "POST", URL: "http://x/users", Body: `{"name":"ana"}`},
+				Response: &runner.ResponseInfo{Status: 201, Body: `{"id":7}`}},
+			{Method: "GET", Path: "/users/{id}", Status: 500, Response: &runner.ResponseInfo{Status: 500, Body: `oops`}},
+		},
+		Checks: []runner.Check{
+			{Kind: runner.CheckStatus, Name: "#1 POST /users · status 201 is declared", Passed: true},
+			{Kind: runner.CheckStatus, Name: "#2 GET /users/{id} · status 500 is declared", Passed: false, Message: "declared: 200"},
+			{Kind: runner.CheckTest, Name: "user is readable", Passed: false},
+		}}
+	m, _ = m.Update(resultMsg{id: 1, res: flow})
+	m.running = false
+
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "▸ flow flows/signup.js") {
+		t.Fatalf("collapsed flow:\n%s", out)
+	}
+	m, _ = m.Update(press("enter")) // expand
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "↳ 1. POST /users") || !strings.Contains(out, "↳ 2. GET /users/{id}") || m.detailFocus {
+		t.Fatalf("enter should expand the flow, not focus details:\n%s", out)
+	}
+
+	m, _ = m.Update(press("j"))
+	m, _ = m.Update(press("j")) // step 2
+	r, _ := m.selected()
+	if r.Outcome != runner.Failed || len(r.Checks) != 1 || r.Checks[0].Name != "status 500 is declared" || r.Response.Body != "oops" {
+		t.Errorf("step result = %+v", r)
+	}
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "500") {
+		t.Errorf("details should show the step response:\n%s", out)
+	}
+
+	m, _ = m.Update(press("k"))
+	if r, _ := m.selected(); r.Outcome != runner.Passed || r.Request.Body != `{"name":"ana"}` {
+		t.Errorf("step 1 = %+v", r)
+	}
+	m, _ = m.Update(press("k"))
+	m, _ = m.Update(press("enter")) // collapse
+	if len(m.visible()) != 1 {
+		t.Errorf("collapse: %d rows", len(m.visible()))
+	}
+}

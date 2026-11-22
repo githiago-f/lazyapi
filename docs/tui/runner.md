@@ -11,7 +11,7 @@ The runner runs operations and flows with the same engine as `lazyapi run` and s
 - `R` in the request list runs the spec's read-only operations (`GET`, `HEAD`, `OPTIONS`).
 - The palette also offers **All operations** (writes included), each **Tag**, **All flows** and each `flows/*.js`. Runs that may change data (every method, or flows) ask `y`/`N` first and show the environment they will use.
 
-The header shows a progress bar and the passed / failed / skipped counts. When the run ends, the cursor jumps to the first failure. The right side is the [response view](./response-preview) of the selected result (status, body, checks, console, timeline), and for a flow it lists every request the flow sent. `F` keeps only failures, `e` opens the operation in the editor, `R` runs again, `esc` stops a run in progress.
+The header shows a progress bar and the passed / failed / skipped counts. When the run ends, the cursor jumps to the first failure. The right side is the [response view](./response-preview) of the selected result (status, body, checks, console, timeline), and for a flow it lists every request the flow sent. `enter` on a flow expands it into its steps (`▸`/`▾`): selecting a step shows that request, its response and its automatic checks (request, status, contract). `F` keeps only failures, `e` opens the operation in the editor, `R` runs again, `esc` stops a run in progress.
 
 The run uses the active environment: its server, env file, vars, credentials and `http:` options.
 
