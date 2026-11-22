@@ -6,6 +6,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 
 | Key | Action |
 |-----|--------|
+| `ctrl+k` | Command palette: open an operation, run the spec / a tag / flows, switch environment, history, copy as cURL |
 | `?` | Toggle help (ignored while typing in a field) |
 | `ctrl+v` | Switch environment: the named environments of `lazyapi.config.yml` (or `.env*` files when there is no config), then "none" |
 | `esc` | Cancel the request in flight (while the spinner is shown) |
@@ -26,6 +27,8 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `d` | Duplicate |
 | `x` | Delete |
 | `ctrl+t` | Edit tags |
+| `R` | Run the spec's read-only operations in the [runner](./runner) |
+| `H` | Open the [history](./runner#history) |
 | `q` | Quit |
 
 ## Request Editor
@@ -40,6 +43,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `ctrl+e` | Save the last response as an example in the spec |
 | `ctrl+x` | Open the Body or Tests tab in `$VISUAL` / `$EDITOR` |
 | `alt+c` | Copy the request as cURL (with the active environment's server and credentials) |
+| `→` | Accept the <code v-pre>{{env.X}}</code> / <code v-pre>{{var.X}}</code> completion shown after typing <code v-pre>{{</code> |
 | `esc` | Leave tab content, then back to the list |
 
 ### Tabs
@@ -60,6 +64,30 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 |-----|--------|
 | `[` / `]` or `1`–`6` | Body / Headers / Cookies / Timeline / Checks / Console |
 | `r` | Toggle raw / pretty body |
+| `f` | jq filter for the body (empty `enter` removes it) |
 | `/` | Search the response; `n` / `N` jump between matches |
 | `ctrl+y` | Copy the response body |
 | `↑` `↓` `pgup` `pgdown`, mouse wheel | Scroll |
+
+## Runner
+
+| Key | Action |
+|-----|--------|
+| `↑`/`k`, `↓`/`j`, `g` / `G` | Move through the results |
+| `enter` / `tab` | Focus the result details (response tabs, search, jq); `tab`/`esc` back to the list |
+| `F` | Show only failures |
+| `e` | Open the operation in the editor |
+| `R` | Run again |
+| `esc` | Stop the run in progress, then back |
+
+## History
+
+| Key | Action |
+|-----|--------|
+| `↑`/`k`, `↓`/`j` | Move |
+| `enter` | Replay: open the request in the editor with the values it was sent with |
+| `d` | Diff the response with the previous response of the same operation |
+| `x` | Diff the response with the example saved in the spec |
+| `tab` | Focus the response details |
+| `esc` | Close the diff, then back |
+

@@ -205,6 +205,12 @@ func TestTools_AgentLoop(t *testing.T) {
 	if res["response"].(map[string]any)["body"] != `{"id":"wrong-type"}` {
 		t.Errorf("body missing: %s", text)
 	}
+	if res, text, _ := c.tool("send_request", map[string]any{"spec": "api/spec.yml", "operation": "getUser", "jq": ".id"}); res["response"].(map[string]any)["body"] != `"wrong-type"` {
+		t.Errorf("jq body: %s", text)
+	}
+	if _, text, isErr := c.tool("send_request", map[string]any{"spec": "api/spec.yml", "operation": "getUser", "jq": ".["}); !isErr || !strings.Contains(text, "jq:") {
+		t.Errorf("invalid jq must be an error: %s", text)
+	}
 
 	// Write a test, read it back, run everything.
 	w, text, isErr := c.tool("write_test", map[string]any{"spec": "api/spec.yml", "operation": "getUser",

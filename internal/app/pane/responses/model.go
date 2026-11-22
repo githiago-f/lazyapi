@@ -14,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/jq"
 	"github.com/githiago-f/lazyapi/internal/runner"
 )
 
@@ -50,6 +51,7 @@ var (
 	PrevTabKey = key.NewBinding(key.WithKeys("["), key.WithHelp("[", "previous tab"))
 	RawKey     = key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "raw/pretty"))
 	SearchKey  = key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search"))
+	FilterKey  = key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "jq filter"))
 	NextHitKey = key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev match"))
 	PrevHitKey = key.NewBinding(key.WithKeys("N"))
 )
@@ -72,6 +74,12 @@ type Model struct {
 	query     string
 	hits      int
 
+	filtering bool // the jq input is open
+	filter    textinput.Model
+	jq        string // applied jq filter ("" = none)
+	jqOut     string
+	jqErr     string
+
 	placeholder string
 }
 
@@ -86,10 +94,15 @@ func New(placeholder string) Model {
 	ti.Prompt = "/"
 	ti.Placeholder = "search the response"
 
+	fi := textinput.New()
+	fi.Prompt = "jq "
+	fi.Placeholder = ".items[] | {id, name}"
+
 	return Model{
 		vp:          vp,
 		spin:        spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		search:      ti,
+		filter:      fi,
 		placeholder: placeholder,
 	}
 }
@@ -100,12 +113,16 @@ func (m *Model) SetSize(w, h int) {
 	m.vp.SetWidth(m.width)
 	m.vp.SetHeight(max(0, m.height-m.chromeHeight()))
 	m.search.SetWidth(max(1, m.width-2))
+	m.filter.SetWidth(max(1, m.width-4))
 	m.refresh()
 }
 
 func (m Model) chromeHeight() int {
 	h := 2 // status line + tab bar
 	if m.searching || m.query != "" {
+		h++
+	}
+	if m.filtering || m.jq != "" {
 		h++
 	}
 	return h
@@ -117,13 +134,18 @@ func (m *Model) Blur() {
 	m.focused = false
 	m.searching = false
 	m.search.Blur()
+	m.filtering = false
+	m.filter.Blur()
 }
 
 // Focused reports whether the view receives keys.
 func (m Model) Focused() bool { return m.focused }
 
-// Searching reports whether the search input is open (it captures keys).
-func (m Model) Searching() bool { return m.searching }
+// Searching reports whether the search or jq input is open (it captures keys).
+func (m Model) Searching() bool { return m.searching || m.filtering }
+
+// Filter returns the applied jq filter ("" when none).
+func (m Model) Filter() string { return m.jq }
 
 // Sending reports whether a request is in flight.
 func (m Model) Sending() bool { return m.sending }
@@ -139,6 +161,7 @@ func (m *Model) StartSending() tea.Cmd {
 func (m *Model) SetResult(res runner.OpResult) {
 	m.sending = false
 	m.result = &res
+	m.runFilter()
 	if res.Outcome == runner.Failed && m.tab == BodyTab {
 		m.tab = ChecksTab
 	}
@@ -151,6 +174,7 @@ func (m *Model) Clear() {
 	m.result = nil
 	m.sending = false
 	m.query = ""
+	m.jq, m.jqOut, m.jqErr = "", "", ""
 	m.tab = BodyTab
 	m.refresh()
 }
@@ -168,13 +192,19 @@ func (m Model) Body() string {
 
 // HelpBindings are the keys available while the view is focused.
 func (m Model) HelpBindings() []key.Binding {
+	if m.filtering {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "apply (empty clears)")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+		}
+	}
 	if m.searching {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "find")),
 			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}
 	}
-	b := []key.Binding{NextTabKey, RawKey, SearchKey}
+	b := []key.Binding{NextTabKey, RawKey, SearchKey, FilterKey}
 	if m.query != "" {
 		b = append(b, NextHitKey)
 	}
@@ -195,6 +225,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if !m.focused {
 			return m, nil
 		}
+		if m.filtering {
+			return m.updateFilter(msg)
+		}
 		if m.searching {
 			return m.updateSearch(msg)
 		}
@@ -212,6 +245,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.raw = !m.raw
 			m.refresh()
 			return m, nil
+		case key.Matches(msg, FilterKey) && m.result != nil && m.result.Response != nil:
+			m.filtering = true
+			m.filter.SetValue(m.jq)
+			m.filter.CursorEnd()
+			m.setTab(BodyTab)
+			m.SetSize(m.width, m.height)
+			return m, m.filter.Focus()
 		case key.Matches(msg, SearchKey):
 			m.searching = true
 			m.search.SetValue(m.query)
@@ -246,6 +286,45 @@ func (m Model) updateSearch(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.search, cmd = m.search.Update(msg)
 	return m, cmd
+}
+
+func (m Model) updateFilter(msg tea.KeyPressMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.filtering = false
+		m.filter.Blur()
+		m.SetSize(m.width, m.height)
+		return m, nil
+	case "enter":
+		m.filtering = false
+		m.filter.Blur()
+		m.SetFilter(m.filter.Value())
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.filter, cmd = m.filter.Update(msg)
+	return m, cmd
+}
+
+// SetFilter applies a jq filter to the body ("" removes it). It stays applied
+// across responses, so re-sending shows the same slice of the new body.
+func (m *Model) SetFilter(filter string) {
+	m.jq = strings.TrimSpace(filter)
+	m.runFilter()
+	m.vp.GotoTop()
+	m.SetSize(m.width, m.height)
+}
+
+func (m *Model) runFilter() {
+	m.jqOut, m.jqErr = "", ""
+	if m.jq == "" || m.result == nil || m.result.Response == nil {
+		return
+	}
+	out, err := jq.Apply(m.jq, m.result.Response.Body)
+	if err != nil {
+		m.jqErr = err.Error()
+	}
+	m.jqOut = out
 }
 
 func (m *Model) setTab(t Tab) {
@@ -288,6 +367,9 @@ func (m Model) content() string {
 	}
 	switch m.tab {
 	case BodyTab:
+		if r.Kind == runner.KindFlow {
+			return flowSteps(r)
+		}
 		if r.Response == nil {
 			return errorText(r)
 		}
@@ -295,6 +377,15 @@ func (m Model) content() string {
 			return dimStyle.Render("(empty body)")
 		}
 		ct := r.Response.Headers["Content-Type"]
+		if m.jq != "" {
+			if m.jqErr != "" {
+				return failStyle.Render(m.jqErr)
+			}
+			if m.jqOut == "" {
+				return dimStyle.Render("(the filter returned nothing)")
+			}
+			return Highlight("application/json", m.jqOut)
+		}
 		if m.raw {
 			return r.Response.Body
 		}
@@ -395,6 +486,9 @@ func (m Model) content() string {
 }
 
 func errorText(r *runner.OpResult) string {
+	if r.Outcome == runner.Skipped || r.Outcome == runner.Planned {
+		return dimStyle.Render("Not sent: " + r.Reason)
+	}
 	return errorBoxStyle.Render("✗ "+r.Reason) + "\n\n" +
 		dimStyle.Render("Nothing came back. Check the server URL, path parameters and network.")
 }
@@ -433,6 +527,12 @@ func (m Model) statusLine() string {
 	if r == nil {
 		return dimStyle.Render(m.placeholder)
 	}
+	if r.Kind == runner.KindFlow {
+		return m.flowStatusLine()
+	}
+	if r.Response == nil && (r.Outcome == runner.Skipped || r.Outcome == runner.Planned) {
+		return badgeBase.Background(lipgloss.Color(config.Overlay1)).Render(strings.ToUpper(string(r.Outcome))) + " " + dimStyle.Render(r.Reason)
+	}
 	if r.Response == nil {
 		return badgeBase.Background(lipgloss.Color(config.Red)).Render("ERROR") + " " + failStyle.Render(r.Reason)
 	}
@@ -458,6 +558,60 @@ func (m Model) statusLine() string {
 		parts = append(parts, warnStyle.Render(fmt.Sprintf("%d attempts", r.Attempts)))
 	}
 	return strings.Join(parts, dimStyle.Render(" · "))
+}
+
+func (m Model) flowStatusLine() string {
+	r := m.result
+	color := config.Green
+	switch r.Outcome {
+	case runner.Failed, runner.Errored:
+		color = config.Red
+	case runner.Skipped:
+		color = config.Overlay1
+	}
+	parts := []string{
+		badgeBase.Background(lipgloss.Color(color)).Render("FLOW " + strings.ToUpper(string(r.Outcome))),
+		labelStyle.Render(fmt.Sprintf("%d %s", len(r.Steps), plural(len(r.Steps), "step", "steps"))),
+	}
+	failed := 0
+	for _, c := range r.Checks {
+		if !c.Passed {
+			failed++
+		}
+	}
+	if n := len(r.Checks); n > 0 {
+		if failed == 0 {
+			parts = append(parts, passStyle.Render(fmt.Sprintf("✓ %d %s", n, plural(n, "check", "checks"))))
+		} else {
+			parts = append(parts, failStyle.Render(fmt.Sprintf("✗ %d/%d checks failed", failed, n)))
+		}
+	}
+	if r.Reason != "" {
+		parts = append(parts, failStyle.Render(r.Reason))
+	}
+	return strings.Join(parts, dimStyle.Render(" · "))
+}
+
+// flowSteps lists the requests a flow sent.
+func flowSteps(r *runner.OpResult) string {
+	if len(r.Steps) == 0 {
+		if r.Reason != "" {
+			return failStyle.Render("✗ " + r.Reason)
+		}
+		return dimStyle.Render("The flow sent no requests.")
+	}
+	var b strings.Builder
+	for i, st := range r.Steps {
+		status := dimStyle.Render("—")
+		if st.Status > 0 {
+			status = StatusBadge(st.Status, "")
+		}
+		fmt.Fprintf(&b, "%2d. %s %s %s %s\n", i+1, status, keyStyle.Render(st.Method), st.Path, dimStyle.Render(fmt.Sprintf("%d ms", st.DurationMs)))
+		if st.Error != "" {
+			b.WriteString("    " + failStyle.Render(st.Error) + "\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func (m Model) tabBar() string {
@@ -504,6 +658,15 @@ func (m Model) View() string {
 		return lipgloss.NewStyle().Width(m.width).Height(m.height).Render(strings.Join(lines, "\n"))
 	}
 	lines = append(lines, m.tabBar())
+	if m.filtering {
+		lines = append(lines, m.filter.View())
+	} else if m.jq != "" {
+		state := "f edit · f then empty enter clears"
+		if m.jqErr != "" {
+			state = "error · " + state
+		}
+		lines = append(lines, dimStyle.Render(ansi.Truncate("jq "+m.jq+" — "+state, m.width, "…")))
+	}
 	if m.searching {
 		lines = append(lines, m.search.View())
 	} else if m.query != "" {

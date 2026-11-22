@@ -576,3 +576,27 @@ environments:
 		t.Errorf("unknown env: %v", err)
 	}
 }
+
+func TestSend_JQ(t *testing.T) {
+	srv := newHitServer(t, ok200)
+	spec := writeSpec(t, smokeSpec)
+
+	out, err := captureStdout(t, func() error {
+		return SendRequest([]string{spec, "--op", "listItems", "--server", srv.URL, "--jq", ".ok", "--output", "json"})
+	})
+	if err != nil {
+		t.Fatalf("send: %v\n%s", err, out)
+	}
+	var res runner.OpResult
+	if jerr := json.Unmarshal([]byte(out), &res); jerr != nil {
+		t.Fatalf("not JSON: %v\n%s", jerr, out)
+	}
+	if res.Response.Body != "true" {
+		t.Errorf("jq body = %q", res.Response.Body)
+	}
+
+	err = SendRequest([]string{spec, "--op", "listItems", "--server", srv.URL, "--jq", ".["})
+	if ExitCode(err) != 2 {
+		t.Errorf("invalid --jq should be a usage error, got %v", err)
+	}
+}

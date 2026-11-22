@@ -174,3 +174,102 @@ func BodyExample(op *openapi3.Operation) (mediaType, raw string) {
 	}
 	return mediaType, ""
 }
+
+// SampleBody is BodyExample with a fallback: when the operation declares a
+// body schema but no example, it returns a value built by SchemaSample. It
+// is meant for editors (the user sees the body before sending), never for
+// `run`, which must not invent data.
+func SampleBody(op *openapi3.Operation) (mediaType, raw string) {
+	mediaType, raw = BodyExample(op)
+	if raw != "" || mediaType == "" {
+		return mediaType, raw
+	}
+	m := op.RequestBody.Value.Content[mediaType]
+	if m == nil || m.Schema == nil {
+		return mediaType, ""
+	}
+	v := SchemaSample(m.Schema)
+	if v == nil {
+		return mediaType, ""
+	}
+	if s, ok := v.(string); ok && !strings.Contains(mediaType, "json") {
+		return mediaType, s
+	}
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return mediaType, ""
+	}
+	return mediaType, string(data)
+}
+
+// FillSampleBody sets a synthetic body (SampleBody) on req when it has none.
+func FillSampleBody(spec *openapi3.T, req *model.Request, ref model.OpenAPIRef) {
+	if req.Body.Raw != "" {
+		return
+	}
+	if mt, raw := SampleBody(FindOperation(spec, ref)); raw != "" {
+		req.Body.Type = model.MimeType(mt)
+		req.Body.Raw = raw
+	}
+}
+
+// ResponseExample returns the example declared for a response status (the
+// media type example, else the first named example, else the schema's), as
+// text: JSON values are indented. ok is false when there is none.
+func ResponseExample(op *openapi3.Operation, status int) (mediaType, body string, ok bool) {
+	if op == nil || op.Responses == nil {
+		return "", "", false
+	}
+	ref := op.Responses.Value(strconv.Itoa(status))
+	if ref == nil {
+		ref = op.Responses.Value(fmt.Sprintf("%dXX", status/100))
+	}
+	if ref == nil {
+		ref = op.Responses.Default()
+	}
+	if ref == nil || ref.Value == nil {
+		return "", "", false
+	}
+	types := make([]string, 0, len(ref.Value.Content))
+	for mt := range ref.Value.Content {
+		types = append(types, mt)
+	}
+	slices.Sort(types)
+	for _, mt := range types {
+		m := ref.Value.Content[mt]
+		if m == nil {
+			continue
+		}
+		var ex any
+		switch {
+		case m.Example != nil:
+			ex = m.Example
+		case len(m.Examples) > 0:
+			names := make([]string, 0, len(m.Examples))
+			for n := range m.Examples {
+				names = append(names, n)
+			}
+			slices.Sort(names)
+			for _, n := range names {
+				if e := m.Examples[n]; e != nil && e.Value != nil && e.Value.Value != nil {
+					ex = e.Value.Value
+					break
+				}
+			}
+		case m.Schema != nil && m.Schema.Value != nil && m.Schema.Value.Example != nil:
+			ex = m.Schema.Value.Example
+		}
+		if ex == nil {
+			continue
+		}
+		if s, isStr := ex.(string); isStr {
+			return mt, s, true
+		}
+		data, err := json.MarshalIndent(ex, "", "  ")
+		if err != nil {
+			continue
+		}
+		return mt, string(data), true
+	}
+	return "", "", false
+}

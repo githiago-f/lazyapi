@@ -247,6 +247,16 @@ func Run(ctx context.Context, spec *openapi3.T, specPath string, opts Options) (
 	return report, opts.Modules.SaveLock()
 }
 
+// PlannedCount is the number of results Run will produce with these options
+// (selected operations, including the ones skipped by method, plus flows).
+func PlannedCount(spec *openapi3.T, specPath string, opts Options) int {
+	n := len(opts.Flows)
+	if !opts.SkipOperations {
+		n += len(plan(spec, specPath, opts.Filter))
+	}
+	return n
+}
+
 // RunOne executes a single operation. Unlike Run, overrides apply even if
 // the spec does not declare them, and a missing path parameter is an error.
 func RunOne(ctx context.Context, spec *openapi3.T, specPath string, ref model.OpenAPIRef, opts Options) (OpResult, error) {
@@ -636,6 +646,10 @@ func selectServer(req *model.Request, value string) error {
 }
 
 var sensitiveHeader = regexp.MustCompile(`(?i)(authorization|cookie|token|secret|password|api[-_]?key)`)
+
+// IsSensitive reports whether a header or parameter name usually carries a
+// credential (its value is redacted in results and history).
+func IsSensitive(name string) bool { return sensitiveHeader.MatchString(name) }
 
 func requestInfo(req model.Request) *RequestInfo {
 	ctx := env.Context{Env: req.Env, Vars: req.Vars}

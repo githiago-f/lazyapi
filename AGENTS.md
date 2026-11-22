@@ -11,6 +11,9 @@ internal/
   app/                     # bubbletea model + views
     tui.go                 #   Main Tui struct, Init/Update/View, state machine
     pane/
+      palette/             #   Command palette (ctrl+k): fuzzy list of palette.Command{Group, Title, Hint, Msg}; ChosenMsg/ClosedMsg
+      runview/             #   Runner view: runner.Run in a goroutine, results streamed through a channel (run id ignores stale msgs), list + responses.Model details
+      historyview/         #   History list, replay (ReplayMsg), diff with previous response / spec example
       editor/              #   Request editor (method, URL, headers, body, params, tests, auth)
         editor.go          #     RequestPane — top-level Update/View, cursor field cycle
         documentation.go   #     Summary + Description fields
@@ -27,7 +30,7 @@ internal/
         preview.go         #     PreviewModel — request header only (the TUI renders the response below it)
         tags.go            #     TagsOverlay — cursor-positioned tag editor (add/delete/change)
       responses/           #   Response view shared by editor and list preview
-        model.go           #     Model — status line, tabs (Body/Headers/Checks/Console), raw toggle, search, spinner
+        model.go           #     Model — status line, tabs (Body/Headers/Cookies/Timeline/Checks/Console), raw toggle, search, jq filter (f), flow steps, spinner
         format.go          #     Pretty (json.Indent, no HTML escaping), Highlight (chroma catppuccin-mocha), HumanSize
         exchange.go        #     SendMsg / ResultMsg, Exchange(ctx, SendMsg) → runner.Exchange with the spec as context
   cli/                     # CLI commands — thin wrappers over runner/inspect/report/mcp
@@ -48,6 +51,9 @@ internal/
   inspect/                 # ListOperations, Describe (with referenced schemas), Validate (OpenAPI + scripts compile)
   mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled) + Tools confined to a root dir
   project/                 # lazyapi.config.yml: named environments (server, env file, vars, auth secrets), Find/Select/Resolve
+  history/                 # TUI request history per spec (user cache dir, jsonl, 0600): no env/auth secrets, sensitive headers/query redacted, body templates kept; Replay
+  diff/                    # Line diff (LCS with prefix/suffix trimming), hunks with folded context
+  jq/                      # gojq wrapper: Apply(filter, body) with timeout, Check(filter)
   importer/                # curl / Postman / HAR → spec operations (Apply: path templating, inferred schemas, security, tests); pm compat scripts
   mock/                    # Mock server: routes spec paths, answers with examples or SchemaSample, validates requests (422), Prefer: code=/example=
   script/                  # JS/TS test engine: esbuild bundling + goja sandbox
@@ -148,6 +154,15 @@ internal/
 - **Environments** — `project.Resolve(spec, --env-name, --server, --env)`: explicit flags win; secrets go to `runner.Options.Auth` → `model.ApplySecrets` (operations, `lazyapi.send`, flows, TUI). TUI `ctrl+v` cycles named envs when a config exists.
 - **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
+
+## TUI Pages and Overlays
+
+- Pages (`config.PageIndex`): `RequestList`, `RequestEditor`, `Runner`, `History`. The runner view receives its non-key messages on every page (a run continues in the background).
+- `ctrl+k` palette: `Tui.paletteCommands()` (internal/app/commands.go) builds the commands; their `Msg` goes back through `Tui.Update`. Add new actions there.
+- Runs with writes (every method) and flows go through `Tui.confirmRun` (y/N), like destructive sends through `Tui.confirm`.
+- History is recorded on every `responses.ResultMsg` (`ResultMsg.Request` is the unresolved request). Never store `Request.Env`, auth secrets or resolved bodies.
+- `components.TemplateNames` feeds `{{` completions in every `components.Field` (→ accepts); `Tui.missingRefs()` lists references without a value for the editor help bar.
+- `store.SampleBody`/`FillSampleBody` (schema → body) are for the editor only; `run` must never invent bodies.
 
 ## TUI Request Flow
 

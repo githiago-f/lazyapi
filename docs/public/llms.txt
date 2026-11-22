@@ -16,6 +16,7 @@ Import: `lazyapi import curl|postman|har <source> --into <spec>` (Postman script
 
 No server yet? `lazyapi mock <spec>` serves the examples on http://127.0.0.1:4010 and validates requests (422). `Prefer: code=404` selects a declared response.
 
+Large responses: `send --jq '<filter>'` (CLI) or the `jq` argument of send_request (MCP) returns only that slice of the body.
 MCP: `lazyapi mcp --root <dir>` exposes list_specs, list_operations, describe_operation, send_request, run_tests, run_flow, write_flow, read_test, write_test, validate_spec, script_api, import_curl, export_curl.
 
 ## Docs

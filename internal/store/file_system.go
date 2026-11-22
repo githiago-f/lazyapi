@@ -244,6 +244,11 @@ func OpenRequestFile(ref model.OpenAPIRef) tea.Cmd {
 		if err != nil {
 			return ErrorMsg{Message: fmt.Sprintf("Error when trying to open file, %v", err)}
 		}
+		if request.Body.Raw == "" {
+			if spec, err := ParseSpec(ref.FilePath); err == nil {
+				FillSampleBody(spec, &request, ref) // visible in the editor before sending
+			}
+		}
 		return LoadedFile{Data: request}
 	}
 }
@@ -403,6 +408,7 @@ func LoadForDuplicate(item requests.RequestItem) tea.Cmd {
 				return ErrorMsg{Message: fmt.Sprintf("Error when parsing spec for duplicate, %v", err)}
 			}
 			req := OperationToRequest(spec, *item.OpenAPIRef)
+			FillSampleBody(spec, &req, *item.OpenAPIRef)
 			return DuplicateData{Data: req}
 		}
 

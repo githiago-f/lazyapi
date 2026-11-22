@@ -157,3 +157,38 @@ func TestModelCookiesAndTimeline(t *testing.T) {
 		}
 	}
 }
+
+func TestModelJQFilter(t *testing.T) {
+	m := New("")
+	m.SetSize(100, 20)
+	m.SetResult(sample(runner.Passed))
+	m.Focus()
+
+	m, _ = m.Update(press("f"))
+	if !m.Searching() {
+		t.Fatal("f should open the jq input (and capture keys)")
+	}
+	for _, r := range ".name" {
+		m, _ = m.Update(press(string(r)))
+	}
+	m, _ = m.Update(press("enter"))
+	out := view(m)
+	if m.Filter() != ".name" || !strings.Contains(out, `"ana"`) || strings.Contains(out, `"id"`) {
+		t.Errorf("filtered body:\n%s", out)
+	}
+
+	// The filter is kept for the next response of the same request.
+	m.SetResult(sample(runner.Passed))
+	if !strings.Contains(view(m), "jq .name") {
+		t.Error("filter should stay applied")
+	}
+
+	m.SetFilter(".[")
+	if out := view(m); !strings.Contains(out, "jq:") || !strings.Contains(out, "error") {
+		t.Errorf("invalid filter must show the error:\n%s", out)
+	}
+	m.SetFilter("")
+	if strings.Contains(view(m), "jq ") {
+		t.Error("empty filter clears it")
+	}
+}

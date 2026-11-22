@@ -25,6 +25,12 @@ Open a request from the list to enter the editor. It shows the request details a
 
 Opening an operation pre-fills path parameters, required query/header parameters and the request body from the spec's examples. Bodies can be edited in `$EDITOR` with `ctrl+x`.
 
+When the spec declares a request body schema but no example, the editor builds one from the schema (examples, defaults, enums, formats and minimums of each property) so you start from a valid shape. `lazyapi run` never invents bodies: this only fills the editor.
+
+## Templates
+
+<code v-pre>{{env.NAME}}</code> and <code v-pre>{{var.NAME}}</code> work in every field. After typing <code v-pre>{{</code>, the field shows a completion from the env file and the active environment's vars; `→` accepts it. References without a value are listed in the bottom bar (<code v-pre>⚠ no value: {{env.TOKEN}}</code>), because they would be sent as empty strings. Vars set by scripts at run time (`vars.set`, `before()`) are not known before sending.
+
 ## Tabs
 
 ### Documentation

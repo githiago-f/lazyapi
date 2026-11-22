@@ -36,13 +36,15 @@ type SendMsg struct {
 type ResultMsg struct {
 	Source Source
 	Result runner.OpResult
+	// Request is what was sent (templates unresolved), for the history.
+	Request model.Request
 }
 
 // Exchange returns a command that sends req through the runner, so the TUI
 // shows the same status, contract and script checks as `lazyapi run`.
 func Exchange(ctx context.Context, msg SendMsg) tea.Cmd {
 	return func() tea.Msg {
-		return ResultMsg{Source: msg.Source, Result: exchange(ctx, msg)}
+		return ResultMsg{Source: msg.Source, Result: exchange(ctx, msg), Request: msg.Request}
 	}
 }
 

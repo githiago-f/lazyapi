@@ -13,9 +13,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/githiago-f/lazyapi/internal/app/pane/editor"
+	"github.com/githiago-f/lazyapi/internal/app/pane/historyview"
+	"github.com/githiago-f/lazyapi/internal/app/pane/palette"
 	"github.com/githiago-f/lazyapi/internal/app/pane/requests"
 	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
+	"github.com/githiago-f/lazyapi/internal/app/pane/runview"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
@@ -55,6 +59,18 @@ type Tui struct {
 	cancelSend context.CancelFunc
 	// confirm holds a destructive request waiting for y/n.
 	confirm *responses.SendMsg
+	// confirmRun is a run with writes waiting for y/N.
+	confirmRun *runview.Run
+
+	palette     *palette.Model
+	runner      runview.Model
+	runnerFrom  config.PageIndex // page to return to when the runner closes
+	history     historyview.Model
+	historyFrom config.PageIndex
+	// templates feeds field completions; missing are the editor's
+	// references without a value.
+	templates *templateSource
+	missing   []string
 
 	// project is lazyapi.config.yml (nil when absent); activeEnv is the
 	// selected named environment (nil: none).
@@ -80,6 +96,9 @@ var (
 	titleInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Subtext0))
 	titleEnvStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Crust)).Background(lipgloss.Color(config.Teal)).Padding(0, 1)
 	titleNoEnv     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1)).Background(lipgloss.Color(config.Surface0)).Padding(0, 1)
+	missingStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Yellow))
+	confirmTitle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(config.Red))
+	confirmKey     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender))
 	confirmStyle   = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(config.Red)).
@@ -107,7 +126,12 @@ func NewTui(defaultFile string, envFile string) Tui {
 		prompt:      components.Prompt(""),
 		envStore:    env.NewStore(envFile),
 		notes:       components.NewNotifications(),
+		runner:      runview.New(),
+		history:     historyview.New(),
 	}
+
+	tui.templates = &templateSource{store: tui.envStore}
+	components.TemplateNames = tui.templates.names
 
 	tui.editor = editor.New(tui.currentRequest)
 	tui.editor.SetEnvStore(tui.envStore)
@@ -180,9 +204,13 @@ func (t Tui) keyMap() viewKeyMap {
 	case config.RequestList:
 		vkm.short = []key.Binding{
 			config.DefaultKeyMap.SendRequest, config.DefaultKeyMap.Select, config.DefaultKeyMap.Filter,
-			config.DefaultKeyMap.CreateNew, config.DefaultKeyMap.SwitchEnv, config.DefaultKeyMap.HelpToggle,
-			config.DefaultKeyMap.Quit,
+			config.DefaultKeyMap.CreateNew, config.DefaultKeyMap.RunAll, config.DefaultKeyMap.Palette,
+			config.DefaultKeyMap.SwitchEnv, config.DefaultKeyMap.HelpToggle, config.DefaultKeyMap.Quit,
 		}
+	case config.Runner:
+		vkm.short = t.runner.HelpBindings()
+	case config.History:
+		vkm.short = t.history.HelpBindings()
 	case config.RequestEditor:
 		vkm.short = t.editor.HelpBindings()
 		if !t.editor.CapturesKeys() {
@@ -220,9 +248,19 @@ func (t Tui) View() tea.View {
 
 	case config.RequestEditor:
 		currentView = t.editor.View().Content
+
+	case config.Runner:
+		currentView = t.runner.View()
+
+	case config.History:
+		currentView = t.history.View()
 	}
 
-	helpBar := helpBarStyle.Width(t.width).Render(t.help.ShortHelpView(vkm.ShortHelp()))
+	helpText := t.help.ShortHelpView(vkm.ShortHelp())
+	if config.DefaultConfig.Active == config.RequestEditor && len(t.missing) > 0 {
+		helpText = missingStyle.Render("⚠ no value: {{"+strings.Join(t.missing, "}} {{")+"}}") + "  " + helpText
+	}
+	helpBar := helpBarStyle.Width(t.width).MaxHeight(1).Render(ansi.Truncate(helpText, max(0, t.width-2), "…"))
 	_, contentHeight := t.contentSize()
 	currentView = lipgloss.NewStyle().Height(contentHeight).MaxHeight(contentHeight).Render(currentView)
 
@@ -244,6 +282,15 @@ func (t Tui) View() tea.View {
 			lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Render("y")+" send   "+
 				lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Render("any other key")+" cancel"))
 		base = overlay.Composite(box, base, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if t.confirmRun != nil {
+		box := confirmStyle.Render(t.confirmRunText())
+		base = overlay.Composite(box, base, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if t.palette != nil {
+		base = overlay.Composite(t.palette.View(), base, overlay.Center, overlay.Top, 0, 3)
 	}
 
 	if t.showHelp {
@@ -401,8 +448,10 @@ func serverFor(v string, servers []string) string {
 func (t *Tui) useEnv(e *project.Environment) {
 	t.activeEnv = e
 	path := ""
+	t.templates.vars = nil
 	if e != nil {
 		path = e.Env
+		t.templates.vars = e.Vars
 	}
 	t.envStore.SetPath(path)
 	t.titleBar.Title = t.title()
@@ -450,6 +499,10 @@ func (t Tui) capturesKeys() bool {
 		return t.requestList.Filtering()
 	case config.RequestEditor:
 		return t.editor.CapturesKeys()
+	case config.Runner:
+		return t.runner.CapturesKeys()
+	case config.History:
+		return t.history.CapturesKeys()
 	}
 	return false
 }
@@ -469,6 +522,38 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return t.startSend(pending)
 			}
 			return t, notify("Request not sent", components.Info)
+		}
+	}
+
+	if t.confirmRun != nil {
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+			pending := *t.confirmRun
+			t.confirmRun = nil
+			if keyMsg.String() == "y" || keyMsg.String() == "Y" {
+				return t.beginRun(pending)
+			}
+			return t, notify("Run cancelled", components.Info)
+		}
+	}
+
+	// The palette owns the keyboard while open.
+	if t.palette != nil {
+		switch msg := msg.(type) {
+		case palette.ClosedMsg:
+			t.palette = nil
+			return t, nil
+		case palette.ChosenMsg:
+			t.palette = nil
+			return t.Update(msg.Msg)
+		case tea.KeyPressMsg:
+			if key.Matches(msg, config.DefaultKeyMap.Kill) {
+				return t, tea.Quit
+			}
+			p, pcmd := t.palette.Update(msg)
+			t.palette = &p
+			return t, pcmd
+		case tea.WindowSizeMsg:
+			t.palette.SetSize(msg.Width, msg.Height)
 		}
 	}
 
@@ -498,6 +583,54 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case runTestsMsg:
+		return t.startRun(msg)
+
+	case showRunnerMsg:
+		return t.beginShowRunner()
+
+	case runview.CloseMsg:
+		config.DefaultConfig.Active = t.runnerFrom
+		return t, nil
+
+	case showHistoryMsg:
+		return t.showHistory()
+
+	case historyview.CloseMsg:
+		config.DefaultConfig.Active = t.historyFrom
+		return t, nil
+
+	case historyview.ReplayMsg:
+		return t.replay(msg.Entry)
+
+	case runview.OpenOperationMsg:
+		ref := msg.Ref
+		return t, store.OpenRequestFile(ref)
+
+	case useEnvMsg:
+		if msg.name == "" {
+			t.useEnv(nil)
+			return t, notify("Environment: none", components.Info)
+		}
+		e, err := t.project.Select(msg.name)
+		if err != nil {
+			return t, notify(err.Error(), components.Error)
+		}
+		t.useEnv(e)
+		return t, notify("Environment: "+msg.name, components.Info)
+
+	case useEnvFileMsg:
+		t.envStore.SetPath(msg.path)
+		t.titleBar.Title = t.title()
+		return t, notify("Environment: "+env.Label(msg.path), components.Info)
+
+	case copyCurlMsg:
+		return t, t.copyCurl()
+
+	case toggleHelpMsg:
+		t.showHelp = !t.showHelp
+		return t, nil
+
 	case store.RequestFilesMsg:
 		t.openAPIFiles = msg.Paths
 		spec := t.defaultFile
@@ -590,6 +723,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case responses.ResultMsg:
 		t.cancelSend = nil
+		cmd = t.recordHistory(msg)
 		switch msg.Source {
 		case responses.FromEditor:
 			rp := t.editor.SetResult(msg)
@@ -600,7 +734,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case responses.FromPreview:
 			t.previewResp.SetResult(msg.Result)
 		}
-		return t, resultNotification(msg.Result)
+		return t, tea.Batch(cmd, resultNotification(msg.Result))
 
 	case requests.EditTagsMsg:
 		item, ok := t.requestList.SelectedItem()
@@ -684,6 +818,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rp := t.editor.SetValue(msg.Data)
 		t.editor = &rp
 		config.DefaultConfig.Active = config.RequestEditor
+		t.missing = t.missingRefs()
 		return t, nil
 
 	case editor.CloseRequestPaneMsg:
@@ -712,6 +847,9 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.requestList.SetSize(listWidth, contentHeight)
 		t.preview.SetSize(previewWidth, contentHeight)
 		t.previewResp.SetSize(previewWidth-2, contentHeight-t.preview.HeaderHeight())
+
+		t.runner.SetSize(msg.Width, contentHeight)
+		t.history.SetSize(msg.Width, contentHeight)
 
 		subModel, _ = t.editor.Update(tea.WindowSizeMsg{Width: msg.Width, Height: contentHeight})
 		ptr := subModel.(editor.RequestPane)
@@ -744,6 +882,18 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.Kill):
 			return t, tea.Quit
+		case key.Matches(msg, config.DefaultKeyMap.Palette) && t.tagsOverlay == nil:
+			w, h := t.width, t.height
+			p := palette.New(t.paletteCommands(), w, h)
+			t.palette = &p
+			return t, p.Init()
+		case !capture && config.DefaultConfig.Active == config.RequestList && key.Matches(msg, config.DefaultKeyMap.RunAll):
+			if specs := t.specs(); len(specs) > 0 {
+				return t.startRun(runTestsMsg{spec: specs[0], methods: runner.SafeMethods, title: filepath.Base(specs[0])})
+			}
+			return t, notify("No OpenAPI spec loaded", components.Error)
+		case !capture && config.DefaultConfig.Active == config.RequestList && key.Matches(msg, config.DefaultKeyMap.History):
+			return t.showHistory()
 		case !capture && config.DefaultConfig.Active == config.RequestList && key.Matches(msg, config.DefaultKeyMap.Quit):
 			return t, tea.Quit
 		case !capture && key.Matches(msg, config.DefaultKeyMap.SwitchEnv):
@@ -828,6 +978,22 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ptr, _ := subModel.(editor.RequestPane)
 		t.editor = &ptr
 		cmd = tea.Batch(cmd, ecmd)
+		if isKey(msg) {
+			t.missing = t.missingRefs()
+		}
+	}
+
+	if config.DefaultConfig.Active == config.History {
+		var hcmd tea.Cmd
+		t.history, hcmd = t.history.Update(msg)
+		cmd = tea.Batch(cmd, hcmd)
+	}
+
+	// The runner keeps receiving its results while another page is shown.
+	if config.DefaultConfig.Active == config.Runner || !isKey(msg) {
+		var rcmd tea.Cmd
+		t.runner, rcmd = t.runner.Update(msg)
+		cmd = tea.Batch(cmd, rcmd)
 	}
 
 	return t, cmd
