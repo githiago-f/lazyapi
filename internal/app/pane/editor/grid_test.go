@@ -20,15 +20,16 @@ func TestGridViewDoesNotMutate(t *testing.T) {
 	}
 
 	before := g.rows[1].value.Style.GetBorderTopForeground()
+	plain := g.view(-1)
 	focused := g.view(3)
 	if g.rows[1].value.Style.GetBorderTopForeground() != before {
 		t.Error("view must not change the grid's styles")
 	}
-	if focused == g.view(-1) {
+	if focused == plain {
 		t.Error("the focused cell must look different")
 	}
-	if g.view(-1) != g.view(-1) {
-		t.Error("rendering must be stable")
+	if after := g.view(-1); after != plain {
+		t.Error("rendering with focus must not affect later renders")
 	}
 }
 
