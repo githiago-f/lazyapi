@@ -2,9 +2,12 @@ package model
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"sort"
 	"strings"
 	"time"
@@ -49,6 +52,9 @@ type Request struct {
 	// Timeout bounds the whole request (connect + headers + body). Zero means
 	// DefaultTimeout. Ignored when HTTPClient is set and has its own timeout.
 	Timeout time.Duration `yaml:"-"`
+
+	// MaxBody caps the response body read (DefaultMaxBody when zero).
+	MaxBody int64 `yaml:"-"`
 }
 
 // DefaultTimeout is applied to requests that do not set Request.Timeout.
@@ -96,6 +102,13 @@ func (r *Request) Send() (*http.Response, string, error) {
 // response together with its fully-read body. The request is bounded by
 // r.Timeout (or DefaultTimeout) and can be cancelled through ctx.
 func (r *Request) SendContext(parent context.Context) (*http.Response, string, error) {
+	resp, body, _, err := r.SendTimed(parent)
+	return resp, body, err
+}
+
+// SendTimed is SendContext plus a breakdown of where the time went.
+func (r *Request) SendTimed(parent context.Context) (*http.Response, string, Timing, error) {
+	var timing Timing
 	timeout := r.Timeout
 	if timeout <= 0 {
 		timeout = DefaultTimeout
@@ -103,23 +116,47 @@ func (r *Request) SendContext(parent context.Context) (*http.Response, string, e
 	reqCtx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	req, err := r.HTTPRequest(reqCtx)
+	var dnsStart, connStart, tlsStart, wrote time.Time
+	trace := &httptrace.ClientTrace{
+		DNSStart:          func(httptrace.DNSStartInfo) { dnsStart = time.Now() },
+		DNSDone:           func(httptrace.DNSDoneInfo) { timing.DNS = time.Since(dnsStart) },
+		ConnectStart:      func(string, string) { connStart = time.Now() },
+		ConnectDone:       func(string, string, error) { timing.Connect = time.Since(connStart) },
+		TLSHandshakeStart: func() { tlsStart = time.Now() },
+		TLSHandshakeDone:  func(tls.ConnectionState, error) { timing.TLS = time.Since(tlsStart) },
+		GotConn:           func(info httptrace.GotConnInfo) { timing.Reused = info.Reused },
+		WroteRequest:      func(httptrace.WroteRequestInfo) { wrote = time.Now() },
+		GotFirstResponseByte: func() {
+			if !wrote.IsZero() {
+				timing.TTFB = time.Since(wrote)
+			}
+		},
+	}
+	start := time.Now()
+	req, err := r.HTTPRequest(httptrace.WithClientTrace(reqCtx, trace))
 	if err != nil {
-		return nil, "", err
+		return nil, "", timing, err
 	}
 
 	response, err := r.client().Do(req)
 	if err != nil {
-		return nil, "", err
+		return nil, "", timing, err
 	}
 	defer func() { _ = response.Body.Close() }()
 
-	bodyBytes, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, "", err
+	limit := r.MaxBody
+	if limit <= 0 {
+		limit = DefaultMaxBody
 	}
-
-	return response, string(bodyBytes), nil
+	bodyBytes, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
+	timing.Total = time.Since(start)
+	if err != nil {
+		return nil, "", timing, err
+	}
+	if int64(len(bodyBytes)) > limit {
+		return nil, "", timing, fmt.Errorf("response body is larger than %d bytes (raise it with --max-body)", limit)
+	}
+	return response, string(bodyBytes), timing, nil
 }
 
 // HTTPRequest builds the *http.Request that SendContext would send:
