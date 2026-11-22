@@ -48,10 +48,12 @@ internal/
   inspect/                 # ListOperations, Describe (with referenced schemas), Validate (OpenAPI + scripts compile)
   mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled) + Tools confined to a root dir
   project/                 # lazyapi.config.yml: named environments (server, env file, vars, auth secrets), Find/Select/Resolve
+  importer/                # curl / Postman / HAR → spec operations (Apply: path templating, inferred schemas, security, tests); pm compat scripts
   mock/                    # Mock server: routes spec paths, answers with examples or SchemaSample, validates requests (422), Prefer: code=/example=
   script/                  # JS/TS test engine: esbuild bundling + goja sandbox
     script.go              #   Run (post-response), Before (export function before(req)), native bridge, Format
     prelude.js             #   JS side of the API: test, expect matchers, console, LazyResponse
+    postman.js             #   `pm` compatibility layer (pm.test/expect with Chai subset, pm.response, variable scopes)
     bundle.go              #   Bundle() — CommonJS wrapped in (function(module, exports){...}) so exports exist before the body; esbuild plugin: https imports, local imports confined to Root, bare imports rejected
     modules.go             #   ModuleLoader — https fetch, disk cache, lazyapi.lock integrity, Offline/Reload/Frozen/AllowedHosts
     spec.go                #   SpecContext (lazyapi.send + contract), ResolveTarget, OperationOptions
@@ -83,6 +85,9 @@ internal/
   model/                   # Core types
     request.go             #   Request, OpenAPIRef, Send()/SendContext(), HTTPRequest (the exact *http.Request sent; empty credentials are skipped), ResolvedURL, MissingPathParams
     oauth.go               #   AuthSecrets, ApplySecrets (by scheme name), OAuth2 client_credentials/password token fetch + cache
+    client.go              #   HTTPOptions (insecure, CA, mTLS, proxy, redirects) → *http.Client; Timing
+    body.go                #   Body encoding: JSON object → form-urlencoded / multipart; file parts only from Body.Files (never from Raw)
+    curl.go                #   Request.Curl — exact request as a curl command
     method.go              #   Method iota (POST=0..HEAD), MarshalYAML/UnmarshalYAML/Label
     body.go                #   Body {MimeType, Raw}, MimeType constants
     auth.go                #   AuthType iota, AuthScheme {all secrets + schema metadata}
@@ -138,6 +143,8 @@ internal/
 - **Exit codes** — 0 ok, 1 a check failed, 2 usage, 3 could not run (errors win over failures). Return `*cli.ExitError` (`usageErr`, `runtimeErr`) instead of plain errors from commands.
 - **before(req)** — `script.Before` evaluates the module once with side effects suppressed (test/console/vars/send are no-ops, top-level errors swallowed), then calls the exported `before` with the full API. The runner applies it before the request check and the send; if it throws, the request is not sent (failed `script` check).
 - **Flows** — `run --flow f.js` (only flows) or `--flows` (operations, then `flows/*.js`); MCP `run_flow`/`write_flow`. Results have `kind: "flow"` and `steps`.
+- **HTTP** — one client per run from `model.HTTPOptions` (flags merged over the environment's `http:`), set on every request incl. `lazyapi.send`, flows and OAuth2 token calls. `SendTimed` returns DNS/connect/TLS/TTFB timing; results carry `timing` and `cookies`.
+- **Import** — never copy credentials into specs (Authorization/API-key headers become security schemes plus a note). Multipart files must never be read from request bodies (scripts/MCP could exfiltrate files).
 - **Environments** — `project.Resolve(spec, --env-name, --server, --env)`: explicit flags win; secrets go to `runner.Options.Auth` → `model.ApplySecrets` (operations, `lazyapi.send`, flows, TUI). TUI `ctrl+v` cycles named envs when a config exists.
 - **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
