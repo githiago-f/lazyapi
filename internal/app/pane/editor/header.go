@@ -10,8 +10,8 @@ import (
 )
 
 type header struct {
-	active   bool
-	width    int
+	active bool
+	width  int
 
 	focusPos int
 	headers  []paramField

@@ -381,7 +381,7 @@ func (t Tui) applyEnv(msg *responses.SendMsg) {
 			msg.Request.ServerURL = u
 		}
 	}
-	msg.Auth, msg.Vars = e.Auth, e.Vars
+	msg.Auth, msg.Vars, msg.HTTP = e.Auth, e.Vars, e.HTTP
 }
 
 // serverFor resolves an environment's server: a URL, or an index into the

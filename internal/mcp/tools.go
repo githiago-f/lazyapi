@@ -92,7 +92,8 @@ var toolList = []tool{
 			"headers":     strMap("Request headers"),
 			"body":        map[string]any{"description": "Request body: a string is sent as-is, anything else is JSON-encoded"},
 			"env_file":    str("Environment file for {{env.NAME}} templates, relative to the root"),
-			"env_name":    str("Named environment from lazyapi.config.yml (server, env file, vars, credentials)"),
+			"env_name":    str("Named environment from lazyapi.config.yml (server, env file, vars, credentials, TLS/proxy)"),
+			"insecure":    boolean("Skip TLS certificate verification (self-signed development servers)"),
 			"no_contract": boolean("Skip response schema validation"),
 			"dry_run":     boolean("Resolve the request without sending it"),
 		}),
@@ -314,6 +315,7 @@ type runArgs struct {
 	Headers    map[string]string `json:"headers"`
 	EnvFile    string            `json:"env_file"`
 	EnvName    string            `json:"env_name"`
+	Insecure   bool              `json:"insecure"`
 	NoContract bool              `json:"no_contract"`
 	DryRun     bool              `json:"dry_run"`
 }
@@ -337,7 +339,12 @@ func (t *Tools) options(a runArgs) (string, runner.Options, error) {
 	if err != nil {
 		return "", runner.Options{}, fmt.Errorf("loading env file: %w", err)
 	}
+	client, err := sel.HTTP.Merge(model.HTTPOptions{Insecure: a.Insecure}).Client()
+	if err != nil {
+		return "", runner.Options{}, err
+	}
 	return specPath, runner.Options{
+		HTTPClient:    client,
 		EnvName:       sel.Name,
 		Vars:          sel.Vars,
 		Auth:          sel.Auth,

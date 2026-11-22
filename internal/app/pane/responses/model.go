@@ -23,11 +23,13 @@ type Tab int
 const (
 	BodyTab Tab = iota
 	HeadersTab
+	CookiesTab
+	TimelineTab
 	ChecksTab
 	ConsoleTab
 )
 
-var tabNames = []string{"Body", "Headers", "Checks", "Console"}
+var tabNames = []string{"Body", "Headers", "Cookies", "Timeline", "Checks", "Console"}
 
 var (
 	labelStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Subtext0))
@@ -203,7 +205,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case key.Matches(msg, PrevTabKey):
 			m.setTab(Tab((int(m.tab) + len(tabNames) - 1) % len(tabNames)))
 			return m, nil
-		case msg.String() >= "1" && msg.String() <= "4" && len(msg.String()) == 1:
+		case len(msg.String()) == 1 && msg.String() >= "1" && msg.String() <= fmt.Sprint(len(tabNames)):
 			m.setTab(Tab(msg.String()[0] - '1'))
 			return m, nil
 		case key.Matches(msg, RawKey) && m.tab == BodyTab:
@@ -311,6 +313,43 @@ func (m Model) content() string {
 			writeHeaders(&b, r.Response.Headers)
 		}
 		return strings.TrimRight(b.String(), "\n")
+
+	case CookiesTab:
+		if r.Response == nil {
+			return errorText(r)
+		}
+		if len(r.Response.Cookies) == 0 {
+			return dimStyle.Render("The response set no cookies.")
+		}
+		var b strings.Builder
+		for _, c := range r.Response.Cookies {
+			fmt.Fprintf(&b, "%s %s\n", keyStyle.Render(c.Name+"="), c.Value)
+			var attrs []string
+			for _, a := range []struct{ k, v string }{{"domain", c.Domain}, {"path", c.Path}, {"expires", c.Expires}, {"sameSite", c.SameSite}} {
+				if a.v != "" {
+					attrs = append(attrs, a.k+"="+a.v)
+				}
+			}
+			if c.MaxAge > 0 {
+				attrs = append(attrs, fmt.Sprintf("maxAge=%d", c.MaxAge))
+			}
+			if c.HTTPOnly {
+				attrs = append(attrs, "HttpOnly")
+			}
+			if c.Secure {
+				attrs = append(attrs, "Secure")
+			}
+			if len(attrs) > 0 {
+				b.WriteString("  " + dimStyle.Render(strings.Join(attrs, " · ")) + "\n")
+			}
+		}
+		return strings.TrimRight(b.String(), "\n")
+
+	case TimelineTab:
+		if r.Response == nil {
+			return errorText(r)
+		}
+		return timeline(r.Response.Timing, r.Response.DurationMs, m.width)
 
 	case ChecksTab:
 		if r.Response == nil {
@@ -435,6 +474,10 @@ func (m Model) tabBar() string {
 				if n := len(m.result.Logs); n > 0 {
 					label += fmt.Sprintf(" %d", n)
 				}
+			case CookiesTab:
+				if m.result.Response != nil && len(m.result.Response.Cookies) > 0 {
+					label += fmt.Sprintf(" %d", len(m.result.Response.Cookies))
+				}
 			case BodyTab:
 				if m.raw {
 					label += " (raw)"
@@ -475,4 +518,43 @@ func plural(n int, one, many string) string {
 		return one
 	}
 	return many
+}
+
+// timeline draws the request phases as proportional bars.
+func timeline(t *runner.TimingInfo, durationMs int64, width int) string {
+	if t == nil {
+		return dimStyle.Render(fmt.Sprintf("Total %d ms (no phase breakdown available)", durationMs))
+	}
+	type phase struct {
+		name  string
+		ms    float64
+		color string
+	}
+	transfer := t.TotalMs - t.DNSMs - t.ConnectMs - t.TLSMs - t.TTFBMs
+	phases := []phase{
+		{"DNS lookup", t.DNSMs, config.Teal},
+		{"TCP connect", t.ConnectMs, config.Blue},
+		{"TLS handshake", t.TLSMs, config.Mauve},
+		{"Waiting (TTFB)", t.TTFBMs, config.Peach},
+		{"Download", max(0, transfer), config.Green},
+	}
+	barWidth := max(10, width-34)
+	var b strings.Builder
+	offset := 0.0
+	for _, p := range phases {
+		start := int(offset / max(t.TotalMs, 0.001) * float64(barWidth))
+		length := int(p.ms / max(t.TotalMs, 0.001) * float64(barWidth))
+		if p.ms > 0 && length == 0 {
+			length = 1
+		}
+		start = min(start, barWidth-length)
+		bar := strings.Repeat(" ", max(0, start)) + lipgloss.NewStyle().Foreground(lipgloss.Color(p.color)).Render(strings.Repeat("█", length))
+		fmt.Fprintf(&b, "%-15s %9.2f ms  %s\n", p.name, p.ms, bar)
+		offset += p.ms
+	}
+	fmt.Fprintf(&b, "%-15s %9.2f ms\n", "Total", t.TotalMs)
+	if t.Reused {
+		b.WriteString("\n" + dimStyle.Render("Reused a keep-alive connection: no DNS, connect or TLS phase."))
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

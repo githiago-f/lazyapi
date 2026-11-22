@@ -31,6 +31,8 @@ func sample(outcome runner.Outcome) runner.OpResult {
 			Status: 200, StatusText: "200 OK", DurationMs: 12,
 			Headers: map[string]string{"Content-Type": "application/json"},
 			Body:    `{"id":1,"html":"<b>x</b>","name":"ana"}`,
+			Timing:  &runner.TimingInfo{DNSMs: 1, ConnectMs: 2, TLSMs: 3, TTFBMs: 5, TotalMs: 12},
+			Cookies: []runner.CookieInfo{{Name: "session", Value: "abc", Path: "/", HTTPOnly: true}},
 		},
 		Checks: []runner.Check{
 			{Kind: runner.CheckStatus, Name: "status 200 is declared", Passed: true},
@@ -85,7 +87,7 @@ func TestModelTabsAndStatus(t *testing.T) {
 	if out := view(m); !strings.Contains(out, "Authorization: <redacted>") || !strings.Contains(out, "Content-Type: application/json") {
 		t.Errorf("headers tab:\n%s", out)
 	}
-	m, _ = m.Update(press("4"))
+	m, _ = m.Update(press("6"))
 	if out := view(m); !strings.Contains(out, "[warn] slow") {
 		t.Errorf("console tab:\n%s", out)
 	}
@@ -135,5 +137,23 @@ func TestModelSearch(t *testing.T) {
 	m, _ = m.Update(press("]"))
 	if m.tab != before {
 		t.Error("unfocused view must ignore keys")
+	}
+}
+
+func TestModelCookiesAndTimeline(t *testing.T) {
+	m := New("")
+	m.SetSize(100, 20)
+	m.SetResult(sample(runner.Passed))
+	m.Focus()
+	m, _ = m.Update(press("3"))
+	if out := view(m); !strings.Contains(out, "session= abc") || !strings.Contains(out, "HttpOnly") || !strings.Contains(out, "Cookies 1") {
+		t.Errorf("cookies tab:\n%s", out)
+	}
+	m, _ = m.Update(press("4"))
+	out := view(m)
+	for _, want := range []string{"DNS lookup", "TLS handshake", "3.00 ms", "Waiting (TTFB)", "Total", "12.00 ms", "█"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("timeline missing %q:\n%s", want, out)
+		}
 	}
 }
