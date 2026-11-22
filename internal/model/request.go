@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/env"
 )
 
@@ -54,23 +53,6 @@ type Request struct {
 
 // DefaultTimeout is applied to requests that do not set Request.Timeout.
 const DefaultTimeout = 30 * time.Second
-
-type FailureMsg struct {
-	Message string
-}
-
-type SuccessMsg struct {
-	StatusCode int
-	Status     string
-	Header     http.Header
-	Body       string
-}
-
-func Failure(msg string) tea.Msg {
-	return FailureMsg{
-		Message: msg,
-	}
-}
 
 func (r *Request) templateContext() env.Context {
 	return env.Context{Env: r.Env, Vars: r.Vars}
@@ -145,6 +127,9 @@ func (r *Request) SendContext(parent context.Context) (*http.Response, string, e
 	for name, value := range r.Headers {
 		req.Header.Set(name, env.Resolve(value, ctx))
 	}
+	if bodyReader != nil && req.Header.Get("Content-Type") == "" && r.Body.Type != "" {
+		req.Header.Set("Content-Type", string(r.Body.Type))
+	}
 
 	for _, scheme := range r.Auth {
 		switch scheme.Type {
@@ -186,20 +171,4 @@ func (r *Request) SendContext(parent context.Context) (*http.Response, string, e
 	}
 
 	return response, string(bodyBytes), nil
-}
-
-func (r *Request) RunRequest() tea.Cmd {
-	return func() tea.Msg {
-		response, body, err := r.Send()
-		if err != nil {
-			return Failure("Failed executing request: " + err.Error())
-		}
-
-		return SuccessMsg{
-			StatusCode: response.StatusCode,
-			Status:     response.Status,
-			Header:     response.Header.Clone(),
-			Body:       body,
-		}
-	}
 }

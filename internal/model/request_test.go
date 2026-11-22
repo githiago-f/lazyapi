@@ -296,64 +296,6 @@ func TestSend_Error(t *testing.T) {
 	}
 }
 
-func TestRunRequest_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	}))
-	defer srv.Close()
-
-	req := &Request{
-		URI:        "/test",
-		Method:     GET,
-		ServerURL:  srv.URL,
-		HTTPClient: srv.Client(),
-	}
-
-	cmd := req.RunRequest()
-	msg := cmd()
-
-	success, ok := msg.(SuccessMsg)
-	if !ok {
-		t.Fatalf("RunRequest returned %T, want SuccessMsg", msg)
-	}
-	if success.StatusCode != http.StatusOK {
-		t.Errorf("StatusCode = %d, want %d", success.StatusCode, http.StatusOK)
-	}
-	if strings.TrimSpace(success.Body) != "ok" {
-		t.Errorf("Body = %q, want %q", success.Body, "ok")
-	}
-}
-
-func TestRunRequest_Failure(t *testing.T) {
-	req := &Request{
-		URI:    "/test",
-		Method: GET,
-	}
-
-	cmd := req.RunRequest()
-	msg := cmd()
-
-	failure, ok := msg.(FailureMsg)
-	if !ok {
-		t.Fatalf("RunRequest returned %T, want FailureMsg", msg)
-	}
-	if failure.Message == "" {
-		t.Error("expected non-empty error message")
-	}
-}
-
-func TestFailure(t *testing.T) {
-	msg := Failure("test error")
-	f, ok := msg.(FailureMsg)
-	if !ok {
-		t.Fatalf("Failure returned %T, want FailureMsg", msg)
-	}
-	if f.Message != "test error" {
-		t.Errorf("Message = %q, want %q", f.Message, "test error")
-	}
-}
-
 func TestSend_DefaultClientUsedWhenNotSet(t *testing.T) {
 	// HTTPClient is nil, should use http.DefaultClient
 	req := &Request{
@@ -459,5 +401,29 @@ func TestSend_Timeout(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("request took %v, timeout not applied", elapsed)
+	}
+}
+
+func TestSend_SetsContentTypeFromBodyType(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Content-Type")
+	}))
+	defer srv.Close()
+
+	req := &Request{URI: "/", Method: POST, ServerURL: srv.URL, Body: Body{Type: ApplicationJSON, Raw: `{}`}}
+	if _, _, err := req.Send(); err != nil {
+		t.Fatal(err)
+	}
+	if got != "application/json" {
+		t.Errorf("Content-Type = %q", got)
+	}
+
+	req.Headers = map[string]string{"content-type": "application/merge-patch+json"}
+	if _, _, err := req.Send(); err != nil {
+		t.Fatal(err)
+	}
+	if got != "application/merge-patch+json" {
+		t.Errorf("explicit header overridden: %q", got)
 	}
 }

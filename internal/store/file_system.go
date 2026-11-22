@@ -30,6 +30,11 @@ type FileSaved struct {
 	Path string
 }
 
+// RequestDeleted reports a deleted draft or operation.
+type RequestDeleted struct {
+	Path string
+}
+
 type DuplicateData struct {
 	Data model.Request
 }
@@ -208,43 +213,37 @@ func LoadRequestsList(paths []string) tea.Cmd {
 	}
 }
 
+// LoadRequest returns the request for an operation: the unsaved edits from
+// the TUI temp file when there are any, otherwise the operation from the spec
+// (with parameter examples).
+func LoadRequest(ref model.OpenAPIRef) (model.Request, error) {
+	if data, err := os.ReadFile(tempPathForRef(ref)); err == nil {
+		var request model.Request
+		if yaml.Unmarshal(data, &request) == nil {
+			request.FileName = ref.FilePath
+			request.OpenAPIRef = &model.OpenAPIRef{FilePath: ref.FilePath, Path: ref.Path, Method: ref.Method}
+			servers, defaultURL := LoadServers(ref.FilePath)
+			request.Servers = servers
+			if request.ServerURL == "" || !contains(servers, request.ServerURL) {
+				request.ServerURL = defaultURL
+			}
+			return request, nil
+		}
+	}
+
+	spec, err := ParseSpec(ref.FilePath)
+	if err != nil {
+		return model.Request{}, err
+	}
+	return OperationToRequest(spec, ref), nil
+}
+
 func OpenRequestFile(ref model.OpenAPIRef) tea.Cmd {
 	return func() tea.Msg {
-		tempPath := tempPathForRef(ref)
-
-		if _, err := os.Stat(tempPath); err == nil {
-			file, err := os.Open(tempPath)
-			if err != nil {
-				return ErrorMsg{Message: fmt.Sprintf("Error when trying to open temp file, %v", err)}
-			}
-			defer func() { _ = file.Close() }()
-
-			var request model.Request
-			decoder := yaml.NewDecoder(file)
-			if err := decoder.Decode(&request); err == nil {
-				request.OpenAPIRef = &model.OpenAPIRef{
-					FilePath: ref.FilePath,
-					Path:     ref.Path,
-					Method:   ref.Method,
-				}
-				servers, defaultURL := LoadServers(ref.FilePath)
-				request.Servers = servers
-				if !contains(servers, request.ServerURL) {
-					request.ServerURL = defaultURL
-				}
-				if request.ServerURL == "" {
-					request.ServerURL = defaultURL
-				}
-				return LoadedFile{Data: request}
-			}
-		}
-
-		spec, err := ParseSpec(ref.FilePath)
+		request, err := LoadRequest(ref)
 		if err != nil {
 			return ErrorMsg{Message: fmt.Sprintf("Error when trying to open file, %v", err)}
 		}
-
-		request := OperationToRequest(spec, ref)
 		return LoadedFile{Data: request}
 	}
 }
@@ -482,7 +481,7 @@ func DeleteRequestFile(item requests.RequestItem) tea.Cmd {
 			if err := os.Remove(item.DraftPath); err != nil {
 				return ErrorMsg{Message: fmt.Sprintf("Error when deleting draft: %v", err)}
 			}
-			return FileSaved{Path: item.DraftPath}
+			return RequestDeleted{Path: item.DraftPath}
 		}
 
 		if item.OpenAPIRef != nil {
@@ -500,9 +499,35 @@ func DeleteRequestFile(item requests.RequestItem) tea.Cmd {
 			if err = removeIfExists(tempPathForRef(ref)); err != nil {
 				return ErrorMsg{Message: fmt.Sprintf("Error removing tmp file: %v", err)}
 			}
-			return FileSaved{Path: ref.FilePath}
+			return RequestDeleted{Path: ref.FilePath}
 		}
 
 		return nil
 	}
+}
+
+// WriteScratchFile writes content to a fresh file under the lazyapi temp
+// directory (used to edit bodies and scripts in $EDITOR). ext selects the
+// editor's syntax mode, e.g. ".json" or ".js".
+func WriteScratchFile(ext, content string) (string, error) {
+	dir := filepath.Join(os.TempDir(), "lazyapi", "edit")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp(dir, "edit-*"+ext)
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+		return "", err
+	}
+	return f.Name(), f.Close()
+}
+
+// ReadScratchFile reads and removes a file written by WriteScratchFile.
+func ReadScratchFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	_ = os.Remove(path)
+	return string(data), err
 }

@@ -62,23 +62,29 @@ Ordem de execução:
 - [ ] Import/export: cURL ↔ request, Postman collection → spec + testes JS, HAR.
 - [ ] HTTP: `--insecure`, CA/client cert, proxy, redirects, limite de body, `form-urlencoded`, `multipart`, upload.
 
-## 5. UI para humanos — nível Postman (P1) — Fase 4
+## 5. UI para humanos — nível Postman (P1) — Fase 4 ✅ (parcial — ver itens abertos)
 
-- [ ] Abas de resposta: Body (pretty/raw) · Headers · Cookies · Tests · Console · Timeline; status, tempo e tamanho.
-- [ ] Syntax highlight (`chroma`) para JSON/XML/HTML/JS.
-- [ ] Busca e filtro jq (`gojq`) na resposta.
-- [ ] Seletor de ambiente na title bar.
+- [x] Abas de resposta: Body (pretty/raw) · Headers (request + response) · Checks · Console; status colorido, tempo, tamanho e resumo de checks. *(Cookies e Timeline ainda não)*
+- [x] Syntax highlight (`chroma`, catppuccin-mocha) para JSON/YAML/XML/HTML/JS/CSS.
+- [x] Busca na resposta (`/`, `n`/`N`).
+- [ ] Filtro jq (`gojq`) na resposta.
+- [x] Seletor de ambiente (`ctrl+v`) + título com spec e env.
 - [ ] Command palette (`ctrl+k`).
 - [ ] Histórico de requests com replay e diff.
-- [ ] Abrir body/script no `$EDITOR`.
-- [ ] Cancelar request em andamento + spinner.
-- [ ] Confirmação antes de enviar métodos destrutivos pelo preview.
+- [x] Abrir body/script no `$EDITOR` (`ctrl+x`).
+- [x] Cancelar request em andamento (`esc`) + spinner.
+- [x] Confirmação antes de enviar métodos destrutivos pelo preview.
 - [ ] Highlight/autocomplete de `{{env.X}}` (não resolvidas em vermelho).
-- [ ] Gerar body a partir do schema/example.
-- [ ] Diff contra example salvo + violação de schema visível.
+- [x] Pré-preencher body com o example do spec (media/named/schema example).
+- [ ] Gerar body sintético a partir do schema quando não há example.
+- [x] Violação de schema visível (aba Checks, mensagem por campo).
+- [ ] Diff da resposta contra o example salvo.
 - [ ] Runner view com progresso.
-- [ ] Parar auto-save a cada `Update` (debounce / só em mudança real).
+- [x] Auto-save só quando o request muda de verdade (fingerprint).
 - [ ] Corrigir styling de param/header recriado a cada frame.
+- [x] Barra de atalhos fixa no rodapé; `?`/`q` não disparam enquanto se digita.
+- [x] TUI envia pelo runner: mesmos checks (status/contract/script) do CLI; F5 envia ou re-roda testes.
+- [x] Bugs: aba Tests não carregava o script salvo; `Content-Type` do body não era enviado; filtro mostrava placeholder truncado; linha extra empurrava o rodapé para fora da tela.
 
 ## 6. Qualidade de código (P1/P2)
 

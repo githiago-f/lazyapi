@@ -158,7 +158,7 @@ func (tp testsPane) View() tea.View {
 
 	var results string
 	if tp.results == "" {
-		results = testInfoStyle.Render("Press F5 to run tests")
+		results = testInfoStyle.Render("F5 runs this script (it sends the request first if there is no response yet)")
 	} else {
 		results = tp.results
 	}
@@ -187,10 +187,6 @@ func (tp *testsPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if !tp.active {
 			return tp, nil
-		}
-
-		if key.Matches(msg, config.DefaultKeyMap.RunTests) {
-			return tp, tp.runTestsCmd()
 		}
 
 		model, cmd := tp.script.Update(msg)

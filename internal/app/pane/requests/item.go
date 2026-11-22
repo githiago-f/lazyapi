@@ -2,6 +2,7 @@ package requests
 
 import (
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -90,15 +91,16 @@ func (ri RequestItem) RenderCompact(width int, selected bool) string {
 	}
 
 	line := badge + " " + uriText + summary
+	if width > 2 {
+		line = ansi.Truncate(line, width-2, "…") // leave room for the cursor prefix
+	}
 
 	if selected {
 		line = selItemBg.Render(line)
 	}
-
-	_ = width // reserved for future truncation
 	return line
 }
 
 func (ri RequestItem) FilterValue() string {
-	return fmt.Sprintf("%s %s %s", ri.URI, ri.About.Summary, strings.Join(ri.Tags, " "))
+	return fmt.Sprintf("%s %s %s %s", ri.Method.Label(), ri.URI, ri.About.Summary, strings.Join(ri.Tags, " "))
 }

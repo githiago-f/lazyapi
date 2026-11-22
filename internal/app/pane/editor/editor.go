@@ -2,25 +2,27 @@
 package editor
 
 import (
-	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
+	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
-	overlay "github.com/rmhubbert/bubbletea-overlay"
+	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/scrollable"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/inmath"
-	"github.com/githiago-f/lazyapi/internal/script"
 	"github.com/githiago-f/lazyapi/internal/model"
-	resp "github.com/githiago-f/lazyapi/internal/response"
+	"github.com/githiago-f/lazyapi/internal/script"
 	"github.com/githiago-f/lazyapi/internal/store"
+	overlay "github.com/rmhubbert/bubbletea-overlay"
+	"gopkg.in/yaml.v3"
 )
 
 type CloseRequestPaneMsg struct {
@@ -30,6 +32,13 @@ type CloseRequestPaneMsg struct {
 
 type TestsResultMsg struct {
 	Result script.Result
+}
+
+// externalEditDoneMsg carries the content edited in $EDITOR back to a tab.
+type externalEditDoneMsg struct {
+	tab     tab
+	content string
+	err     error
 }
 
 func closePane(save bool) tea.Cmd {
@@ -78,6 +87,9 @@ type RequestPane struct {
 
 	BlockTab bool
 	dirty    bool
+	// savedFingerprint is the last request state written to the temp file;
+	// the temp file is only rewritten when the request actually changes.
+	savedFingerprint string
 
 	Method components.Selector
 	Server components.Selector
@@ -86,14 +98,8 @@ type RequestPane struct {
 
 	RequestTabs tabs.Model
 
-	ResponsePreview viewport.Model
-
-	respContentWidth int
-
-	lastStatusCode int
-	lastStatus     string
-	lastHeader     http.Header
-	lastBody       string
+	Response  responses.Model
+	respStyle lipgloss.Style
 }
 
 func methodLabels() []string {
@@ -137,15 +143,16 @@ func New(request *model.Request) *RequestPane {
 		},
 
 		RequestTabs: tabs.New(
-			tabs.NewTab("Documentation", docs),
+			tabs.NewTab("Docs", docs),
 			tabs.NewTab("Params", scrollable.New(params)),
-			tabs.NewTab("Authorize", scrollable.New(authorize)),
-			tabs.NewTab("Header", scrollable.New(header)),
+			tabs.NewTab("Auth", scrollable.New(authorize)),
+			tabs.NewTab("Headers", scrollable.New(header)),
 			tabs.NewTab("Body", body),
 			tabs.NewTab("Tests", scrollable.New(tests)),
 		),
 
-		ResponsePreview: viewport.New(viewport.WithWidth(0), viewport.WithHeight(0)),
+		Response:  responses.New("No response yet · alt+enter sends from any field"),
+		respStyle: lipgloss.NewStyle().Border(lipgloss.NormalBorder()),
 	}
 }
 
@@ -157,7 +164,7 @@ func (rp RequestPane) View() tea.View {
 	rp.URI.Style = rp.URI.Style.UnsetBorderForeground()
 	rp.Send.Style = rp.Send.Style.UnsetBorderForeground()
 	rp.RequestTabs.Style = rp.RequestTabs.Style.UnsetBorderForeground()
-	rp.ResponsePreview.Style = rp.ResponsePreview.Style.UnsetBorderForeground()
+	respStyle := rp.respStyle
 
 	switch field(rp.fieldsCursor) {
 	case method:
@@ -171,9 +178,7 @@ func (rp RequestPane) View() tea.View {
 	case reqTabs:
 		rp.RequestTabs.Style = rp.RequestTabs.Style.BorderForeground(activeColor)
 	case response:
-		rp.ResponsePreview.Style = rp.ResponsePreview.Style.BorderForeground(activeColor)
-		rp.ResponsePreview.SetWidth(max(0, rp.ResponsePreview.Width()))
-		rp.ResponsePreview.SetHeight(max(0, rp.ResponsePreview.Height()))
+		respStyle = respStyle.BorderForeground(activeColor)
 	}
 
 	requestURL := lipgloss.JoinHorizontal(
@@ -190,7 +195,7 @@ func (rp RequestPane) View() tea.View {
 		lipgloss.JoinHorizontal(
 			lipgloss.Left,
 			rp.RequestTabs.View().Content,
-			rp.ResponsePreview.View(),
+			respStyle.Render(rp.Response.View()),
 		),
 	)
 
@@ -213,8 +218,12 @@ func (rp RequestPane) View() tea.View {
 func (rp *RequestPane) SetEnvStore(s *env.Store) {
 	rp.envStore = s
 
-	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+	tp := rp.testsPane()
 	tp.SetEnvStore(s)
+}
+
+func (rp RequestPane) testsPane() *testsPane {
+	return rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
 }
 
 func (rp RequestPane) SetValue(formData model.Request) RequestPane {
@@ -248,8 +257,12 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
 	au.SetValue(formData.Auth)
 
-	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+	tp := rp.testsPane()
+	tp.SetValue(formData.Tests)
 	tp.SetRequestData(formData)
+
+	rp.Response.Clear()
+	rp.savedFingerprint = fingerprint(rp.GetAsRequestData())
 
 	return rp
 }
@@ -261,13 +274,11 @@ func (rp *RequestPane) Reset() {
 	rp.URI.TextInput.SetValue("")
 	rp.openAPIRef = nil
 	rp.draftPath = ""
-	rp.lastStatusCode = 0
-	rp.lastStatus = ""
-	rp.lastHeader = nil
-	rp.lastBody = ""
+	rp.savedFingerprint = ""
+	rp.Response.Clear()
+	rp.Response.Blur()
 
-	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
-	tp.Reset()
+	rp.testsPane().Reset()
 
 	rp.RequestTabs.SetCursor(0)
 }
@@ -278,9 +289,12 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
 	pr := rp.RequestTabs.Tabs[Params].Content.(scrollable.Model).Content.(*params)
 	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
-	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
+	tp := rp.testsPane()
 
-	envMap, _ := rp.envStore.Load()
+	var envMap map[string]string
+	if rp.envStore != nil {
+		envMap, _ = rp.envStore.Load()
+	}
 
 	return model.Request{
 		FileName:   rp.fileName,
@@ -304,52 +318,69 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 	}
 }
 
-func (rp RequestPane) SetResponse(statusCode int, status string, header http.Header, body string) RequestPane {
-	rp.lastStatusCode = statusCode
-	rp.lastStatus = status
-	rp.lastHeader = header
-	rp.lastBody = body
-	rp.ResponsePreview.SetContent(resp.BuildContent(rp.lastStatusCode, rp.lastStatus, rp.lastHeader, rp.lastBody, rp.respContentWidth))
-
-	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
-	tp.SetResponseData(statusCode, status, header, body)
-
-	return rp
+// fingerprint identifies the persisted part of a request.
+func fingerprint(r model.Request) string {
+	data, err := yaml.Marshal(r)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
-func (rp RequestPane) SetResponseFeedback(feedback string) RequestPane {
-	rp.ResponsePreview.SetContent(feedback + "\n" + rp.ResponsePreview.View())
-	return rp
+// sendCmd asks the TUI to send the current request with the current
+// (possibly unsaved) test script.
+func (rp RequestPane) sendCmd() tea.Cmd {
+	req := rp.GetAsRequestData()
+	rp.testsPane().SetRequestData(req)
+	source := rp.testsPane().Value()
+	return func() tea.Msg {
+		return responses.SendMsg{Source: responses.FromEditor, Request: req, Script: &source}
+	}
 }
 
-func (rp RequestPane) SetResponseError(err string) RequestPane {
-	rp.ResponsePreview.SetContent(fmt.Sprintf("Error: %s", err))
-	rp.lastStatusCode = 0
-	rp.lastHeader = nil
-	rp.lastBody = ""
+// StartSending shows the spinner; the TUI calls it when it starts a request.
+func (rp RequestPane) StartSending() (RequestPane, tea.Cmd) {
+	cmd := rp.Response.StartSending()
+	return rp, cmd
+}
 
-	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
-	tp.SetResponseError()
-
+// SetResult shows a finished exchange and feeds it to the Tests tab.
+func (rp RequestPane) SetResult(res responses.ResultMsg) RequestPane {
+	rp.Response.SetResult(res.Result)
+	tp := rp.testsPane()
+	if r := res.Result.Response; r != nil {
+		header := http.Header{}
+		for k, v := range r.Headers {
+			header.Set(k, v)
+		}
+		tp.SetResponseData(r.Status, r.StatusText, header, r.Body)
+	} else {
+		tp.SetResponseError()
+	}
 	return rp
 }
 
 func (rp RequestPane) FocusResponse() RequestPane {
 	rp.fieldsCursor = int(response)
+	rp.Response.Focus()
 	return rp
 }
 
+// LastResponse returns the last received response (status 0 when none).
 func (rp RequestPane) LastResponse() (statusCode int, header http.Header, body string) {
-	return rp.lastStatusCode, rp.lastHeader, rp.lastBody
-}
-
-func (rp RequestPane) LastStatusText() string {
-	return rp.lastStatus
+	res := rp.Response.Result()
+	if res == nil || res.Response == nil {
+		return 0, nil, ""
+	}
+	header = http.Header{}
+	for k, v := range res.Response.Headers {
+		header.Set(k, v)
+	}
+	return res.Response.Status, header, res.Response.Body
 }
 
 func (rp RequestPane) SetTestResults(result script.Result) RequestPane {
-	tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
-	tp.SetResults(result)
+	rp.testsPane().SetResults(result)
 	return rp
 }
 
@@ -357,8 +388,19 @@ func (rp RequestPane) CurrentRef() *model.OpenAPIRef {
 	return rp.openAPIRef
 }
 
+// CapturesKeys reports whether a text input in the editor must receive
+// every key (so global shortcuts like "q" or "?" are not triggered).
+func (rp RequestPane) CapturesKeys() bool {
+	return rp.Response.Searching() || field(rp.fieldsCursor) == uri || rp.shouldBlockTabCommands()
+}
+
 func (rp RequestPane) shouldBlockTabCommands() bool {
 	return field(rp.fieldsCursor) == reqTabs && rp.BlockTab
+}
+
+func (rp RequestPane) editableTab() bool {
+	c := tab(rp.RequestTabs.Cursor())
+	return field(rp.fieldsCursor) == reqTabs && (c == Body || c == Tests)
 }
 
 func (rp RequestPane) HelpBindings() []key.Binding {
@@ -366,66 +408,83 @@ func (rp RequestPane) HelpBindings() []key.Binding {
 
 	switch field(rp.fieldsCursor) {
 	case method, serverField:
-		var sel components.Selector
-		if field(rp.fieldsCursor) == method {
-			sel = rp.Method
-		} else {
-			sel = rp.Server
-		}
-		if sel.Open {
-			bindings = append(bindings,
-				config.DefaultKeyMap.Up,
-				config.DefaultKeyMap.Down,
-				config.DefaultKeyMap.Select,
-				config.DefaultKeyMap.Back,
-			)
-		} else {
-			bindings = append(bindings,
-				config.DefaultKeyMap.Up,
-				config.DefaultKeyMap.Down,
-				config.DefaultKeyMap.Select,
-			)
-		}
-
-	case uri:
-		// no special bindings
-
-	case send:
 		bindings = append(bindings,
+			config.DefaultKeyMap.Up,
+			config.DefaultKeyMap.Down,
 			config.DefaultKeyMap.Select,
 		)
 
+	case send:
+		bindings = append(bindings, config.DefaultKeyMap.Select)
+
 	case reqTabs:
-		if !rp.BlockTab {
-			bindings = append(bindings,
-				config.DefaultKeyMap.Left,
-				config.DefaultKeyMap.Right,
-				config.DefaultKeyMap.Select,
-			)
-		} else {
+		if rp.BlockTab {
 			content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor()].Content
 			if h, ok := content.(interface{ HelpBindings() []key.Binding }); ok {
 				bindings = append(bindings, h.HelpBindings()...)
 			}
+			if rp.editableTab() {
+				bindings = append(bindings, config.DefaultKeyMap.OpenEditor)
+			}
 			return bindings
+		}
+		bindings = append(bindings, config.DefaultKeyMap.Left, config.DefaultKeyMap.Right, config.DefaultKeyMap.Select)
+		if rp.editableTab() {
+			bindings = append(bindings, config.DefaultKeyMap.OpenEditor)
 		}
 
 	case response:
-		// viewport handles PgUp/PgDown internally
+		bindings = append(bindings, rp.Response.HelpBindings()...)
+		if rp.Response.Searching() {
+			return bindings
+		}
+		bindings = append(bindings, config.DefaultKeyMap.CopyResponse)
 	}
 
-	// Core keys valid when not inside tab content
-	if !rp.BlockTab {
-		bindings = append(bindings,
-			config.DefaultKeyMap.Back,
-			config.DefaultKeyMap.Save,
-			config.DefaultKeyMap.SaveExample,
-			config.DefaultKeyMap.Next,
-			config.DefaultKeyMap.Prev,
-		)
-	}
+	return append(bindings,
+		config.DefaultKeyMap.Next,
+		config.DefaultKeyMap.Save,
+		config.DefaultKeyMap.SaveExample,
+		config.DefaultKeyMap.Back,
+	)
+}
 
-	return bindings
+// openExternalEditor edits the Body or Tests tab content in $EDITOR.
+func (rp RequestPane) openExternalEditor() tea.Cmd {
+	t := tab(rp.RequestTabs.Cursor())
+	var content, ext string
+	switch t {
+	case Body:
+		content, ext = rp.RequestTabs.Tabs[Body].Content.(*body).Value(), ".json"
+	case Tests:
+		content, ext = rp.testsPane().script.Value(), ".js"
+	default:
+		return nil
+	}
+	path, err := store.WriteScratchFile(ext, content)
+	if err != nil {
+		return notify("Cannot open editor: "+err.Error(), components.Error)
+	}
+	editorCmd := os.Getenv("VISUAL")
+	if editorCmd == "" {
+		editorCmd = os.Getenv("EDITOR")
+	}
+	if editorCmd == "" {
+		editorCmd = "vi"
+	}
+	parts := strings.Fields(editorCmd)
+	c := exec.Command(parts[0], append(parts[1:], path)...) //nolint:gosec // the user's own $EDITOR
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		edited, readErr := store.ReadScratchFile(path)
+		if err == nil {
+			err = readErr
+		}
+		return externalEditDoneMsg{tab: t, content: edited, err: err}
+	})
+}
+
+func notify(msg string, kind components.NotificationType) tea.Cmd {
+	return func() tea.Msg { return components.ShowNotificationMsg{Message: msg, Type: kind} }
 }
 
 func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -434,62 +493,93 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model    tea.Model
 		consumed bool
 	)
-	switch field(rp.fieldsCursor) {
-	case method:
-		model, cmd = rp.Method.Update(msg)
-		rp.Method, _ = model.(components.Selector)
-	case serverField:
-		model, cmd = rp.Server.Update(msg)
-		rp.Server, _ = model.(components.Selector)
-	case uri:
-		model, cmd = rp.URI.Update(msg)
-		rp.URI, _ = model.(components.Field)
-	case send:
-		model, cmd = rp.Send.Update(msg)
-		rp.Send, _ = model.(components.Button)
-		if rp.Send.Clicked {
-			rp.Send.Clicked = false
-			req := rp.GetAsRequestData()
 
-			tp := rp.RequestTabs.Tabs[Tests].Content.(scrollable.Model).Content.(*testsPane)
-			tp.SetRequestData(req)
-
-			cmd = tea.Batch(cmd, req.RunRequest())
+	switch msg := msg.(type) {
+	case externalEditDoneMsg:
+		if msg.err != nil {
+			return rp, notify("Editor failed: "+msg.err.Error(), components.Error)
 		}
-	case reqTabs:
-		// Two-stage Esc: check if content is active before the tabs update
-		wasActive := false
-		if rp.BlockTab {
-			if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
-				content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor()].Content
-				if a, ok := content.(interface{ IsActive() bool }); ok {
-					wasActive = a.IsActive()
+		switch msg.tab {
+		case Body:
+			rp.RequestTabs.Tabs[Body].Content.(*body).SetValue(msg.content)
+		case Tests:
+			rp.testsPane().script.SetValue(msg.content)
+		}
+		rp.dirty = true
+		return rp.autosave(nil)
+	case tea.KeyPressMsg:
+		if key.Matches(msg, config.DefaultKeyMap.OpenEditor) && rp.editableTab() {
+			return rp, rp.openExternalEditor()
+		}
+		if (msg.String() == "alt+enter" || msg.String() == "ctrl+enter") && !rp.Response.Searching() {
+			return rp, rp.sendCmd()
+		}
+		// F5 re-runs the script on the last response, or sends when there is none.
+		if key.Matches(msg, config.DefaultKeyMap.RunTests) && !rp.Response.Searching() {
+			if rp.Response.Result() == nil || rp.Response.Result().Response == nil {
+				return rp, rp.sendCmd()
+			}
+			rp.testsPane().SetRequestData(rp.GetAsRequestData())
+			return rp, rp.testsPane().runTestsCmd()
+		}
+	}
+
+	if !rp.Response.Searching() {
+		switch field(rp.fieldsCursor) {
+		case method:
+			model, cmd = rp.Method.Update(msg)
+			rp.Method, _ = model.(components.Selector)
+		case serverField:
+			model, cmd = rp.Server.Update(msg)
+			rp.Server, _ = model.(components.Selector)
+		case uri:
+			model, cmd = rp.URI.Update(msg)
+			rp.URI, _ = model.(components.Field)
+		case send:
+			model, cmd = rp.Send.Update(msg)
+			rp.Send, _ = model.(components.Button)
+			if rp.Send.Clicked {
+				rp.Send.Clicked = false
+				cmd = tea.Batch(cmd, rp.sendCmd())
+			}
+		case reqTabs:
+			// Two-stage Esc: check if content is active before the tabs update
+			wasActive := false
+			if rp.BlockTab {
+				if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
+					content := rp.RequestTabs.Tabs[rp.RequestTabs.Cursor()].Content
+					if a, ok := content.(interface{ IsActive() bool }); ok {
+						wasActive = a.IsActive()
+					}
+				}
+			}
+
+			model, cmd = rp.RequestTabs.Update(msg)
+			rp.RequestTabs, _ = model.(tabs.Model)
+
+			// Only exit tab if content was NOT active (Esc already blurred it)
+			if rp.BlockTab && !wasActive {
+				if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
+					rp.BlockTab = false
+					consumed = true
 				}
 			}
 		}
+	}
 
-		model, cmd = rp.RequestTabs.Update(msg)
-		rp.RequestTabs, _ = model.(tabs.Model)
-
-		// Only exit tab if content was NOT active (Esc already blurred it)
-		if rp.BlockTab && !wasActive {
-			if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.Back) {
-				rp.BlockTab = false
-				consumed = true
+	// The response view also needs spinner ticks and mouse wheel while unfocused.
+	if field(rp.fieldsCursor) == response || !isKey(msg) {
+		var rcmd tea.Cmd
+		rp.Response, rcmd = rp.Response.Update(msg)
+		cmd = tea.Batch(cmd, rcmd)
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && field(rp.fieldsCursor) == response && !rp.Response.Searching() &&
+			key.Matches(keyMsg, config.DefaultKeyMap.CopyResponse) && rp.Response.Body() != "" {
+			if err := clipboard.WriteAll(rp.Response.Body()); err == nil {
+				cmd = tea.Batch(cmd, notify("✓ Response body copied", components.Success))
 			}
 		}
-
-	case response:
-		rp.ResponsePreview, cmd = rp.ResponsePreview.Update(msg)
-		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, config.DefaultKeyMap.CopyResponse) && rp.lastBody != "" {
-			if err := clipboard.WriteAll(rp.lastBody); err == nil {
-				cmd = tea.Batch(cmd, func() tea.Msg {
-					return components.ShowNotificationMsg{
-						Message: "✓ Response body copied",
-						Type:    components.Success,
-					}
-				})
-			}
+		if rp.Response.Searching() {
+			return rp, cmd
 		}
 	}
 
@@ -501,19 +591,12 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		sendWidth, _ := lipgloss.Size(rp.Send.View().Content)
 
 		rp.URI.Style = rp.URI.Style.Width(msg.Width - (methodWidth + serverWidth + sendWidth + 3))
-		tabsHeight := msg.Height - (methodHeight + 5)
+		tabsHeight := msg.Height - methodHeight
 		rp.RequestTabs.Style = rp.RequestTabs.Style.Height(tabsHeight)
 
 		respWidth := msg.Width - rp.RequestTabs.Width()
-		rp.respContentWidth = max(0, respWidth-2)
-		rp.ResponsePreview.SetWidth(max(0, respWidth-2))
-		rp.ResponsePreview.SetHeight(max(0, tabsHeight))
-		if rp.lastBody != "" {
-			rp.ResponsePreview.SetContent(resp.BuildContent(rp.lastStatusCode, rp.lastStatus, rp.lastHeader, rp.lastBody, rp.respContentWidth))
-		}
-		rp.ResponsePreview.Style = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			Width(respWidth)
+		rp.Response.SetSize(max(0, respWidth-2), max(0, tabsHeight-2))
+		rp.respStyle = rp.respStyle.Width(respWidth)
 
 		childrenMsg := tea.WindowSizeMsg{Width: rp.RequestTabs.Width() - 2, Height: max(0, tabsHeight-4)}
 
@@ -543,22 +626,36 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, config.DefaultKeyMap.Prev) && !rp.BlockTab:
 			rp.fieldsCursor = inmath.Circle(rp.fieldsCursor-1, 0, int(lastField))
 		case key.Matches(msg, config.DefaultKeyMap.Save) && !rp.BlockTab:
-			cmd = tea.Batch(cmd, store.SaveFile(rp.GetAsRequestData()),
-				func() tea.Msg {
-					return components.ShowNotificationMsg{
-						Message: "✓ Request saved",
-						Type:    components.Success,
-					}
-				})
+			cmd = tea.Batch(cmd, store.SaveFile(rp.GetAsRequestData()))
+			rp.savedFingerprint = fingerprint(rp.GetAsRequestData())
 		case key.Matches(msg, config.DefaultKeyMap.Back) && !rp.BlockTab:
 			return rp, closePane(false)
 		}
+		if field(rp.fieldsCursor) == response {
+			rp.Response.Focus()
+		} else {
+			rp.Response.Blur()
+		}
 	}
 
-	if rp.fileName != "" && rp.dirty {
-		rp.dirty = false
-		cmd = tea.Batch(cmd, store.SaveTempFile(rp.GetAsRequestData()))
-	}
+	return rp.autosave(cmd)
+}
 
+// autosave writes the temp file only when the request content changed.
+func (rp RequestPane) autosave(cmd tea.Cmd) (tea.Model, tea.Cmd) {
+	if rp.fileName == "" || !rp.dirty {
+		return rp, cmd
+	}
+	rp.dirty = false
+	data := rp.GetAsRequestData()
+	if fp := fingerprint(data); fp != rp.savedFingerprint {
+		rp.savedFingerprint = fp
+		cmd = tea.Batch(cmd, store.SaveTempFile(data))
+	}
 	return rp, cmd
+}
+
+func isKey(msg tea.Msg) bool {
+	_, ok := msg.(tea.KeyPressMsg)
+	return ok
 }
