@@ -98,6 +98,11 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !p.active {
 			return &p, nil
 		}
+		if q := p.query.cells(); p.focusPos < q && p.query.completing(p.focusPos) && menuKey(msg) {
+			return &p, p.query.update(p.focusPos, msg)
+		} else if p.focusPos >= q && p.params.completing(p.focusPos-q) && menuKey(msg) {
+			return &p, p.params.update(p.focusPos-q, msg)
+		}
 		total := p.totalFields()
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.AddQueryParam):
@@ -116,4 +121,15 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return &p, nil
+}
+
+// Completing reports whether the focused field has its menu open.
+func (p params) Completing() bool {
+	if !p.active {
+		return false
+	}
+	if q := p.query.cells(); p.focusPos >= q {
+		return p.params.completing(p.focusPos - q)
+	}
+	return p.query.completing(p.focusPos)
 }

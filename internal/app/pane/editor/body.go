@@ -12,6 +12,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/model"
 )
 
 // body is the Body tab: a text area, or name/value rows when the body is a
@@ -19,7 +20,7 @@ import (
 // rows are stored as a JSON object, which the request encodes as fields.
 type body struct {
 	active bool
-	editor components.Text
+	editor components.CodeEditor
 
 	form     bool
 	grid     kvGrid
@@ -49,7 +50,7 @@ func (b *body) IsActive() bool {
 }
 
 func BodyTab() *body {
-	editor := components.NewTextarea("Json data", "")
+	editor := components.NewCodeEditor(components.LangJSON, `{ "name": "{{env.USER}}" }  ·  $ or {{ completes variables`, "")
 
 	return &body{editor: editor, focusPos: -1, grid: newGrid()}
 }
@@ -59,6 +60,20 @@ func BodyTab() *body {
 func (b *body) SetForm(form bool) {
 	b.form = form
 	b.focusPos = -1
+}
+
+// SetType sets the body's media type: form rows for forms, JSON colors and
+// validation for JSON, plain text otherwise. Call it before SetValue.
+func (b *body) SetType(t model.MimeType) {
+	b.SetForm(model.Body{Type: t}.IsForm())
+	switch {
+	case t == "" || strings.Contains(string(t), "json"):
+		b.editor.Lang = components.LangJSON
+	case strings.Contains(string(t), "javascript"):
+		b.editor.Lang = components.LangJS
+	default:
+		b.editor.Lang = components.LangText
+	}
 }
 
 func (b *body) SetValue(s string) {
@@ -228,10 +243,6 @@ func (b body) View() tea.View {
 	if b.form {
 		return tea.NewView(b.formView())
 	}
-	b.editor.Style = b.editor.Style.UnsetBorderForeground()
-	if b.active {
-		b.editor.Style = b.editor.Style.BorderForeground(config.DefaultConfig.PrimaryColor())
-	}
 	return tea.NewView(b.editor.View().Content)
 }
 
@@ -246,12 +257,7 @@ func (b body) formView() string {
 func (b body) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		bodyHeight := max(1, msg.Height-5)
-		b.editor.Style = b.editor.Style.
-			Width(msg.Width - 1).
-			Height(bodyHeight)
-		b.editor.TextArea.SetWidth(max(0, msg.Width-3))
-		b.editor.TextArea.SetHeight(bodyHeight)
+		b.editor.SetSize(msg.Width, max(4, msg.Height-3))
 		b.width = msg.Width
 		b.grid.setWidth(msg.Width)
 
@@ -266,8 +272,8 @@ func (b body) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if b.form {
 		return b.updateForm(msg)
 	}
-	model, cmd := b.editor.Update(msg)
-	b.editor, _ = model.(components.Text)
+	var cmd tea.Cmd
+	b.editor, cmd = b.editor.Update(msg)
 	return &b, cmd
 }
 
@@ -275,6 +281,9 @@ func (b body) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return &b, nil
+	}
+	if b.grid.completing(b.focusPos) && menuKey(k) {
+		return &b, b.grid.update(b.focusPos, k)
 	}
 	total := b.grid.cells()
 	switch {
@@ -288,4 +297,12 @@ func (b body) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return &b, b.grid.update(b.focusPos, k)
 	}
 	return &b, nil
+}
+
+// Completing reports whether a completion menu is open.
+func (b body) Completing() bool {
+	if b.form {
+		return b.active && b.grid.completing(b.focusPos)
+	}
+	return b.active && b.editor.Completing()
 }

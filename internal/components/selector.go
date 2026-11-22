@@ -23,7 +23,7 @@ type Selector struct {
 }
 
 var selectorStyle = lipgloss.NewStyle().
-	Border(lipgloss.NormalBorder()).
+	Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2)).
 	Padding(0, 2).
 	Align(lipgloss.Center)
 

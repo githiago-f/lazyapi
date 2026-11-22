@@ -45,7 +45,7 @@ type testsPane struct {
 	active   bool
 	width    int
 	height   int
-	script   components.Text
+	script   components.CodeEditor
 	results  string
 	reqData  model.Request
 	envStore *env.Store
@@ -59,7 +59,7 @@ type testsPane struct {
 
 func TestsTab() *testsPane {
 	return &testsPane{
-		script:  components.NewTextarea("Test script (JavaScript)", defaultTestScript),
+		script:  components.NewCodeEditor(components.LangJS, "Test script (JavaScript/TypeScript)", defaultTestScript),
 		results: "",
 	}
 }
@@ -141,20 +141,8 @@ func (tp testsPane) Init() tea.Cmd {
 }
 
 func (tp testsPane) View() tea.View {
-	activeColor := config.DefaultConfig.PrimaryColor()
-
-	editorHeight := max(1, tp.height*7/10)
+	editorHeight := tp.editorHeight()
 	resultsHeight := max(3, tp.height-3-editorHeight)
-
-	tp.script.Style = tp.script.Style.
-		UnsetBorderForeground().
-		Width(max(0, tp.width-2)).
-		Height(editorHeight)
-	if tp.active {
-		tp.script.Style = tp.script.Style.BorderForeground(activeColor)
-	}
-	tp.script.TextArea.SetWidth(max(0, tp.width-3))
-	tp.script.TextArea.SetHeight(editorHeight)
 
 	var results string
 	if tp.results == "" {
@@ -179,6 +167,7 @@ func (tp *testsPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		tp.width = msg.Width
 		tp.height = msg.Height
+		tp.script.SetSize(max(0, tp.width), tp.editorHeight()+2)
 
 	case tabs.SetActiveTabMsg:
 		tp.SetActive(msg.Active)
@@ -189,13 +178,23 @@ func (tp *testsPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return tp, nil
 		}
 
-		model, cmd := tp.script.Update(msg)
-		tp.script, _ = model.(components.Text)
+		var cmd tea.Cmd
+		tp.script, cmd = tp.script.Update(msg)
 		return tp, cmd
+
+	case tea.PasteMsg:
+		if tp.active {
+			var cmd tea.Cmd
+			tp.script, cmd = tp.script.Update(msg)
+			return tp, cmd
+		}
 	}
 
 	return tp, nil
 }
+
+// Completing reports whether the script editor has its menu open.
+func (tp testsPane) Completing() bool { return tp.active && tp.script.Completing() }
 
 func (tp testsPane) buildExecData() script.ExecData {
 	data := script.ExecData{Request: tp.reqData}
@@ -309,3 +308,6 @@ func formatTestResults(result script.Result) string {
 
 	return b.String()
 }
+
+// editorHeight is the script editor's text height (the rest shows results).
+func (tp testsPane) editorHeight() int { return max(1, tp.height*7/10) }

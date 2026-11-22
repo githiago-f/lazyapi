@@ -128,7 +128,11 @@ func New(request *model.Request) *RequestPane {
 	tests := TestsTab()
 
 	return &RequestPane{
-		URI: components.InitField("", ""),
+		URI: func() components.Field {
+			f := components.InitField("/path/{id}?q={{env.X}}", "")
+			f.Kind = components.URLField
+			return f
+		}(),
 		Method: components.Selector{
 			Cursor: 0,
 			Labels: methodLabels(),
@@ -155,7 +159,7 @@ func New(request *model.Request) *RequestPane {
 		),
 
 		Response:  responses.New("No response yet · alt+enter sends from any field"),
-		respStyle: lipgloss.NewStyle().Border(lipgloss.NormalBorder()),
+		respStyle: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2)),
 	}
 }
 
@@ -201,6 +205,12 @@ func (rp RequestPane) View() tea.View {
 			respStyle.Render(rp.Response.View()),
 		),
 	)
+
+	if menu := rp.URI.MenuView(60); menu != "" && field(rp.fieldsCursor) == uri {
+		methodWidth, _ := lipgloss.Size(rp.Method.View().Content)
+		serverWidth, _ := lipgloss.Size(rp.Server.View().Content)
+		return tea.NewView(overlay.Composite(menu, fullView, overlay.Left, overlay.Top, methodWidth+serverWidth, 3))
+	}
 
 	if field(rp.fieldsCursor) == method && rp.Method.Open {
 		dd := rp.Method.DropDownView()
@@ -250,7 +260,7 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	*docs = docs.SetValue(formData.About)
 
 	bd := rp.RequestTabs.Tabs[Body].Content.(*body)
-	bd.SetForm(formData.Body.IsForm())
+	bd.SetType(formData.Body.Type)
 	bd.SetValue(formData.Body.Raw)
 
 	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
@@ -546,6 +556,10 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			model, cmd = rp.Server.Update(msg)
 			rp.Server, _ = model.(components.Selector)
 		case uri:
+			// An open completion menu owns tab/esc/arrows.
+			if k, ok := msg.(tea.KeyPressMsg); ok && rp.URI.Completing() && menuKey(k) {
+				consumed = true
+			}
 			model, cmd = rp.URI.Update(msg)
 			rp.URI, _ = model.(components.Field)
 		case send:
@@ -671,4 +685,13 @@ func (rp RequestPane) autosave(cmd tea.Cmd) (tea.Model, tea.Cmd) {
 func isKey(msg tea.Msg) bool {
 	_, ok := msg.(tea.KeyPressMsg)
 	return ok
+}
+
+// menuKey reports whether a key drives an open completion menu.
+func menuKey(k tea.KeyPressMsg) bool {
+	switch k.String() {
+	case "tab", "enter", "esc", "up", "down", "ctrl+n", "ctrl+p":
+		return true
+	}
+	return false
 }

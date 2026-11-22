@@ -67,6 +67,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// Completing forwards the content's completion state (see tabs).
+func (m Model) Completing() bool {
+	c, ok := m.Content.(interface{ Completing() bool })
+	return ok && c.Completing()
+}
+
 func (m Model) IsActive() bool {
 	if a, ok := m.Content.(interface{ IsActive() bool }); ok {
 		return a.IsActive()

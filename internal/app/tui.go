@@ -132,7 +132,7 @@ func NewTui(defaultFile string, envFile string) Tui {
 	}
 
 	tui.templates = &templateSource{store: tui.envStore}
-	components.TemplateNames = tui.templates.names
+	components.TemplateSource = tui.templates
 
 	tui.editor = editor.New(tui.currentRequest)
 	tui.editor.SetEnvStore(tui.envStore)

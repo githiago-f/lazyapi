@@ -331,3 +331,71 @@ paths:
 		t.Fatal("the form was not sent")
 	}
 }
+
+func TestTUI_CompletionAndCodeEditor(t *testing.T) {
+	got := make(chan string, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- r.URL.RequestURI()
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "api.yml")
+	if err := os.WriteFile(spec, []byte(fmt.Sprintf(`openapi: 3.0.0
+info: {title: API, version: "1"}
+servers: [{url: %s}]
+paths:
+  /items:
+    post:
+      operationId: createItem
+      requestBody:
+        content:
+          application/json:
+            example: {name: a}
+      responses: {"200": {description: ok}}
+`, srv.URL)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=abc123\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "lazyapi.config.yml"), []byte("default: dev\nenvironments:\n  dev:\n    env: .env\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm := start(t, spec)
+	waitFor(t, tm, "/items")
+	tm.Send(press("enter"))
+	waitFor(t, tm, "No response yet")
+
+	// URI: "$TO" opens the variable menu; tab inserts {{env.TOKEN}}.
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnd})
+	tm.Type("?t=$TO")
+	waitFor(t, tm, "env.TOKEN", "tab accept")
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModAlt})
+	select {
+	case uri := <-got:
+		if uri != "/items?t=abc123" {
+			t.Errorf("sent %q", uri)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("request not sent")
+	}
+
+	// Body: the JSON editor flags invalid JSON in its status line. The
+	// response took the focus: tab ×5 wraps around to the request tabs.
+	waitFor(t, tm, "200")
+	for i := 0; i < 5; i++ {
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	}
+	for i := 0; i < 4; i++ {
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyRight})
+	}
+	tm.Send(press("enter"))
+	waitFor(t, tm, "JSON", "✓ valid")
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl})
+	tm.Type(",")
+	waitFor(t, tm, "✗ invalid")
+}
