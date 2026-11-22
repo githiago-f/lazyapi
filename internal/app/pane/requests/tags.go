@@ -53,9 +53,9 @@ func (to TagsOverlay) Init() tea.Cmd {
 var (
 	tagChip    = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface1)).Foreground(lipgloss.Color(config.Text)).Padding(0, 1)
 	tagDel     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red)).SetString(" ×")
-	tagSelChip = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface2)).Foreground(lipgloss.Color(config.Peach)).Padding(0, 1)
+	tagSelChip = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface2)).Foreground(lipgloss.Color(config.Accent)).Padding(0, 1)
 	tagSelDel  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red)).Bold(true).SetString(" ×")
-	tagBox     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Peach)).Padding(1, 2)
+	tagBox     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Accent)).Padding(1, 2)
 	tagHint    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0))
 )
 

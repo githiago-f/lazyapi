@@ -113,12 +113,6 @@ func methodLabels() []string {
 	return labels
 }
 
-var defaultBtnStyle = lipgloss.NewStyle().
-	Bold(true).
-	Padding(0, 2).
-	Border(lipgloss.InnerHalfBlockBorder()).
-	Foreground(lipgloss.Color(config.Crust))
-
 func New(request *model.Request) *RequestPane {
 	docs := DocumentationTab()
 	params := ParamsTab()
@@ -142,11 +136,9 @@ func New(request *model.Request) *RequestPane {
 			Width: 45,
 		},
 		Send: components.Button{
-			Label:  "Send",
-			Active: true,
-			Style: defaultBtnStyle.
-				Background(lipgloss.Color(config.Flamingo)).
-				BorderForeground(lipgloss.Color(config.Flamingo)),
+			Label:     "▶ Send",
+			BusyLabel: "◌ Sending",
+			Active:    true,
 		},
 
 		RequestTabs: tabs.New(
@@ -169,7 +161,6 @@ func (rp RequestPane) View() tea.View {
 	rp.Method.Style = rp.Method.Style.UnsetBorderForeground()
 	rp.Server.Style = rp.Server.Style.UnsetBorderForeground()
 	rp.URI.Style = rp.URI.Style.UnsetBorderForeground()
-	rp.Send.Style = rp.Send.Style.UnsetBorderForeground()
 	rp.RequestTabs.Style = rp.RequestTabs.Style.UnsetBorderForeground()
 	respStyle := rp.respStyle
 
@@ -180,13 +171,18 @@ func (rp RequestPane) View() tea.View {
 		rp.Server.Style = rp.Server.Style.BorderForeground(activeColor)
 	case uri:
 		rp.URI.Style = rp.URI.Style.BorderForeground(activeColor)
-	case send:
-		rp.Send.Style = rp.Send.Style.BorderForeground(activeColor).Background(activeColor)
 	case reqTabs:
 		rp.RequestTabs.Style = rp.RequestTabs.Style.BorderForeground(activeColor)
 	case response:
 		respStyle = respStyle.BorderForeground(activeColor)
 	}
+
+	// The method reads in its list color; the button is highlighted only
+	// while it has the focus, and dims while a request is in flight.
+	rp.Method.Style = rp.Method.Style.Bold(true).Foreground(lipgloss.Color(config.MethodColor(rp.Method.Value())))
+	rp.Server.Style = rp.Server.Style.Foreground(lipgloss.Color(config.Subtext0))
+	rp.Send.Focused = field(rp.fieldsCursor) == send
+	rp.Send.Busy = rp.Response.Sending()
 
 	requestURL := lipgloss.JoinHorizontal(
 		lipgloss.Left,

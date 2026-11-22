@@ -107,11 +107,11 @@ func (s Selector) dropDownHeight() int {
 
 var dropDownBox = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
-	BorderForeground(lipgloss.Color(config.Peach))
+	BorderForeground(lipgloss.Color(config.Accent))
 
 var (
 	dropDownSel = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(config.Peach)).
+			Foreground(lipgloss.Color(config.Accent)).
 			Padding(0, 1)
 	dropDownUnsel = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(config.Text)).

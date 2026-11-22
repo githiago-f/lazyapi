@@ -227,4 +227,4 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - No external CLI framework — ad-hoc `os.Args`.
 - No database — everything file-based.
 - Tab/Shift+Tab within tab content wraps cyclically (last → first, first → last). No exit via Tab; Esc blurs then exits.
-- `lipgloss` for all styling; Catppuccin Mocha palette in `config/config.go`.
+- `lipgloss` for all styling; Catppuccin Mocha palette in `config/config.go`. Use the semantic colors in `config/theme.go`: `Accent` (Mauve) is the only focus/selection color (borders, active tab, menus, focused button), `Brand` (Peach) the logo and titles, `Border` idle borders, `MethodColor` for HTTP methods. Highlight only what has the focus (e.g. `Button.Focused`, set by the parent each frame).

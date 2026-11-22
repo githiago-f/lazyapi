@@ -11,34 +11,69 @@ import (
 
 type ButtonClickedMsg struct{}
 
+// Button is a bordered action button. It is drawn like the fields around
+// it while idle, filled with the accent while focused, flashes green when
+// pressed and dims while Busy.
 type Button struct {
 	Label  string
-	Active bool
+	Active bool // false: disabled
+	// Focused draws the focus highlight (the parent sets it).
+	Focused bool
+	// Busy replaces the label (e.g. "Sending") and dims the button.
+	Busy      bool
+	BusyLabel string
 
 	Clicked bool
 
+	// Style adds to the base style (e.g. a width).
 	Style  lipgloss.Style
 	zoneID string
 }
+
+var buttonBase = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color(config.Border)).
+	Padding(0, 2).
+	Bold(true).
+	Foreground(lipgloss.Color(config.Go))
 
 func (b Button) Init() tea.Cmd {
 	return nil
 }
 
-func (b Button) View() tea.View {
-	var v string
+// style is the button's look for its current state. States are applied on
+// top of the base (lipgloss Inherit drops padding).
+func (b Button) style() lipgloss.Style {
+	st := buttonBase
+	if w := b.Style.GetWidth(); w > 0 {
+		st = st.Width(w)
+	}
 	switch {
-	case !b.Active:
-		v = b.Style.
-			Background(lipgloss.Color(config.Overlay1)).
-			Render(b.Label)
-	default:
-		v = b.Style.Render(b.Label)
+	case b.Clicked:
+		return st.BorderForeground(lipgloss.Color(config.Go)).
+			Background(lipgloss.Color(config.Go)).Foreground(lipgloss.Color(config.OnAccent))
+	case !b.Active || b.Busy:
+		st = st.Foreground(lipgloss.Color(config.Overlay0))
+		if b.Focused {
+			st = st.BorderForeground(lipgloss.Color(config.Accent))
+		}
+		return st
+	case b.Focused:
+		return st.BorderForeground(lipgloss.Color(config.Accent)).
+			Background(lipgloss.Color(config.Accent)).Foreground(lipgloss.Color(config.OnAccent))
+	}
+	return st
+}
+
+func (b Button) View() tea.View {
+	label := b.Label
+	if b.Busy && b.BusyLabel != "" {
+		label = b.BusyLabel
 	}
 	if b.zoneID == "" {
 		b.zoneID = "btn-" + b.Label
 	}
-	return tea.NewView(Z.Mark(b.zoneID, v))
+	return tea.NewView(Z.Mark(b.zoneID, b.style().Render(label)))
 }
 
 func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -47,14 +82,14 @@ func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		b.Clicked = false
 	case tea.KeyPressMsg:
 		switch {
-		case key.Matches(msg, config.DefaultKeyMap.Select) && b.Active:
+		case key.Matches(msg, config.DefaultKeyMap.Select) && b.Active && !b.Busy:
 			b.Clicked = true
 			return b, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
 				return ButtonClickedMsg{}
 			})
 		}
 	case tea.MouseClickMsg:
-		if msg.Button != tea.MouseLeft || !b.Active {
+		if msg.Button != tea.MouseLeft || !b.Active || b.Busy {
 			break
 		}
 		if b.zoneID == "" {
