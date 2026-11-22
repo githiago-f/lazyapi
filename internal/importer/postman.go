@@ -10,6 +10,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/project"
 )
 
 // Extras are side outputs of an import besides operations.
@@ -118,6 +121,14 @@ var pmVar = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}`)
 // a LazyAPI test script that uses the `pm` compatibility layer, and
 // {{variables}} become {{env.variables}} (values go to .env.postman).
 func ParsePostman(data []byte) ([]Request, Extras, error) {
+	return ParsePostmanWith(data, nil)
+}
+
+// ParsePostmanWith is ParsePostman with an environment's values available
+// to resolve {{variables}} in request hosts (e.g. {{baseUrl}} defined only
+// in the environment). Environment values win over collection variables;
+// they are not added to Extras.Variables.
+func ParsePostmanWith(data []byte, environment map[string]string) ([]Request, Extras, error) {
 	var c pmCollection
 	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, Extras{}, fmt.Errorf("not a Postman collection: %w", err)
@@ -130,6 +141,14 @@ func ParsePostman(data []byte) ([]Request, Extras, error) {
 		if !v.Disabled && v.Key != "" {
 			extras.Variables[v.Key] = v.value()
 		}
+	}
+
+	resolve := map[string]string{}
+	for k, v := range extras.Variables {
+		resolve[k] = v
+	}
+	for k, v := range environment {
+		resolve[k] = v
 	}
 
 	var out []Request
@@ -146,7 +165,7 @@ func ParsePostman(data []byte) ([]Request, Extras, error) {
 				walk(it.Item, append(append([]string{}, tags...), it.Name), itemAuth, itemPre, itemTests)
 				continue
 			}
-			r, err := postmanRequest(it, itemAuth, extras.Variables)
+			r, err := postmanRequest(it, itemAuth, resolve)
 			if err != nil {
 				continue
 			}
@@ -414,13 +433,15 @@ func WriteExtras(specPath string, x Extras, res *Result) error {
 	res.Files = append(res.Files, envPath)
 	res.note("collection variables written to %s; add it to .gitignore", envPath)
 
-	cfgPath := filepath.Join(dir, "lazyapi.config.yml")
+	cfgPath := filepath.Join(dir, project.FileName)
 	if _, err := os.Stat(cfgPath); err == nil {
 		res.note("use them with: --env %s (lazyapi.config.yml exists and was not changed)", envPath)
+		for _, scheme := range sortedAuth(res.Auth) {
+			res.note("add auth.%s to your environment to authenticate: %s", scheme, authHint(res.Auth[scheme]))
+		}
 		return nil
 	}
-	cfg := "# Created by lazyapi import postman.\nenvironments:\n  postman:\n    env: .env.postman\n"
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+	if _, err := project.AddEnvironment(cfgPath, "postman", project.Environment{Env: ".env.postman", Auth: res.Auth}); err != nil {
 		return err
 	}
 	res.Files = append(res.Files, cfgPath)
@@ -435,4 +456,15 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// authHint shows the config lines for credentials that are references.
+func authHint(a model.AuthSecrets) string {
+	var parts []string
+	for _, kv := range [][2]string{{"token", a.Token}, {"username", a.Username}, {"password", a.Password}, {"value", a.Value}} {
+		if kv[1] != "" {
+			parts = append(parts, fmt.Sprintf("%s: %q", kv[0], kv[1]))
+		}
+	}
+	return strings.Join(parts, ", ")
 }

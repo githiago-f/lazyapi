@@ -178,3 +178,60 @@ func TestImportCurlAndHAR(t *testing.T) {
 		t.Errorf("unknown source: %v", err)
 	}
 }
+
+func TestImport_PostmanWithEnvironmentRuns(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":1}]`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	coll := filepath.Join(dir, "shop.postman_collection.json")
+	envJSON := filepath.Join(dir, "staging.postman_environment.json")
+	spec := filepath.Join(dir, "api.yml")
+	writeFile(t, coll, `{"info":{"name":"Shop","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+"auth":{"type":"bearer","bearer":[{"key":"token","value":"{{token}}"}]},
+"item":[{"name":"List users","request":{"method":"GET","url":"{{baseUrl}}/users"}}]}`)
+	writeFile(t, envJSON, fmt.Sprintf(`{"name":"Staging","_postman_variable_scope":"environment","values":[
+{"key":"baseUrl","value":%q,"enabled":true},{"key":"token","value":"tok-123","type":"secret","enabled":true}]}`, srv.URL))
+
+	if _, err := captureStdout(t, func() error {
+		return Import([]string{"postman", coll, "--environment", envJSON, "--into", spec})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{spec, filepath.Join(dir, "lazyapi.config.yml")} {
+		if data, _ := os.ReadFile(f); strings.Contains(string(data), "tok-123") {
+			t.Errorf("%s contains the secret:\n%s", f, data)
+		}
+	}
+	out, err := captureStdout(t, func() error {
+		return RunTests([]string{spec, "--env-name", "staging"})
+	})
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, out)
+	}
+	if gotAuth != "Bearer tok-123" {
+		t.Errorf("Authorization = %q\n%s", gotAuth, out)
+	}
+
+	// postman-env alone adds another environment next to it.
+	writeFile(t, envJSON, `{"name":"Prod","values":[{"key":"baseUrl","value":"https://api.example.com","enabled":true}]}`)
+	if _, err := captureStdout(t, func() error { return Import([]string{"postman-env", envJSON, "--into", spec}) }); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := os.ReadFile(filepath.Join(dir, "lazyapi.config.yml"))
+	if !strings.Contains(string(cfg), "prod:") || !strings.Contains(string(cfg), "staging:") {
+		t.Errorf("config:\n%s", cfg)
+	}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
