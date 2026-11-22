@@ -454,6 +454,7 @@ func (rp RequestPane) HelpBindings() []key.Binding {
 
 	return append(bindings,
 		config.DefaultKeyMap.Next,
+		config.DefaultKeyMap.CopyCurl,
 		config.DefaultKeyMap.Save,
 		config.DefaultKeyMap.SaveExample,
 		config.DefaultKeyMap.Back,
