@@ -10,6 +10,7 @@ import (
 	"net/http/httptrace"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/githiago-f/lazyapi/internal/env"
@@ -108,7 +109,6 @@ func (r *Request) SendContext(parent context.Context) (*http.Response, string, e
 
 // SendTimed is SendContext plus a breakdown of where the time went.
 func (r *Request) SendTimed(parent context.Context) (*http.Response, string, Timing, error) {
-	var timing Timing
 	timeout := r.Timeout
 	if timeout <= 0 {
 		timeout = DefaultTimeout
@@ -116,31 +116,42 @@ func (r *Request) SendTimed(parent context.Context) (*http.Response, string, Tim
 	reqCtx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	var dnsStart, connStart, tlsStart, wrote time.Time
+	// The trace callbacks may run on transport goroutines, even after Do
+	// returned (a dial still in progress when the request is cancelled), so
+	// every access goes through mu and the result is a copy.
+	var (
+		mu                                   sync.Mutex
+		timing                               Timing
+		dnsStart, connStart, tlsStart, wrote time.Time
+	)
+	locked := func(f func()) { mu.Lock(); defer mu.Unlock(); f() }
+	snapshot := func() Timing { mu.Lock(); defer mu.Unlock(); return timing }
 	trace := &httptrace.ClientTrace{
-		DNSStart:          func(httptrace.DNSStartInfo) { dnsStart = time.Now() },
-		DNSDone:           func(httptrace.DNSDoneInfo) { timing.DNS = time.Since(dnsStart) },
-		ConnectStart:      func(string, string) { connStart = time.Now() },
-		ConnectDone:       func(string, string, error) { timing.Connect = time.Since(connStart) },
-		TLSHandshakeStart: func() { tlsStart = time.Now() },
-		TLSHandshakeDone:  func(tls.ConnectionState, error) { timing.TLS = time.Since(tlsStart) },
-		GotConn:           func(info httptrace.GotConnInfo) { timing.Reused = info.Reused },
-		WroteRequest:      func(httptrace.WroteRequestInfo) { wrote = time.Now() },
+		DNSStart:          func(httptrace.DNSStartInfo) { locked(func() { dnsStart = time.Now() }) },
+		DNSDone:           func(httptrace.DNSDoneInfo) { locked(func() { timing.DNS = time.Since(dnsStart) }) },
+		ConnectStart:      func(string, string) { locked(func() { connStart = time.Now() }) },
+		ConnectDone:       func(string, string, error) { locked(func() { timing.Connect = time.Since(connStart) }) },
+		TLSHandshakeStart: func() { locked(func() { tlsStart = time.Now() }) },
+		TLSHandshakeDone:  func(tls.ConnectionState, error) { locked(func() { timing.TLS = time.Since(tlsStart) }) },
+		GotConn:           func(info httptrace.GotConnInfo) { locked(func() { timing.Reused = info.Reused }) },
+		WroteRequest:      func(httptrace.WroteRequestInfo) { locked(func() { wrote = time.Now() }) },
 		GotFirstResponseByte: func() {
-			if !wrote.IsZero() {
-				timing.TTFB = time.Since(wrote)
-			}
+			locked(func() {
+				if !wrote.IsZero() {
+					timing.TTFB = time.Since(wrote)
+				}
+			})
 		},
 	}
 	start := time.Now()
 	req, err := r.HTTPRequest(httptrace.WithClientTrace(reqCtx, trace))
 	if err != nil {
-		return nil, "", timing, err
+		return nil, "", snapshot(), err
 	}
 
 	response, err := r.client().Do(req)
 	if err != nil {
-		return nil, "", timing, err
+		return nil, "", snapshot(), err
 	}
 	defer func() { _ = response.Body.Close() }()
 
@@ -149,14 +160,14 @@ func (r *Request) SendTimed(parent context.Context) (*http.Response, string, Tim
 		limit = DefaultMaxBody
 	}
 	bodyBytes, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
-	timing.Total = time.Since(start)
+	locked(func() { timing.Total = time.Since(start) })
 	if err != nil {
-		return nil, "", timing, err
+		return nil, "", snapshot(), err
 	}
 	if int64(len(bodyBytes)) > limit {
-		return nil, "", timing, fmt.Errorf("response body is larger than %d bytes (raise it with --max-body)", limit)
+		return nil, "", snapshot(), fmt.Errorf("response body is larger than %d bytes (raise it with --max-body)", limit)
 	}
-	return response, string(bodyBytes), timing, nil
+	return response, string(bodyBytes), snapshot(), nil
 }
 
 // HTTPRequest builds the *http.Request that SendContext would send:
