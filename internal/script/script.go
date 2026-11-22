@@ -105,13 +105,17 @@ type Result struct {
 	Results     []TestResult `json:"results"`
 	Logs        []LogEntry   `json:"logs,omitempty"`
 	ScriptError string       `json:"error,omitempty"`
-	PassCount   int          `json:"passed"`
+	// AfterError is set when the exported after(res) hook threw.
+	AfterError string `json:"afterError,omitempty"`
+	// AfterRan reports whether the script exported after() and it was called.
+	AfterRan  bool `json:"afterRan,omitempty"`
+	PassCount int  `json:"passed"`
 	FailCount   int          `json:"failed"`
 }
 
 // Failed reports whether any test failed or the script errored.
 func (r Result) Failed() bool {
-	return r.FailCount > 0 || r.ScriptError != ""
+	return r.FailCount > 0 || r.ScriptError != "" || r.AfterError != ""
 }
 
 // Run bundles and executes source, returning the collected test results.
@@ -133,10 +137,33 @@ func execute(code string, data ExecData, opts Options) (result Result) {
 		return finish(result)
 	}
 	defer stop()
-	if _, err := vm.RunScript(scriptName(opts), code); err != nil {
+	_, err = vm.RunScript(scriptName(opts), code)
+	if err != nil {
 		result.ScriptError = jsError(err)
 	}
+	// after(res) runs even when tests failed or the top level threw: it is
+	// for cleanup. Not after a timeout (the VM is interrupted).
+	var intr *goja.InterruptedError
+	if !errors.As(err, &intr) {
+		runAfter(vm, &result)
+	}
 	return finish(result)
+}
+
+// runAfter calls the module's exported after(res), if any.
+func runAfter(vm *goja.Runtime, result *Result) {
+	exports := vm.Get("__lazyapi_module").ToObject(vm).Get("exports")
+	if exports == nil || goja.IsUndefined(exports) || goja.IsNull(exports) {
+		return
+	}
+	fn, ok := goja.AssertFunction(exports.ToObject(vm).Get("after"))
+	if !ok {
+		return
+	}
+	result.AfterRan = true
+	if _, err := fn(goja.Undefined(), vm.Get("response")); err != nil {
+		result.AfterError = "after(): " + jsError(err)
+	}
 }
 
 // newRuntime creates a VM with the bridge, the prelude and the module

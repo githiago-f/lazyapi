@@ -17,6 +17,14 @@
 //
 // The rest of the file (top level and test() calls) runs after the response.
 //
+// A script may also export after(res), called once the tests are done, even
+// when they failed or the top level threw. Use it to clean up what the
+// request created (it runs once per script run; res is null in flows):
+//
+//   export function after(res: LazyResponse | null): void {
+//     lazyapi.send("deleteUser", { params: { id: String(res.json().id) } });
+//   }
+//
 // Flows (flows/*.js next to the spec) are scripts without an implicit
 // request: they call lazyapi.send() in order and assert with test(). Every
 // call made by a flow is checked against the spec automatically.

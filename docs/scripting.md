@@ -67,6 +67,26 @@ test("authorized", () => expect(response).toHaveStatus(200));
 - If `before` throws, the request is **not sent** and the failure is reported as a `script` check.
 - The request check and the request that is sent both use the request as `before` left it.
 
+
+## Cleaning up: `after(res)`
+
+A script can export `after`, which runs once the tests are done: after the top level and every `test()`, **even when tests failed or the top level threw**. Use it to remove what the request created, so a run against a real API can be repeated:
+
+```js
+test("creates the user", () => expect(response).toHaveStatus(201));
+
+export function after(res) {
+  if (res.status === 201) {
+    lazyapi.send("deleteUser", { params: { id: String(res.json().id) } });
+  }
+}
+```
+
+- `res` is the same object as `response` (`null` in flows, which have no implicit request).
+- `after` has the full API: `lazyapi.send()`, `vars`, `console`, and `test()` (tests inside it count like any other).
+- When it ran, the result has a `script` check **after() ran without errors**; if it throws, that check fails with the error. Requests sent from `after` in a flow are listed as flow steps and checked against the spec like the others.
+- It does not run when the request could not be sent (nothing was created), when `before()` threw, or after a script timeout.
+
 ## Flows
 
 A flow is a scenario across operations: `flows/<name>.js` next to the spec. There is no implicit request or response: the flow calls `lazyapi.send()` in order and asserts with `test()`.

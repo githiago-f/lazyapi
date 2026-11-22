@@ -115,6 +115,7 @@ func RunFlow(ctx context.Context, spec *openapi3.T, specPath, flowPath string, o
 	if sr.ScriptError != "" {
 		res.Checks = append(res.Checks, Check{Kind: CheckScript, Name: "flow ran without errors", Message: sr.ScriptError})
 	}
+	res.Checks = append(res.Checks, afterChecks(sr)...)
 	res.Logs = sr.Logs
 	res.TestsFile = res.Path
 	if len(res.Checks) == 0 {
