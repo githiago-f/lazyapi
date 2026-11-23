@@ -162,7 +162,7 @@ Or download a release binary, or build from source with `go build -o lazyapi ./c
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions and the pull request checklist. [AGENTS.md](AGENTS.md) describes the architecture for coding agents. The roadmap is in [TODO.md](TODO.md).
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions and the pull request checklist. [AGENTS.md](AGENTS.md) describes the architecture for coding agents. The roadmap is in the [issues](https://github.com/githiago-f/lazyapi/issues).
 
 ```bash
 go test ./...        # includes the examples against the mock
