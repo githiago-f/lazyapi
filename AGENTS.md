@@ -54,6 +54,7 @@ internal/
   project/                 # lazyapi.config.yml: named environments (server, env file, vars, auth secrets), Find/Select/Resolve
   history/                 # TUI request history per spec (user cache dir, jsonl, 0600): no env/auth secrets, sensitive headers/query redacted, body templates kept; Replay
   diff/                    # Line diff (LCS with prefix/suffix trimming), hunks with folded context
+  fake/                    # {{$name}} built-ins (Postman names) over gofakeit: Value, Vars, JSName (faker.* in scripts), Seed
   jq/                      # gojq wrapper: Apply(filter, body) with timeout, Check(filter)
   importer/                # curl / Postman (+ environments: WriteEnvironment → .env.<name> + project.AddEnvironment) / HAR → spec operations (Apply: path templating, inferred schemas, security, tests); pmtranslate.go: Postman scripts → native API (Chai chains → expect), TODO(postman) for the rest
   mock/                    # Mock server: routes spec paths, answers with examples or SchemaSample, validates requests (422), Prefer: code=/example=
@@ -62,6 +63,7 @@ internal/
     prelude.js             #   JS side of the API: test, expect matchers, console, LazyResponse
     bundle.go              #   Bundle() — CommonJS wrapped in (function(module, exports){...}) so exports exist before the body; esbuild plugin: https imports, local imports confined to Root, bare imports rejected
     modules.go             #   ModuleLoader — https fetch, disk cache, lazyapi.lock integrity, Offline/Reload/Frozen/AllowedHosts
+    helpers.go             #   HelperNames — exported functions of a script (completions for {{$name}})
     spec.go                #   SpecContext (lazyapi.send + contract; "METHOD https://…" targets mapped with store.MatchPath and sent to that host), ResolveTarget, OperationOptions
     lazyapi.d.ts           #   Public script API (embedded; printed by `lazyapi types`)
   components/              # Reusable UI components
@@ -153,6 +155,7 @@ internal/
 - **Execution** — all checks live in `internal/runner`: request (`store.ValidateRequest` on `Request.HTTPRequest`, does not block sending) → status declared → contract (`store.ValidateResponse`) → script. `--no-contract` skips request + contract. CLI and MCP only render `runner.Report`/`OpResult`. Never print from runner.
 - **Exit codes** — 0 ok, 1 a check failed, 2 usage, 3 could not run (errors win over failures). Return `*cli.ExitError` (`usageErr`, `runtimeErr`) instead of plain errors from commands.
 - **before(req)** — `script.Before` evaluates the module once with side effects suppressed (test/console/vars/send are no-ops, top-level errors swallowed), then calls the exported `before` with the full API. The runner applies it before the request check and the send; if it throws, the request is not sent (failed `script` check).
+- **Dynamic values** — `{{$name}}` (env.DynamicRefs/ResolveDynamic, `Request.WithDynamic`) is materialized once per send, a new value per occurrence, before before(req): `script.Before` uses the script's exported functions first, then `fake`; without a script the runner uses `script.Dynamic`; `SpecContext.Send` too. Unknown names fail the operation (request check). Never resolve `{{$…}}` in `env.Resolve` (values would differ between report and wire).
 - **after(res)** — `script.Run` calls the exported `after` with `response` once the top level finished (also when tests failed or it threw; not after a timeout). `Result.AfterRan/AfterError` → `runner.afterChecks` adds a `script` check "after() ran without errors". `Before` never calls it.
 - **Data-driven** — `Options.Data` (`runner.LoadData` for CSV/JSON): `Run` calls `runOnce` per row with the row merged into a copy of Env; results get `Iteration` (labels `[#n]`), scripts get `lazyapi.iteration` via `ExecData.Iteration` (threaded through `ExchangeInput`).
 - **Flows** — `run --flow f.js` (only flows) or `--flows` (operations, then `flows/*.js`); MCP `run_flow`/`write_flow`. Results have `kind: "flow"` and `steps`.

@@ -99,3 +99,26 @@ func TestRun_IgnoresBeforeExport(t *testing.T) {
 test("ok", () => expect(response.status).toBe(200));`
 	mustPass(t, Run(src, baseData(), Options{}))
 }
+
+func TestHelperNames(t *testing.T) {
+	src := "export function before(req) {}\nexport function randomSku() { return 1 }\nexport const code = () => 2;\n  export async function later() {}\nfunction hidden() {}\nexport function after() {}"
+	if got := strings.Join(HelperNames(src), ","); got != "code,later,randomSku" {
+		t.Errorf("HelperNames = %s", got)
+	}
+}
+
+func TestBefore_DynamicValues(t *testing.T) {
+	data := baseData()
+	data.Request.Headers = map[string]string{"X-Id": "{{$guid}}", "X-Sku": "{{$sku}}"}
+	src := "export function sku() { return { a: 1 } }\nexport function before(req) { req.headers['X-Seen'] = req.headers['X-Sku']; }"
+	res := Before(src, data, Options{})
+	h := res.Request.Headers
+	if res.Error != "" || len(h["X-Id"]) != 36 || h["X-Sku"] != `{"a":1}` || h["X-Seen"] != h["X-Sku"] {
+		t.Fatalf("Before = %+v", res)
+	}
+	data.Request.Headers = map[string]string{"X": "{{$boom}}"}
+	res = Before("export function boom() { throw new Error('no') }", data, Options{})
+	if !res.Dynamic || !strings.Contains(res.Error, "{{$boom}}: boom(): Error: no") {
+		t.Errorf("throwing helper: %+v", res)
+	}
+}

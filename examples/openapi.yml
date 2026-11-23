@@ -165,7 +165,7 @@ paths:
                     application/json:
                         example:
                             email: carla@example.com
-                            name: Carla Dias
+                            name: '{{$displayName}}'
                         schema:
                             $ref: '#/components/schemas/NewUser'
                 required: true

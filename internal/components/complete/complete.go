@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/githiago-f/lazyapi/internal/fake"
 )
 
 // Item is one completion.
@@ -27,8 +29,18 @@ type Result struct {
 
 // Var is a template variable that can be completed.
 type Var struct {
-	Ref   string // "env.TOKEN" or "var.userId"
+	Ref   string // "env.TOKEN", "var.userId" or "$randomEmail"
 	Value string
+	// Detail replaces the (masked) value in the menu, e.g. the description
+	// of a dynamic variable.
+	Detail string
+}
+
+func varDetail(v Var) string {
+	if v.Detail != "" {
+		return v.Detail
+	}
+	return Mask(v.Ref, v.Value)
 }
 
 var sensitive = regexp.MustCompile(`(?i)(token|secret|pass|key|auth|cookie|credential|private)`)
@@ -67,7 +79,7 @@ func Templates(text []rune, cursor int, vars []Var) (Result, bool) {
 			end += 2 // auto-closed braces are replaced too
 		}
 		items := rank(vars, strings.TrimSpace(typed), func(v Var) Item {
-			return Item{Label: v.Ref, Insert: "{{" + v.Ref + "}}", Detail: Mask(v.Ref, v.Value)}
+			return Item{Label: v.Ref, Insert: "{{" + v.Ref + "}}", Detail: varDetail(v)}
 		})
 		return Result{Start: start, End: end, Items: items}, len(items) > 0
 	}
@@ -82,7 +94,7 @@ func Templates(text []rune, cursor int, vars []Var) (Result, bool) {
 	}
 	typed := string(text[i:cursor])
 	items := rank(vars, typed, func(v Var) Item {
-		return Item{Label: v.Ref, Insert: "{{" + v.Ref + "}}", Detail: Mask(v.Ref, v.Value)}
+		return Item{Label: v.Ref, Insert: "{{" + v.Ref + "}}", Detail: varDetail(v)}
 	})
 	return Result{Start: i - 1, End: cursor, Items: items}, len(items) > 0
 }
@@ -99,7 +111,12 @@ func rank(vars []Var, typed string, item func(Var) Item) []Item {
 	for _, v := range vars {
 		ref := strings.ToLower(v.Ref)
 		_, name, _ := strings.Cut(ref, ".")
+		if strings.HasPrefix(ref, "$") {
+			name = ref[1:]
+		}
 		switch {
+		case typed == "" && strings.HasPrefix(ref, "$"):
+			hits = append(hits, scored{v, 2}) // dynamic variables after env/var
 		case typed == "":
 			hits = append(hits, scored{v, 1})
 		case strings.HasPrefix(ref, typed), strings.HasPrefix(name, typed):
@@ -131,6 +148,14 @@ func (m member) item() Item {
 	return Item{Label: m.name, Insert: m.name, Detail: m.detail}
 }
 
+func init() {
+	f := []member{{"int()", "(min, max) → integer"}, {"float()", "(min, max) → number"}, {"pick()", "(list) → element"}, {"get()", "(\"randomEmail\") → string"}}
+	for _, v := range fake.Vars() {
+		f = append(f, member{fake.JSName(v.Name) + "()", v.Description})
+	}
+	api["faker"] = f
+}
+
 var api = map[string][]member{
 	"response": {{"status", "number"}, {"statusText", "string"}, {"headers", "Record<string,string>"}, {"body", "string"},
 		{"time", "ms"}, {"json()", "parsed body"}, {"text()", "string"}, {"header()", "header value"}},
@@ -153,7 +178,7 @@ var matchers = []member{
 
 var globals = []member{
 	{"test()", "(name, fn)"}, {"expect()", "(actual)"}, {"response", "the response"}, {"request", "the request"},
-	{"env", "environment"}, {"vars", "run variables"}, {"lazyapi", "send, iteration"}, {"console", "log"},
+	{"env", "environment"}, {"vars", "run variables"}, {"lazyapi", "send, iteration"}, {"faker", "fake data"}, {"console", "log"},
 }
 
 // Script completes the script API after "object." and "expect(…).", and
@@ -286,6 +311,10 @@ var signatures = map[string]string{
 	"response.header":        "response.header(name: string) → string | undefined",
 	"request.json":           "request.json<T>() → T",
 	"console.log":            "console.log(...values)",
+	"faker.int":              "faker.int(min = 0, max = 1000) → number",
+	"faker.float":            "faker.float(min = 0, max = 1) → number",
+	"faker.pick":             "faker.pick<T>(list: T[]) → T",
+	"faker.get":              "faker.get(name: string) → string — a {{$name}} built-in",
 	"toBe":                   "toBe(expected) — strict equality (===)",
 	"toEqual":                "toEqual(expected) — deep equality",
 	"toContain":              "toContain(item) — substring or array element",

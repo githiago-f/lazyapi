@@ -146,7 +146,7 @@ func kindOf(t chroma.TokenType, v string) Kind {
 	return Plain
 }
 
-var template = regexp.MustCompile(`\{\{\s*(\w+)\.([^{}\s]+)\s*\}\}`)
+var template = regexp.MustCompile(`\{\{\s*(\$|\w+\.)([^{}\s]+)\s*\}\}`)
 
 // Resolver reports whether a template reference ("env.TOKEN") has a value.
 type Resolver func(ref string) bool
@@ -161,9 +161,9 @@ func MarkTemplates(lines []Line, resolve Resolver) {
 		for _, m := range template.FindAllStringSubmatchIndex(s, -1) {
 			// byte offsets → rune offsets
 			start, end := runeIndex(s, m[0]), runeIndex(s, m[1])
-			scopeEnd := runeIndex(s, m[3]) + 1 // include the dot
+			scopeEnd := runeIndex(s, m[3]) // "env." or "$"
 			nameStart, nameEnd := runeIndex(s, m[4]), runeIndex(s, m[5])
-			ok := resolve == nil || resolve(s[m[2]:m[3]]+"."+s[m[4]:m[5]])
+			ok := resolve == nil || resolve(s[m[2]:m[5]])
 			for j := start; j < end; j++ {
 				switch {
 				case j >= nameStart && j < nameEnd && ok:

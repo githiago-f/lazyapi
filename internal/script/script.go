@@ -19,6 +19,7 @@ import (
 	"github.com/dop251/goja"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/githiago-f/lazyapi/internal/env"
+	"github.com/githiago-f/lazyapi/internal/fake"
 	"github.com/githiago-f/lazyapi/internal/model"
 )
 
@@ -209,8 +210,55 @@ type BeforeResult struct {
 	// Request is the request after before() changed it.
 	Request model.Request
 	Logs    []LogEntry
-	// Error is set when the script does not compile or before() threw.
-	Error string
+	// Error is set when the script does not compile, before() threw or a
+	// {{$name}} could not be resolved (Dynamic is then true).
+	Error   string
+	Dynamic bool
+}
+
+// Dynamic resolves a built-in {{$name}} (the faker); it is the DynamicFunc
+// used when there is no script.
+func Dynamic(name string) (string, error) {
+	if v, ok := fake.Value(name); ok {
+		return v, nil
+	}
+	return "", unknownDynamic(name)
+}
+
+func unknownDynamic(name string) error {
+	return fmt.Errorf("unknown dynamic variable {{$%s}}: export function %s() from the test script, or use a built-in one (lazyapi fake)", name, name)
+}
+
+// helpers resolves {{$name}} with the function the module exports under
+// that name (called with no arguments, its result converted to text), or
+// with the faker.
+func helpers(vm *goja.Runtime, exports *goja.Object) env.DynamicFunc {
+	return func(name string) (string, error) {
+		if exports != nil && name != "before" && name != "after" {
+			if fn, ok := goja.AssertFunction(exports.Get(name)); ok {
+				v, err := fn(goja.Undefined())
+				if err != nil {
+					return "", fmt.Errorf("{{$%s}}: %s(): %s", name, name, jsError(err))
+				}
+				return jsText(vm, v), nil
+			}
+		}
+		return Dynamic(name)
+	}
+}
+
+// jsText converts a helper's result: strings as they are, objects as JSON,
+// null/undefined as "".
+func jsText(vm *goja.Runtime, v goja.Value) string {
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return ""
+	}
+	if obj, ok := v.(*goja.Object); ok && obj.ClassName() != "String" {
+		if data, err := json.Marshal(obj.Export()); err == nil {
+			return string(data)
+		}
+	}
+	return v.String()
 }
 
 // Before runs the `export function before(req)` hook of a test script, so it
@@ -247,10 +295,25 @@ func Before(source string, data ExecData, opts Options) BeforeResult {
 	b.evaluating = false
 
 	exports := vm.Get("__lazyapi_module").ToObject(vm).Get("exports")
-	if exports == nil || goja.IsUndefined(exports) || goja.IsNull(exports) {
+	var exp *goja.Object
+	if exports != nil && !goja.IsUndefined(exports) && !goja.IsNull(exports) {
+		exp = exports.ToObject(vm)
+	}
+
+	// {{$name}}: helpers exported by the script first, then the faker.
+	if len(data.Request.DynamicRefs()) > 0 {
+		req, err := data.Request.WithDynamic(helpers(vm, exp))
+		out.Logs = discard.Logs
+		if err != nil {
+			out.Error, out.Dynamic = err.Error(), true
+			return out
+		}
+		data.Request, out.Request = req, req
+	}
+	if exp == nil {
 		return out
 	}
-	fn, ok := goja.AssertFunction(exports.ToObject(vm).Get("before"))
+	fn, ok := goja.AssertFunction(exp.Get("before"))
 	if !ok {
 		return out
 	}
@@ -451,6 +514,12 @@ func (b *bridge) object() map[string]any {
 		"iterations":       max(1, b.data.Iterations),
 		"validateContract": b.validateContract,
 		"validateSchema":   validateSchema,
+		"fake": func(name string) (string, error) {
+			return Dynamic(name)
+		},
+		"fakeNames": fakeNames,
+		"fakeInt":   fake.Int,
+		"fakeFloat": fake.Float,
 	}
 	if b.data.Response != nil {
 		obj["response"] = b.responseData(b.data.Response)
@@ -458,6 +527,15 @@ func (b *bridge) object() map[string]any {
 		obj["response"] = nil
 	}
 	return obj
+}
+
+// fakeNames maps faker.* method names to the built-in variables.
+func fakeNames() map[string]string {
+	out := map[string]string{}
+	for _, v := range fake.Vars() {
+		out[fake.JSName(v.Name)] = v.Name
+	}
+	return out
 }
 
 func mapGet(vm *goja.Runtime, m map[string]string) func(string) goja.Value {

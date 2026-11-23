@@ -17,6 +17,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/components/complete"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
+	"github.com/githiago-f/lazyapi/internal/fake"
 	"github.com/githiago-f/lazyapi/internal/history"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/runner"
@@ -317,6 +318,9 @@ func (t Tui) replay(e history.Entry) (Tui, tea.Cmd) {
 type templateSource struct {
 	store *env.Store
 	vars  map[string]string
+	// helpers are the functions the editor's test script exports: they
+	// resolve {{$name}} like the built-in faker variables.
+	helpers []string
 }
 
 func (s *templateSource) Vars() []complete.Var {
@@ -327,10 +331,22 @@ func (s *templateSource) Vars() []complete.Var {
 	for k, v := range s.vars {
 		out = append(out, complete.Var{Ref: "var." + k, Value: v})
 	}
+	for _, h := range s.helpers {
+		out = append(out, complete.Var{Ref: "$" + h, Detail: "helper from the test script"})
+	}
+	for _, v := range fake.Vars() {
+		if !slices.Contains(s.helpers, v.Name) {
+			out = append(out, complete.Var{Ref: "$" + v.Name, Detail: v.Description})
+		}
+	}
 	return out
 }
 
 func (s *templateSource) Has(ref string) bool {
+	if name, ok := strings.CutPrefix(ref, "$"); ok {
+		_, builtin := fake.Value(name)
+		return builtin || slices.Contains(s.helpers, name)
+	}
 	scope, name, _ := strings.Cut(ref, ".")
 	switch scope {
 	case "env":
@@ -368,6 +384,12 @@ func (t Tui) missingRefs() []string {
 		inputs = append(inputs, a.Username, a.Password, a.Token, a.KeyValue, a.ClientID, a.ClientSecret, a.AccessToken)
 	}
 	missing := env.Missing(env.Context{Env: envMap, Vars: vars}, inputs...)
+	t.templates.helpers = script.HelperNames(req.Tests)
+	for _, name := range env.DynamicRefs(inputs...) {
+		if !t.templates.Has("$" + name) {
+			missing = append(missing, "$"+name)
+		}
+	}
 	sort.Strings(missing)
 	return missing
 }

@@ -29,6 +29,7 @@ MCP: `lazyapi mcp --root <dir>` exposes list_specs, list_operations, describe_op
 - [Environments & Auth](https://githiago-f.github.io/lazyapi/latest/environments): lazyapi.config.yml, credentials, OAuth2
 - [describe / validate](https://githiago-f.github.io/lazyapi/latest/cli/inspect)
 - Script API types: run `lazyapi types`
+- Fake data: {{$randomEmail}}, {{$guid}}, … in requests (new value per occurrence; `lazyapi fake` lists them), `faker.*` in scripts; a test script's exported functions are dynamic values too (`export function randomSku()` → {{$randomSku}}, overrides built-ins)
 
 ## Rules of thumb
 

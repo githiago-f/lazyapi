@@ -93,7 +93,7 @@ const removed = lazyapi.send("deleteUser", { params: { id: String(created.json()
 test("deleted", () => expect(removed).toHaveStatus(204));
 ```
 
-Scripts run in a sandbox with `request`, `response`, `env`, `vars`, `lazyapi.send`, `test`, `expect` (Jest-style matchers) and `console`. Run `lazyapi types` for the TypeScript definitions. Details: [docs/scripting.md](docs/scripting.md).
+Scripts run in a sandbox with `request`, `response`, `env`, `vars`, `lazyapi.send`, `faker`, `test`, `expect` (Jest-style matchers) and `console`. Requests can use fake data with `{{$randomEmail}}`, `{{$guid}}`, … (`lazyapi fake` lists them), and a script's exported functions become dynamic values too: `export function randomSku() { … }` → `{{$randomSku}}`. Run `lazyapi types` for the TypeScript definitions. Details: [docs/scripting.md](docs/scripting.md).
 
 ## CLI
 
@@ -111,6 +111,7 @@ lazyapi import postman shop.json --into api.yml   # also: curl '<command>', har 
 lazyapi send request api.yml --op getUser --output curl
 lazyapi send request api.yml --op upload --file avatar=./me.png --form caption=hi
 lazyapi types                                # script API (TypeScript definitions)
+lazyapi fake                                 # {{$dynamic}} variables (faker)
 ```
 
 TLS (`--insecure`, `--ca-cert`, mTLS), proxies, redirects and body limits can be set per run or per environment. Results include timing (DNS, connect, TLS, TTFB) and cookies.

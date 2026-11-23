@@ -95,6 +95,32 @@
     },
   };
 
+  // ------------------------------------------------------------------ faker
+  // faker.firstName() ↔ {{$randomFirstName}}, faker.uuid() ↔ {{$randomUUID}}, …
+  var faker = {
+    int: function (min, max) {
+      return native.fakeInt(min === undefined ? 0 : Math.floor(min), max === undefined ? 1000 : Math.floor(max));
+    },
+    float: function (min, max) {
+      return native.fakeFloat(min === undefined ? 0 : +min, max === undefined ? 1 : +max);
+    },
+    pick: function (list) {
+      if (!list || !list.length) return undefined;
+      return list[native.fakeInt(0, list.length - 1)];
+    },
+    /** Value of a built-in dynamic variable, e.g. faker.get("randomEmail"). */
+    get: function (name) {
+      return native.fake(String(name).replace(/^\$/, ""));
+    },
+  };
+  var names = native.fakeNames();
+  Object.keys(names).forEach(function (js) {
+    if (faker[js]) return;
+    var name = names[js];
+    faker[js] = function () { return native.fake(name); };
+  });
+  global.faker = faker;
+
   // ------------------------------------------------------------------- test
   function errMessage(e) {
     if (e && typeof e === "object" && "message" in e) return String(e.message);

@@ -25,6 +25,13 @@
 //     lazyapi.send("deleteUser", { params: { id: String(res.json().id) } });
 //   }
 //
+// Dynamic values: {{$randomEmail}}, {{$guid}}, … in URLs, params, headers and
+// bodies get a new value at every occurrence when the request is sent
+// (`lazyapi fake` lists them). Every other function the script exports is a
+// helper usable the same way, and replaces a built-in of the same name:
+//
+//   export function randomSku() { return "SKU-" + faker.int(100, 999); }  // {{$randomSku}}
+//
 // Flows (flows/*.js next to the spec) are scripts without an implicit
 // request: they call lazyapi.send() in order and assert with test(). Every
 // call made by a flow is checked against the spec automatically.
@@ -144,6 +151,37 @@ declare const lazyapi: {
    * come from the URL) and sent to that host. A URL outside the spec is an error.
    */
   send(target: string, options?: SendOptions): LazyResponse;
+};
+
+/** Fake data (gofakeit). Each built-in {{$randomX}} is faker.x(): faker.email(), faker.uuid(), … */
+declare const faker: {
+  /** Integer in [min, max] (defaults 0, 1000). */
+  int(min?: number, max?: number): number;
+  /** Number in [min, max) (defaults 0, 1). */
+  float(min?: number, max?: number): number;
+  /** A random element of list. */
+  pick<T>(list: T[]): T;
+  /** The value of a built-in dynamic variable: faker.get("randomEmail"). */
+  get(name: string): string;
+  guid(): string; timestamp(): string; isoTimestamp(): string; uuid(): string;
+  alphaNumeric(): string; boolean(): string; color(): string; hexColor(): string; abbreviation(): string;
+  ip(): string; ipv6(): string; macAddress(): string; password(): string; locale(): string; userAgent(): string;
+  protocol(): string; semver(): string; email(): string; exampleEmail(): string; userName(): string; url(): string;
+  domainName(): string; domainSuffix(): string; domainWord(): string;
+  firstName(): string; lastName(): string; fullName(): string; namePrefix(): string; nameSuffix(): string;
+  jobArea(): string; jobDescriptor(): string; jobTitle(): string; jobType(): string; gender(): string; age(): string;
+  phoneNumber(): string; phoneNumberExt(): string; city(): string; streetName(): string; streetAddress(): string;
+  state(): string; zipCode(): string; country(): string; countryCode(): string; latitude(): string; longitude(): string;
+  timeZone(): string; avatarImage(): string; imageUrl(): string;
+  companyName(): string; companySuffix(): string; bs(): string; catchPhrase(): string; price(): string;
+  currencyCode(): string; currencyName(): string; bitcoin(): string; bankAccount(): string; bankAccountName(): string;
+  creditCardMask(): string; creditCardNumber(): string; transactionType(): string;
+  dateFuture(): string; datePast(): string; dateRecent(): string; weekday(): string; month(): string;
+  fileName(): string; fileExt(): string; mimeType(): string;
+  productName(): string; product(): string; productMaterial(): string; productAdjective(): string; department(): string;
+  noun(): string; verb(): string; ingverb(): string; adjective(): string; word(): string; words(): string; phrase(): string;
+  loremWord(): string; loremWords(): string; loremSentence(): string; loremSentences(): string;
+  loremParagraph(): string; loremSlug(): string; loremText(): string;
 };
 
 /** Registers a test. It fails if fn throws (or returns a rejected promise). */

@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-var vars = []Var{{"env.TOKEN", "s3cr3t"}, {"env.BASE_URL", "http://x"}, {"var.userId", "42"}, {"env.USER", "ana"}}
+var vars = []Var{{Ref: "env.TOKEN", Value: "s3cr3t"}, {Ref: "env.BASE_URL", Value: "http://x"}, {Ref: "var.userId", Value: "42"}, {Ref: "env.USER", Value: "ana"},
+	{Ref: "$randomEmail", Detail: "email address"}, {Ref: "$randomPassword", Detail: "15-character password"}}
 
 func labels(r Result) []string {
 	var out []string
@@ -33,7 +34,7 @@ func TestTemplates(t *testing.T) {
 	}
 	text, cur = at("Bearer {{|}}")
 	r, _ = Templates(text, cur, vars)
-	if len(r.Items) != 4 || r.End != cur+2 {
+	if len(r.Items) != 6 || r.Items[3].Label != "var.userId" || r.Items[4].Label != "$randomEmail" || r.End != cur+2 {
 		t.Errorf("auto-closed braces must be replaced: %+v", r)
 	}
 	text, cur = at("$tok|")
@@ -97,5 +98,20 @@ func TestSignature(t *testing.T) {
 		if want == "" && got != "" || want != "" && !strings.HasPrefix(got, want) {
 			t.Errorf("%q → %q, want prefix %q", src, got, want)
 		}
+	}
+}
+
+func TestTemplates_Dynamic(t *testing.T) {
+	for _, src := range []string{`{"email": "{{$rand|`, `{"email": "$randomE|`} {
+		text, cur := at(src)
+		r, ok := Templates(text, cur, vars)
+		if !ok || r.Items[0].Label != "$randomEmail" || r.Items[0].Insert != "{{$randomEmail}}" || r.Items[0].Detail != "email address" {
+			t.Errorf("%s: %+v", src, r.Items)
+		}
+	}
+	text, cur := at("{{$randomP|")
+	r, _ := Templates(text, cur, vars)
+	if len(r.Items) == 0 || r.Items[0].Detail != "15-character password" {
+		t.Errorf("descriptions are not masked: %+v", r.Items)
 	}
 }

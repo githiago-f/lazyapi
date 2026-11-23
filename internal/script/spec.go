@@ -110,6 +110,10 @@ func (c *SpecContext) Send(target string, opts SendOptions) (*Response, error) {
 			req.Headers["Content-Type"] = "application/json"
 		}
 	}
+	if req, err = req.WithDynamic(Dynamic); err != nil {
+		c.observe(ref, req, nil, err)
+		return nil, err
+	}
 	if missing := req.MissingPathParams(); len(missing) > 0 {
 		err := fmt.Errorf("missing path parameter(s) %s (pass them in options.params)", strings.Join(missing, ", "))
 		c.observe(ref, req, nil, err)
