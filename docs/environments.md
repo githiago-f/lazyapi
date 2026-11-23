@@ -91,3 +91,18 @@ Credentials are applied to every request whose operation (or the spec, globally)
 | `oauth2` | `accessToken` (fixed), or `clientId` + `clientSecret` (client credentials) / + `username` + `password` (password grant); optional `scopes`, `tokenUrl` |
 
 For OAuth2 client-credentials and password flows, LazyAPI requests a token from the flow's `tokenUrl` (client authenticated with HTTP Basic). It caches the token until shortly before `expires_in`. A failed token request fails the operation with the token server's answer. Authorization-code and implicit flows need a browser: put a token in `accessToken`.
+
+## Upgrading from 1.3
+
+1.4 reads only the `.lazyapi/` layout. To move a project:
+
+```bash
+mkdir -p api/.lazyapi/envs api/.lazyapi/secrets
+git mv api/lazyapi.config.yml api/.lazyapi/config.yml
+git mv api/tests api/.lazyapi/tests
+git mv api/flows api/.lazyapi/flows
+sed -i 's#x-lazyapi-tests: tests/#x-lazyapi-tests: .lazyapi/tests/#' api/openapi.yml
+printf 'secrets/\n.local/\n' > api/.lazyapi/.gitignore
+```
+
+Then split each environment's old `.env.<name>`: plain values into `.lazyapi/envs/<name>.env` (commit it), credentials into `.lazyapi/secrets/<name>.env`, and drop the `env:` keys from `config.yml`. Scripts that used `pm.*` must use the native API (re-importing the collection translates them).
