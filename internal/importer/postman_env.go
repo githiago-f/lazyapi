@@ -12,6 +12,7 @@ import (
 
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/project"
+	"github.com/githiago-f/lazyapi/internal/workspace"
 )
 
 // PostmanEnvironment is a Postman environment export
@@ -86,31 +87,22 @@ func EnvironmentName(name string) string {
 	return n
 }
 
-// WriteEnvironment writes the values to .env.<name> next to the spec (0600)
-// and adds the environment to lazyapi.config.yml (created if missing).
-// Existing files and environments are never overwritten.
+// WriteEnvironment writes the values of a Postman environment to the
+// workspace: plain variables to .lazyapi/envs/<name>.env (committed),
+// secret ones to .lazyapi/secrets/<name>.env (0600, git-ignored), and adds
+// the environment to .lazyapi/config.yml (created if missing). Existing
+// files and environments are never overwritten.
 func WriteEnvironment(specPath, name string, e PostmanEnvironment, res *Result) error {
-	dir := filepath.Dir(specPath)
-	envFile := ".env." + name
-	envPath := filepath.Join(dir, envFile)
-	if _, err := os.Stat(envPath); err == nil {
-		return fmt.Errorf("%s already exists; choose another --name or remove it", envPath)
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "# Postman environment %q (used as {{env.NAME}}). May contain secrets: do not commit.\n", e.Name)
-	for _, k := range sortedKeys(e.Values) {
-		fmt.Fprintf(&b, "%s=%s\n", k, envValue(e.Values[k]))
-	}
-	if err := os.WriteFile(envPath, []byte(b.String()), 0o600); err != nil {
+	secret := func(k string) bool { return isSecret(e, k) || sensitiveName.MatchString(k) }
+	header := fmt.Sprintf("Postman environment %q", e.Name)
+	if err := writeEnvFiles(specPath, name, header, e.Values, secret, res); err != nil {
 		return err
 	}
-	res.Files = append(res.Files, envPath)
-	res.note("%d variables written to %s; add it to .gitignore", len(e.Values), envPath)
 	if len(e.Disabled) > 0 {
 		res.note("disabled variables were skipped: %s", strings.Join(e.Disabled, ", "))
 	}
 
-	entry := project.Environment{Env: envFile, Auth: res.Auth}
+	entry := project.Environment{Auth: res.Auth}
 	for _, k := range sortedKeys(e.Values) {
 		if v := e.Values[k]; serverKey.MatchString(k) && strings.Contains(v, "://") && !isSecret(e, k) {
 			entry.Server = strings.TrimRight(v, "/")
@@ -118,7 +110,7 @@ func WriteEnvironment(specPath, name string, e PostmanEnvironment, res *Result) 
 			break
 		}
 	}
-	cfgPath := filepath.Join(dir, project.FileName)
+	cfgPath := workspace.Config(specPath)
 	created, err := project.AddEnvironment(cfgPath, name, entry)
 	if err != nil {
 		return err
@@ -130,6 +122,55 @@ func WriteEnvironment(specPath, name string, e PostmanEnvironment, res *Result) 
 		res.note("%s credentials come from the env file (auth.%s in environment %s)", scheme, scheme, name)
 	}
 	res.note("use it with: lazyapi run %s --env-name %s (ctrl+v in the TUI)", specPath, name)
+	return nil
+}
+
+// sensitiveName marks variables that go to the secrets file by name.
+var sensitiveName = regexp.MustCompile(`(?i)(token|secret|pass|key|auth|cookie|credential|private|session)`)
+
+// writeEnvFiles splits values between .lazyapi/envs/<name>.env (committed)
+// and .lazyapi/secrets/<name>.env (git-ignored). Neither may exist yet.
+func writeEnvFiles(specPath, name, header string, values map[string]string, secret func(string) bool, res *Result) error {
+	plainPath, secretPath := workspace.EnvFile(specPath, name), workspace.SecretsFile(specPath, name)
+	for _, p := range []string{plainPath, secretPath} {
+		if _, err := os.Stat(p); err == nil {
+			return fmt.Errorf("%s already exists; choose another --name or remove it", p)
+		}
+	}
+	var plain, secrets strings.Builder
+	var nPlain, nSecret int
+	fmt.Fprintf(&plain, "# %s: variables (used as {{env.NAME}}). Committed: no secrets here.\n", header)
+	fmt.Fprintf(&secrets, "# %s: secrets (used as {{env.NAME}}). Git-ignored.\n", header)
+	for _, k := range sortedKeys(values) {
+		if secret(k) {
+			fmt.Fprintf(&secrets, "%s=%s\n", k, envValue(values[k]))
+			nSecret++
+		} else {
+			fmt.Fprintf(&plain, "%s=%s\n", k, envValue(values[k]))
+			nPlain++
+		}
+	}
+	if _, err := workspace.Ensure(specPath); err != nil {
+		return err
+	}
+	if nPlain > 0 {
+		if err := os.MkdirAll(filepath.Dir(plainPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(plainPath, []byte(plain.String()), 0o644); err != nil {
+			return err
+		}
+		res.Files = append(res.Files, plainPath)
+		res.note("%d variables written to %s (commit it)", nPlain, plainPath)
+	}
+	if nSecret > 0 {
+		p, err := workspace.WriteSecrets(specPath, name, []byte(secrets.String()))
+		if err != nil {
+			return err
+		}
+		res.Files = append(res.Files, p)
+		res.note("%d secrets written to %s (git-ignored)", nSecret, p)
+	}
 	return nil
 }
 

@@ -97,18 +97,18 @@ func TestImportPostmanAndRun(t *testing.T) {
 	if strings.Contains(string(raw), "s3cret") {
 		t.Error("the token must not be copied into the spec")
 	}
-	envData, _ := os.ReadFile(filepath.Join(dir, ".env.postman"))
+	envData, _ := os.ReadFile(filepath.Join(dir, ".lazyapi", "secrets", "postman.env"))
 	if !strings.Contains(string(envData), "token=s3cret") {
-		t.Errorf(".env.postman = %s", envData)
+		t.Errorf("secrets/postman.env = %s", envData)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "lazyapi.config.yml")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".lazyapi", "config.yml")); err != nil {
 		t.Error("config with the postman environment should be created")
 	}
 
-	// The Postman scripts run unchanged through the pm layer, with the
-	// collection token applied via the bearerAuth scheme from the env file.
-	cfg := "environments:\n  postman:\n    env: .env.postman\n    auth:\n      bearerAuth: {token: \"{{env.token}}\"}\n"
-	if err := os.WriteFile(filepath.Join(dir, "lazyapi.config.yml"), []byte(cfg), 0o644); err != nil {
+	// The translated Postman scripts run, with the collection token applied
+	// via the bearerAuth scheme from the environment's secrets file.
+	cfg := "environments:\n  postman:\n    auth:\n      bearerAuth: {token: \"{{env.token}}\"}\n"
+	if err := os.WriteFile(filepath.Join(dir, ".lazyapi", "config.yml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, err = captureStdout(t, func() error {
@@ -203,7 +203,7 @@ func TestImport_PostmanWithEnvironmentRuns(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{spec, filepath.Join(dir, "lazyapi.config.yml")} {
+	for _, f := range []string{spec, filepath.Join(dir, ".lazyapi", "config.yml"), filepath.Join(dir, ".lazyapi", "envs", "staging.env")} {
 		if data, _ := os.ReadFile(f); strings.Contains(string(data), "tok-123") {
 			t.Errorf("%s contains the secret:\n%s", f, data)
 		}
@@ -223,7 +223,7 @@ func TestImport_PostmanWithEnvironmentRuns(t *testing.T) {
 	if _, err := captureStdout(t, func() error { return Import([]string{"postman-env", envJSON, "--into", spec}) }); err != nil {
 		t.Fatal(err)
 	}
-	cfg, _ := os.ReadFile(filepath.Join(dir, "lazyapi.config.yml"))
+	cfg, _ := os.ReadFile(filepath.Join(dir, ".lazyapi", "config.yml"))
 	if !strings.Contains(string(cfg), "prod:") || !strings.Contains(string(cfg), "staging:") {
 		t.Errorf("config:\n%s", cfg)
 	}

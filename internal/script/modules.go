@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/githiago-f/lazyapi/internal/workspace"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,8 +19,8 @@ import (
 	"time"
 )
 
-// LockFileName is the lockfile written next to the spec.
-const LockFileName = "lazyapi.lock"
+// LockFileName is the lockfile, in .lazyapi/ next to the spec.
+const LockFileName = workspace.LockName
 
 // maxModuleSize caps a single fetched module.
 const maxModuleSize = 20 << 20
@@ -62,11 +63,11 @@ func DefaultCacheDir() string {
 }
 
 // NewModuleLoader returns a loader using the default cache and a lockfile in
-// lockDir (no lockfile when lockDir is empty).
+// specDir/.lazyapi (no lockfile when specDir is empty).
 func NewModuleLoader(lockDir string) *ModuleLoader {
 	m := &ModuleLoader{CacheDir: DefaultCacheDir()}
 	if lockDir != "" {
-		m.LockPath = filepath.Join(lockDir, LockFileName)
+		m.LockPath = filepath.Join(lockDir, workspace.Dir, LockFileName)
 	}
 	return m
 }
@@ -201,6 +202,9 @@ func (m *ModuleLoader) SaveLock() error {
 	}
 	data, err := json.MarshalIndent(m.lock, "", "  ")
 	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(m.LockPath), 0o755); err != nil {
 		return err
 	}
 	if err := writeAtomic(m.LockPath, append(data, '\n')); err != nil {

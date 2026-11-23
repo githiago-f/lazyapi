@@ -238,7 +238,8 @@ func TestTUI_SwitchNamedEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := fmt.Sprintf("default: local\nenvironments:\n  local:\n    server: %s\n  staging:\n    server: http://staging.invalid\n", srv.URL)
-	if err := os.WriteFile(filepath.Join(dir, "lazyapi.config.yml"), []byte(cfg), 0o644); err != nil {
+	_ = os.MkdirAll(filepath.Join(dir, ".lazyapi"), 0o755)
+	if err := os.WriteFile(filepath.Join(dir, ".lazyapi", "config.yml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tm := start(t, spec)
@@ -357,10 +358,12 @@ paths:
 `, srv.URL)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=abc123\n"), 0o600); err != nil {
+	// The environment's variables come from .lazyapi/envs/dev.env by convention.
+	_ = os.MkdirAll(filepath.Join(dir, ".lazyapi", "envs"), 0o755)
+	if err := os.WriteFile(filepath.Join(dir, ".lazyapi", "envs", "dev.env"), []byte("TOKEN=abc123\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "lazyapi.config.yml"), []byte("default: dev\nenvironments:\n  dev:\n    env: .env\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".lazyapi", "config.yml"), []byte("default: dev\nenvironments:\n  dev: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tm := start(t, spec)
@@ -505,8 +508,8 @@ paths:
 `, srv.URL)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_ = os.MkdirAll(filepath.Join(dir, "data"), 0o755)
-	if err := os.WriteFile(filepath.Join(dir, "data", "users.csv"), []byte("id\n7\n8\n9\n"), 0o644); err != nil {
+	_ = os.MkdirAll(filepath.Join(dir, ".lazyapi", "data"), 0o755)
+	if err := os.WriteFile(filepath.Join(dir, ".lazyapi", "data", "users.csv"), []byte("id\n7\n8\n9\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name": "not data"}`), 0o644); err != nil {

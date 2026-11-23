@@ -75,7 +75,7 @@ Select the type from the dropdown.
 
 The code editor, in JavaScript, for the operation's test script (see [Test Scripts](../scripting.md)). Scripts can use `request`, `response`, `env`, `vars`, `lazyapi.send()`, `test()` and `expect()`, and may import relative files or `https://` modules.
 
-Press `F5` to run the script against the last response. Results, failure messages and `console` output appear below the editor. When you save (`ctrl+o`), the script is written to `tests/<operationId>.js` next to the spec and linked through `x-lazyapi-tests`.
+Press `F5` to run the script against the last response. Results, failure messages and `console` output appear below the editor. When you save (`ctrl+o`), the script is written to `.lazyapi/tests/<operationId>.js` next to the spec and linked through `x-lazyapi-tests`.
 
 ```js
 test("status is 200", () => expect(response).toHaveStatus(200));

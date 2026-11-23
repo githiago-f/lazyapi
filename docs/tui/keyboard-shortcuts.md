@@ -8,7 +8,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 |-----|--------|
 | `ctrl+k` | Command palette: open an operation, run the spec / a tag / flows, switch environment, history, copy as cURL |
 | `?` | Toggle help (ignored while typing in a field) |
-| `ctrl+v` | Switch environment: the named environments of `lazyapi.config.yml` (or `.env*` files when there is no config), then "none" |
+| `ctrl+v` | Switch environment: the named environments of `.lazyapi/config.yml` (or `.env*` files when there is no config), then "none" |
 | `esc` | Cancel the request in flight (while the spinner is shown) |
 | `ctrl+c` | Quit |
 

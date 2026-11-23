@@ -21,8 +21,8 @@ const importUsage = `usage: lazyapi import <curl|postman|postman-env|har> <sourc
   postman      <source> is a Postman collection (v2.0/v2.1 JSON);
                --environment env.json resolves {{baseUrl}}-style hosts and imports it too
   postman-env  <source> is a Postman environment (*.postman_environment.json):
-               values go to .env.<name> next to the spec, and lazyapi.config.yml
-               gets an environment <name> (--name overrides it)
+               values go to .lazyapi/envs/<name>.env (secrets to .lazyapi/secrets/,
+               git-ignored), and .lazyapi/config.yml gets an environment <name>
   har          <source> is a HAR file (browser DevTools → Save all as HAR)
 
 Each request becomes an operation (path parameters, query/header
@@ -36,7 +36,7 @@ func Import(args []string) error {
 	into := fs.String("into", "", "spec to add the operations to (created if missing)")
 	dryRun := fs.Bool("dry-run", false, "show what would be imported without writing")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
-	envName := fs.String("name", "", "postman-env / --environment: environment name in lazyapi.config.yml")
+	envName := fs.String("name", "", "postman-env / --environment: environment name in .lazyapi/config.yml")
 	envFile := fs.String("environment", "", "postman: a Postman environment export to resolve variables with (also imported)")
 	pos, err := parseInterleaved(fs, args)
 	if err != nil || len(pos) < 2 || *into == "" {
@@ -199,7 +199,7 @@ func importPostmanEnv(source, into, name string, dryRun, asJSON bool) error {
 	name = pickEnvName(name, e.Name)
 	var res importer.Result
 	if dryRun {
-		res.Notes = append(res.Notes, fmt.Sprintf("would write %d variables to .env.%s and add environment %q to %s",
+		res.Notes = append(res.Notes, fmt.Sprintf("would write %d variables to .lazyapi/envs|secrets/%s.env and add environment %q to %s",
 			len(e.Values), name, name, project.FileName))
 	} else if err := importer.WriteEnvironment(into, name, e, &res); err != nil {
 		return runtimeErr(err)

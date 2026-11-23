@@ -115,8 +115,6 @@ func rank(vars []Var, typed string, item func(Var) Item) []Item {
 			name = ref[1:]
 		}
 		switch {
-		case typed == "" && strings.HasPrefix(ref, "$"):
-			hits = append(hits, scored{v, 2}) // dynamic variables after env/var
 		case typed == "":
 			hits = append(hits, scored{v, 1})
 		case strings.HasPrefix(ref, typed), strings.HasPrefix(name, typed):
@@ -128,6 +126,10 @@ func rank(vars []Var, typed string, item func(Var) Item) []Item {
 	sort.SliceStable(hits, func(a, b int) bool {
 		if hits[a].score != hits[b].score {
 			return hits[a].score < hits[b].score
+		}
+		// env/var before the (many) dynamic variables
+		if da, db := strings.HasPrefix(hits[a].v.Ref, "$"), strings.HasPrefix(hits[b].v.Ref, "$"); da != db {
+			return db
 		}
 		return hits[a].v.Ref < hits[b].v.Ref
 	})

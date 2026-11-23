@@ -47,11 +47,11 @@ internal/
   runner/                  # Executes operations → structured results (no printing)
     result.go              #   Outcome, Check (status|contract|test|script), OpResult, Report, Summarize, exit codes
     runner.go              #   Filter, ParseMethods, Run (reads→POST→PUT/PATCH→DELETE, parallel, bail, retries), RunOne, Exchange
-    flow.go                #   RunFlow (flows/*.js; every lazyapi.send step gets request/status/contract checks), FindFlows
+    flow.go                #   RunFlow (.lazyapi/flows/*.js; every lazyapi.send step gets request/status/contract checks), FindFlows
   report/                  # Renders runner results: pretty (FormatOp/WriteSummary), json, junit, tap; body policy
   inspect/                 # ListOperations, Describe (with referenced schemas), Validate (OpenAPI + scripts compile)
   mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled) + Tools confined to a root dir
-  project/                 # lazyapi.config.yml: named environments (server, env file, vars, auth secrets), Find/Select/Resolve
+  project/                 # .lazyapi/config.yml: named environments (server, env file, vars, auth secrets), Find/Select/Resolve
   history/                 # TUI request history per spec (user cache dir, jsonl, 0600): no env/auth secrets, sensitive headers/query redacted, body templates kept; Replay
   diff/                    # Line diff (LCS with prefix/suffix trimming), hunks with folded context
   fake/                    # {{$name}} built-ins (Postman names) over gofakeit: Value, Vars, JSName (faker.* in scripts), Seed
@@ -62,7 +62,7 @@ internal/
     script.go              #   Run (post-response), Before (export function before(req)), native bridge, Format
     prelude.js             #   JS side of the API: test, expect matchers, console, LazyResponse
     bundle.go              #   Bundle() — CommonJS wrapped in (function(module, exports){...}) so exports exist before the body; esbuild plugin: https imports, local imports confined to Root, bare imports rejected
-    modules.go             #   ModuleLoader — https fetch, disk cache, lazyapi.lock integrity, Offline/Reload/Frozen/AllowedHosts
+    modules.go             #   ModuleLoader — https fetch, disk cache, .lazyapi/lazyapi.lock integrity, Offline/Reload/Frozen/AllowedHosts
     helpers.go             #   HelperNames — exported functions of a script (completions for {{$name}})
     spec.go                #   SpecContext (lazyapi.send + contract; "METHOD https://…" targets mapped with store.MatchPath and sent to that host), ResolveTarget, OperationOptions
     lazyapi.d.ts           #   Public script API (embedded; printed by `lazyapi types`)
@@ -139,7 +139,7 @@ internal/
 `internal/store/` — data access. Core functions are synchronous; `tea.Cmd` wrappers in `file_system.go` for TUI.
 
 - **OpenAPI as source of truth** — every `.yml`/`.yaml` file parsed as OpenAPI 3.x via `openapi3.Loader`. `IsOpenAPIFile()` checks for `openapi` or `swagger` root keys via YAML unmarshal.
-- **Test scripts** — JavaScript/TypeScript files next to the spec (default `tests/<operationId|method_path>.js`) and referenced per operation by the `x-lazyapi-tests` extension. Paths must stay inside the spec directory. `OperationToRequest` loads them into `Request.Tests`; `SaveFile` writes them via `SaveOperationTests`. The CLI never reads test scripts from temp files.
+- **Test scripts** — JavaScript/TypeScript files next to the spec (default `.lazyapi/tests/<operationId|method_path>.js`) and referenced per operation by the `x-lazyapi-tests` extension. Paths must stay inside the spec directory. `OperationToRequest` loads them into `Request.Tests`; `SaveFile` writes them via `SaveOperationTests`. The CLI never reads test scripts from temp files.
 - **Errors** — `tea.Cmd` wrappers return `store.ErrorMsg{Message}` on failure; the TUI shows it as a notification. Never return `tea.Quit`/`tea.Println` as a `tea.Msg` and never `panic` in store code.
 - **Temp/draft files** — stored in `os.TempDir()/lazyapi/<sanitized-abs-path>/`. Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
 - **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]model.RequestItem` with Tags), `OperationToRequest` (pre-fills path params and required query/header params from spec examples), `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
@@ -158,11 +158,11 @@ internal/
 - **Dynamic values** — `{{$name}}` (env.DynamicRefs/ResolveDynamic, `Request.WithDynamic`) is materialized once per send, a new value per occurrence, before before(req): `script.Before` uses the script's exported functions first, then `fake`; without a script the runner uses `script.Dynamic`; `SpecContext.Send` too. Unknown names fail the operation (request check). Never resolve `{{$…}}` in `env.Resolve` (values would differ between report and wire).
 - **after(res)** — `script.Run` calls the exported `after` with `response` once the top level finished (also when tests failed or it threw; not after a timeout). `Result.AfterRan/AfterError` → `runner.afterChecks` adds a `script` check "after() ran without errors". `Before` never calls it.
 - **Data-driven** — `Options.Data` (`runner.LoadData` for CSV/JSON): `Run` calls `runOnce` per row with the row merged into a copy of Env; results get `Iteration` (labels `[#n]`), scripts get `lazyapi.iteration` via `ExecData.Iteration` (threaded through `ExchangeInput`).
-- **Flows** — `run --flow f.js` (only flows) or `--flows` (operations, then `flows/*.js`); MCP `run_flow`/`write_flow`. Results have `kind: "flow"` and `steps`.
+- **Flows** — `run --flow f.js` (only flows) or `--flows` (operations, then `.lazyapi/flows/*.js`); MCP `run_flow`/`write_flow`. Results have `kind: "flow"` and `steps`.
 - **HTTP** — one client per run from `model.HTTPOptions` (flags merged over the environment's `http:`), set on every request incl. `lazyapi.send`, flows and OAuth2 token calls. `SendTimed` returns DNS/connect/TLS/TTFB timing; results carry `timing` and `cookies`.
-- **Import** — never copy credentials into specs (Authorization/API-key headers become security schemes plus a note). Credentials that are only `{{env.X}}` references go to `Result.Auth` → the environment's `auth:` in lazyapi.config.yml (edited with yaml.Node via `project.AddEnvironment`, never overwriting). Multipart files must never be read from request bodies (scripts/MCP could exfiltrate files).
+- **Import** — never copy credentials into specs (Authorization/API-key headers become security schemes plus a note). Credentials that are only `{{env.X}}` references go to `Result.Auth` → the environment's `auth:` in .lazyapi/config.yml (edited with yaml.Node via `project.AddEnvironment`, never overwriting). Multipart files must never be read from request bodies (scripts/MCP could exfiltrate files).
 - **Environments** — `project.Resolve(spec, --env-name, --server, --env)`: explicit flags win; secrets go to `runner.Options.Auth` → `model.ApplySecrets` (operations, `lazyapi.send`, flows, TUI). TUI `ctrl+v` cycles named envs when a config exists.
-- **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
+- **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `.lazyapi/lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
 
 ## TUI Pages and Overlays

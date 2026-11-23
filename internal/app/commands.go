@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/githiago-f/lazyapi/internal/workspace"
 	"os"
 	"path/filepath"
 	"slices"
@@ -400,7 +401,7 @@ func (t Tui) missingRefs() []string {
 func dataFiles(spec string) []string {
 	dir := filepath.Dir(spec)
 	var out []string
-	for _, pattern := range []string{"*.csv", "*.json", "data/*.csv", "data/*.json"} {
+	for _, pattern := range []string{"*.csv", "*.json", workspace.DataDir + "/*.csv", workspace.DataDir + "/*.json"} {
 		matches, _ := filepath.Glob(filepath.Join(dir, pattern))
 		for _, m := range matches {
 			if strings.HasSuffix(m, ".json") && !isJSONArray(m) {

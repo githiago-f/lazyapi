@@ -31,7 +31,7 @@ Or with any client that reads an `mcpServers` config:
 | `describe_operation` | Parameters with examples, request/response schemas, referenced components, security, current test script |
 | `send_request` | Send one operation (params, query, headers, body) and get request, response and every check |
 | `run_tests` | Run many operations. Only GET/HEAD/OPTIONS run unless `methods` is set (`["all"]` includes writes). Bodies are included only for operations that did not pass |
-| `run_flow` / `write_flow` | Write and run `flows/<name>.js` scenarios across operations; every step is checked against the spec |
+| `run_flow` / `write_flow` | Write and run `.lazyapi/flows/<name>.js` scenarios across operations; every step is checked against the spec |
 | `import_curl` / `export_curl` | Add an operation from a curl command, or get the exact request as curl |
 | `read_test` / `write_test` | Read or write an operation's JavaScript test script; `write_test` links it via `x-lazyapi-tests` and reports compile errors |
 | `validate_spec` | OpenAPI and LazyAPI checks (operationIds, responses, scripts compile) |
@@ -39,7 +39,7 @@ Or with any client that reads an `mcpServers` config:
 
 `send_request` accepts `jq` (e.g. `".items[0] | {id, status}"`) to return only part of a large body; checks still see the whole response.
 
-`send_request`, `run_tests` and `run_flow` accept `env_name` to use a named environment from `lazyapi.config.yml` (server, env file, variables and credentials).
+`send_request`, `run_tests` and `run_flow` accept `env_name` to use a named environment from `.lazyapi/config.yml` (server, env file, variables and credentials).
 
 Tool failures (network errors, unknown operations) come back as results with `isError: true` and a readable message, so the agent can fix the call and retry.
 
@@ -59,7 +59,7 @@ Agents without MCP can use the CLI with JSON output:
 lazyapi list ops api.yml --json
 lazyapi describe api.yml getUser --json
 lazyapi send request api.yml --op getUser --param id=1 --output json
-lazyapi types > tests/lazyapi.d.ts
+lazyapi types > .lazyapi/tests/lazyapi.d.ts
 lazyapi run api.yml --output json            # exit 0 ok · 1 failed · 2 usage · 3 could not run
 ```
 
@@ -75,4 +75,4 @@ lazyapi run api.yml --output json            # exit 0 ok · 1 failed · 2 usage 
      expect(response.json()).toHaveProperty("email");
    });
    ```
-5. `run` / `run_tests`: run everything. Commit the spec, `tests/` and `lazyapi.lock` so CI runs the same checks with `--frozen-lockfile`.
+5. `run` / `run_tests`: run everything. Commit the spec, `tests/` and `.lazyapi/lazyapi.lock` so CI runs the same checks with `--frozen-lockfile`.

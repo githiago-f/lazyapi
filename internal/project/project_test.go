@@ -23,6 +23,7 @@ environments:
 func write(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	p := filepath.Join(dir, name)
+	_ = os.MkdirAll(filepath.Dir(p), 0o755)
 	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +47,16 @@ func TestFindLoadSelect(t *testing.T) {
 	if err != nil || e.Name != "local" || e.Server != "http://127.0.0.1:4010" || e.Vars["tenant"] != "acme" {
 		t.Fatalf("default = %+v, %v", e, err)
 	}
-	if e.Env != filepath.Join(dir, ".env.local") {
+	if e.Env != filepath.Join(dir, ".lazyapi", ".env.local") {
 		t.Errorf("env path should be relative to the config: %s", e.Env)
+	}
+	// envs/<name>.env and secrets/<name>.env are read by convention, before env:.
+	_ = os.MkdirAll(filepath.Join(dir, ".lazyapi", "envs"), 0o755)
+	_ = os.MkdirAll(filepath.Join(dir, ".lazyapi", "secrets"), 0o755)
+	write(t, dir, ".lazyapi/envs/local.env", "A=1\n")
+	write(t, dir, ".lazyapi/secrets/local.env", "B=2\n")
+	if got := e.Files(c); len(got) != 3 || filepath.Base(filepath.Dir(got[0])) != "envs" || filepath.Base(filepath.Dir(got[1])) != "secrets" || got[2] != e.Env {
+		t.Errorf("files = %v", got)
 	}
 	if e.Auth["bearerAuth"].Token != "{{env.TOKEN}}" {
 		t.Errorf("auth = %+v", e.Auth)

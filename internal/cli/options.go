@@ -112,14 +112,14 @@ func (f *runFlags) validate() error {
 }
 
 // options builds runner options for a spec. A named environment from
-// lazyapi.config.yml supplies the server, env file, vars and credentials;
+// .lazyapi/config.yml supplies the server, env file, vars and credentials;
 // explicit --server / --env win over it.
 func (f *runFlags) options(specPath string) (runner.Options, error) {
 	selected, err := project.Resolve(specPath, *f.envName, *f.server, *f.envFile)
 	if err != nil {
 		return runner.Options{}, usageErr("%v", err)
 	}
-	server, envFile := selected.Server, selected.EnvFile
+	server, envFiles := selected.Server, selected.EnvFiles
 
 	client, err := selected.HTTP.Merge(f.http).Client()
 	if err != nil {
@@ -130,7 +130,7 @@ func (f *runFlags) options(specPath string) (runner.Options, error) {
 		return runner.Options{}, usageErr("--max-body: %v", err)
 	}
 
-	envMap, err := env.NewStore(envFile).Load()
+	envMap, err := env.NewStore(envFiles...).Load()
 	if err != nil {
 		return runner.Options{}, runtimeErr(fmt.Errorf("error loading env file: %w", err))
 	}

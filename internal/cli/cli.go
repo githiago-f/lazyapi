@@ -147,7 +147,7 @@ Common flags: --server, --env, --param k=v, --query k=v, --header k=v, --timeout
 
 Test scripts are JavaScript/TypeScript files next to the spec, referenced per
 operation by x-lazyapi-tests. They may import relative files and https://
-modules (pinned in lazyapi.lock). Responses are validated against the OpenAPI
+modules (pinned in .lazyapi/lazyapi.lock). Responses are validated against the OpenAPI
 schema automatically.
 
 Exit status: 0 all passed, 1 a check failed, 2 usage error, 3 something could not run.`)

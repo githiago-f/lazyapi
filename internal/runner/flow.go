@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"github.com/githiago-f/lazyapi/internal/workspace"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,13 +16,13 @@ import (
 	"github.com/githiago-f/lazyapi/internal/store"
 )
 
-// FlowsDir is where flows live, next to the spec.
-const FlowsDir = "flows"
+// FlowsDir is where flows live, relative to the spec's directory.
+const FlowsDir = workspace.FlowsDir
 
 // DefaultFlowTimeout bounds a whole flow (all its requests and assertions).
 const DefaultFlowTimeout = 5 * time.Minute
 
-// FindFlows lists flows/*.js|*.ts next to the spec, sorted.
+// FindFlows lists .lazyapi/flows/*.js|*.ts next to the spec, sorted.
 func FindFlows(specPath string) ([]string, error) {
 	dir := filepath.Join(filepath.Dir(specPath), FlowsDir)
 	entries, err := os.ReadDir(dir)

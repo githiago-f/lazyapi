@@ -19,7 +19,7 @@ func TestDataFiles(t *testing.T) {
 	write("api.yml", "openapi: 3.0.0")
 	write("rows.json", "  [ {\"id\": 1} ]")
 	write("package.json", `{"name": "x"}`)
-	write("data/users.csv", "id\n1\n")
+	write(".lazyapi/data/users.csv", "id\n1\n")
 	write("notes.txt", "x")
 	got := dataFiles(filepath.Join(dir, "api.yml"))
 	var names []string
@@ -27,7 +27,7 @@ func TestDataFiles(t *testing.T) {
 		rel, _ := filepath.Rel(dir, g)
 		names = append(names, rel)
 	}
-	if strings.Join(names, ",") != "rows.json,data/users.csv" {
+	if strings.Join(names, ",") != "rows.json,.lazyapi/data/users.csv" {
 		t.Errorf("data files = %v", names)
 	}
 }

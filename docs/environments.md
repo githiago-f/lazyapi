@@ -1,21 +1,38 @@
 # Environments & Auth
 
-`lazyapi.config.yml` defines named environments. Each one sets a server, an env file, initial variables and credentials per security scheme. LazyAPI looks for the file next to the spec, then in the working directory.
+Everything LazyAPI keeps for a spec lives in a **`.lazyapi/` directory next to it**, so it is versioned with the API (git-native). Only credentials and machine-local state stay out of git:
+
+```
+api/
+  openapi.yml
+  .lazyapi/
+    config.yml           # environments: server, vars, http, auth   (committed)
+    envs/<name>.env      # variables of an environment               (committed)
+    secrets/<name>.env   # credentials of an environment             (git-ignored)
+    tests/<op>.js        # test scripts (x-lazyapi-tests)            (committed)
+    flows/*.js           # flows                                     (committed)
+    data/*.csv|json      # data files for data-driven runs           (committed)
+    lazyapi.lock         # pinned URL imports                        (committed)
+    .local/              # drafts, history, caches                   (git-ignored)
+    .gitignore           # secrets/ and .local/ (written by lazyapi)
+```
+
+LazyAPI writes `.lazyapi/.gitignore` when it creates the directory (for example on `lazyapi import`), and never overwrites it. LazyAPI looks for `.lazyapi/config.yml` next to the spec, then in the working directory.
+
+`.lazyapi/config.yml` defines named environments. Each one sets a server, initial variables, HTTP options and credentials per security scheme:
 
 ```yaml
 default: local                 # used when no --env-name is given ($LAZYAPI_ENV also works)
 environments:
   local:
     server: http://127.0.0.1:4010
-    env: .env.local            # relative to this file
     vars:                      # initial {{var.X}} values
       tenant: demo
   staging:
     server: https://staging.example.com
-    env: .env.staging
     auth:                      # keys are security scheme names from the spec
       bearerAuth:
-        token: "{{env.API_TOKEN}}"
+        token: "{{env.API_TOKEN}}"      # API_TOKEN in secrets/staging.env
       apiKeyAuth:
         value: "{{env.API_KEY}}"
       basicAuth:
@@ -27,7 +44,7 @@ environments:
         scopes: "read write"   # optional: overrides the spec's scopes
   production:
     server: "1"                # an index into the spec's servers also works
-    env: .env.production
+    env: ../shared/prod.env    # optional extra env file, relative to this file
     http:                      # TLS, proxy and redirects for this environment
       caCert: certs/internal-ca.pem     # paths are relative to this file
       clientCert: certs/client.pem
@@ -38,7 +55,17 @@ environments:
       insecure: false
 ```
 
-Keep secrets in the env files (gitignored) and reference them with templates. The config file itself can be committed.
+## Variables and secrets
+
+The values of <code v-pre>{{env.NAME}}</code> for an environment come, in this order (later files win), from:
+
+1. the process environment;
+2. `.lazyapi/envs/<name>.env`: plain variables (base URLs, tenant ids, feature flags). **Commit it**;
+3. `.lazyapi/secrets/<name>.env`: tokens, passwords, client secrets. **Git-ignored**; written with mode `600` by LazyAPI;
+4. the environment's `env:` file, if any;
+5. `--env <file>` on the command line.
+
+So the config and the variables are code that reviews and CI see, and each developer (or the CI secret store) provides `secrets/<name>.env`. In CI, write the file from the secret store before running, or export the variables in the process environment.
 
 CLI flags such as `--insecure` or `--proxy` are combined with the environment's `http` settings.
 
@@ -46,7 +73,7 @@ CLI flags such as `--insecure` or `--proxy` are combined with the environment's 
 
 | Where | How |
 |-------|-----|
-| CLI | `lazyapi run api.yml --env-name staging`. `--server` and `--env` still win over the environment |
+| CLI | `lazyapi run api.yml --env-name staging`. `--server` wins over the environment; `--env` is read last |
 | MCP | `env_name` argument on `send_request`, `run_tests`, `run_flow` |
 | TUI | Starts on the `default` environment; `ctrl+v` cycles environments (then "none"). The title shows the environment and its server |
 

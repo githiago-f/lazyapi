@@ -39,7 +39,7 @@ func TestSaveOperationTests_Roundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scriptPath := filepath.Join(filepath.Dir(specPath), "tests", "get_items_id.js")
+	scriptPath := filepath.Join(filepath.Dir(specPath), ".lazyapi", "tests", "get_items_id.js")
 	data, err := os.ReadFile(scriptPath)
 	if err != nil {
 		t.Fatalf("script file not written: %v", err)
@@ -49,7 +49,7 @@ func TestSaveOperationTests_Roundtrip(t *testing.T) {
 	}
 
 	raw, _ := os.ReadFile(specPath)
-	if !strings.Contains(string(raw), TestsExtension+": tests/get_items_id.js") {
+	if !strings.Contains(string(raw), TestsExtension+": .lazyapi/tests/get_items_id.js") {
 		t.Errorf("spec does not reference script:\n%s", raw)
 	}
 
@@ -75,7 +75,7 @@ func TestSaveOperationTests_UsesOperationID(t *testing.T) {
 	if err := SaveOperationTests(spec, specPath, ref, "-- t"); err != nil {
 		t.Fatal(err)
 	}
-	if got := spec.Paths.Find("/items").Post.Extensions[TestsExtension]; got != "tests/createItem.js" {
+	if got := spec.Paths.Find("/items").Post.Extensions[TestsExtension]; got != ".lazyapi/tests/createItem.js" {
 		t.Errorf("extension = %v, want tests/createItem.js", got)
 	}
 }
@@ -145,7 +145,7 @@ func TestLoadOperationTests_RejectsLua(t *testing.T) {
 	if err := SaveOperationTests(spec, specPath, ref, "test('x', () => {});"); err != nil {
 		t.Fatal(err)
 	}
-	if got := op.Extensions[TestsExtension]; got != "tests/get_items.js" {
+	if got := op.Extensions[TestsExtension]; got != ".lazyapi/tests/get_items.js" {
 		t.Errorf("extension = %v, want tests/get_items.js", got)
 	}
 }
@@ -161,7 +161,7 @@ func TestOperationTestsPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(filepath.Dir(specPath), "tests", "delete_items_id.js")
+	want := filepath.Join(filepath.Dir(specPath), ".lazyapi", "tests", "delete_items_id.js")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

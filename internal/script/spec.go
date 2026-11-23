@@ -25,7 +25,7 @@ type SpecContext struct {
 	Vars      map[string]string
 	Timeout   time.Duration
 
-	// Auth fills credentials by security scheme name (lazyapi.config.yml).
+	// Auth fills credentials by security scheme name (.lazyapi/config.yml).
 	Auth map[string]model.AuthSecrets
 
 	// HTTPClient and MaxBody are applied to every request (nil/0: defaults).

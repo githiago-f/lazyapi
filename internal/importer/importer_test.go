@@ -113,10 +113,10 @@ func TestApply(t *testing.T) {
 	if post.RequestBody.Value.Content["application/json"].Schema.Value.Properties["email"].Value.Format != "email" {
 		t.Error("request body schema")
 	}
-	if post.Extensions[store.TestsExtension] != "tests/postV1Users.js" {
+	if post.Extensions[store.TestsExtension] != ".lazyapi/tests/postV1Users.js" {
 		t.Errorf("tests link = %v", post.Extensions)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "tests", "postV1Users.js")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".lazyapi", "tests", "postV1Users.js")); err != nil {
 		t.Error("tests file not written")
 	}
 

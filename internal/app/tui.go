@@ -73,7 +73,7 @@ type Tui struct {
 	templates *templateSource
 	missing   []string
 
-	// project is lazyapi.config.yml (nil when absent); activeEnv is the
+	// project is .lazyapi/config.yml (nil when absent); activeEnv is the
 	// selected named environment (nil: none).
 	project   *project.Config
 	activeEnv *project.Environment
@@ -449,17 +449,17 @@ func serverFor(v string, servers []string) string {
 // useEnv activates a named environment (nil clears it).
 func (t *Tui) useEnv(e *project.Environment) {
 	t.activeEnv = e
-	path := ""
+	var paths []string
 	t.templates.vars = nil
 	if e != nil {
-		path = e.Env
+		paths = e.Files(t.project)
 		t.templates.vars = e.Vars
 	}
-	t.envStore.SetPath(path)
+	t.envStore.SetPaths(paths...)
 	t.titleBar.Title = t.title()
 }
 
-// switchEnv cycles through the named environments of lazyapi.config.yml
+// switchEnv cycles through the named environments of .lazyapi/config.yml
 // (then "none"), or through the env files in the working directory when
 // there is no config.
 func (t Tui) switchEnv() (Tui, tea.Cmd) {
@@ -649,7 +649,7 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			spec = msg.Paths[0]
 		}
 		if cfg, err := project.Find(spec); err != nil {
-			cmd = notify("lazyapi.config.yml: "+err.Error(), components.Error)
+			cmd = notify(".lazyapi/config.yml: "+err.Error(), components.Error)
 		} else if cfg != nil {
 			t.project = cfg
 			// An explicit --env file keeps priority over the default environment.
