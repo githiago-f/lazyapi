@@ -52,7 +52,7 @@ lazyapi run api.yml --flow .lazyapi/flows/signup.js --data users.json
 ```
 
 - CSV needs a header row. JSON is an array of objects; numbers and booleans become text, nested values JSON text.
-- In each iteration the row's values are added to the env: use <code v-pre>{{env.email}}</code> in params, headers and bodies (<code v-pre>--param id={{env.id}}</code>) and `env.get("email")` in scripts. Imported Postman <code v-pre>{{email}}</code> placeholders already read the env.
+- In each iteration the row's values are added to the env: use `{{env.email}}` in params, headers and bodies (`--param id={{env.id}}`) and `env.get("email")` in scripts. Imported Postman `{{email}}` placeholders already read the env.
 - Every iteration starts from the same env and vars: what a script sets in one row does not leak into the next.
 - Scripts see `lazyapi.iteration` (0-based) and `lazyapi.iterations`.
 - Results carry `"iteration"` (1-based) and labels end with `[#n]` in every output format; the report has `"iterations"`. `--bail` stops after the iteration with the first failure. At most 10 000 rows.
@@ -63,7 +63,7 @@ lazyapi run api.yml --flow .lazyapi/flows/signup.js --data users.json
 |------|-------------|
 | `--env-name <name>` | Named environment from [`.lazyapi/config.yml`](/environments): server, env file, vars and credentials |
 | `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first). Wins over the environment |
-| `--env <file>` | `.env` file for <code v-pre>{{env.NAME}}</code>. Wins over the environment |
+| `--env <file>` | `.env` file for `{{env.NAME}}`. Wins over the environment |
 | `--param k=v` | Path parameter for operations that declare it (repeatable). Otherwise the spec's example is used; with no value at all, the operation is skipped |
 | `--query k=v`, `--header k=v` | Added to every request (repeatable) |
 | `--timeout <d>` | Per-request timeout (default `30s`) |

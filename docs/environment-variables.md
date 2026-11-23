@@ -1,14 +1,14 @@
 # Environment Variables
 
-LazyAPI supports template resolution in URLs, headers, body, params, and auth fields using `&#123;&#123;...&#125;&#125;` syntax.
+LazyAPI supports template resolution in URLs, headers, body, params, and auth fields using `{{...}}` syntax.
 
 ## Syntax
 
 | Pattern | Source | Example |
 |---------|--------|---------|
-| `&#123;&#123;env.VAR_NAME&#125;&#125;` | System environment or `.env` file | `&#123;&#123;env.API_KEY&#125;&#125;` |
-| `&#123;&#123;var.VAR_NAME&#125;&#125;` | Request-scoped variables | `&#123;&#123;var.userId&#125;&#125;` |
-| `&#123;&#123;lazyapi.*&#125;&#125;` | Reserved for future use | — |
+| `{{env.VAR_NAME}}` | System environment or `.env` file | `{{env.API_KEY}}` |
+| `{{var.VAR_NAME}}` | Request-scoped variables | `{{var.userId}}` |
+| `{{lazyapi.*}}` | Reserved for future use | — |
 
 ## Usage
 
@@ -17,13 +17,13 @@ LazyAPI supports template resolution in URLs, headers, body, params, and auth fi
 ./lazyapi my-api.yml --env .env
 
 # In the TUI editor, type directly into any field:
-https://&#123;&#123;env.BASE_URL&#125;&#125;/api/users
+https://{{env.BASE_URL}}/api/users
 
 # In headers:
-Authorization: Bearer &#123;&#123;env.TOKEN&#125;&#125;
+Authorization: Bearer {{env.TOKEN}}
 
 # In request body:
-{"apiKey": "&#123;&#123;env.API_KEY&#125;&#125;"}
+{"apiKey": "{{env.API_KEY}}"}
 ```
 
 ## .env file format
@@ -38,4 +38,4 @@ TOKEN=eyJhbGci...
 
 1. System environment variables
 2. `.env` file variables (overrides system if duplicate)
-3. Request-scoped `&#123;&#123;var.X&#125;&#125;` values (set programmatically)
+3. Request-scoped `{{var.X}}` values (set programmatically)

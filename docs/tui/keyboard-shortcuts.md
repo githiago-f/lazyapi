@@ -4,6 +4,8 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 
 ## Global
 
+<Screen name="help" caption="? shows every key of the current page" />
+
 | Key | Action |
 |-----|--------|
 | `ctrl+k` | Command palette: open an operation, run the spec / a tag / flows, switch environment, history, copy as cURL |
@@ -43,7 +45,7 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `ctrl+e` | Save the last response as an example in the spec (outside text fields and editors, where `ctrl+e` is "end of line") |
 | `ctrl+x` | Open the Body or Tests tab in `$VISUAL` / `$EDITOR` |
 | `alt+c` | Copy the request as cURL (with the active environment's server and credentials) |
-| <code v-pre>{{</code> or `$name` | Open the variable menu; `↑`/`↓` choose, `tab` inserts, `esc` closes |
+| `{{` or `$name` | Open the variable menu; `↑`/`↓` choose, `tab` inserts, `esc` closes |
 | `alt+f` | Format the JSON body |
 | `ctrl+z` / `ctrl+y` | Undo / redo in Body, Tests and the description |
 | `shift` + movement, `alt+a` | Select in the code editor (`esc` clears) |

@@ -58,6 +58,8 @@ GET  /pets    List all pets
 
 ## Preview Panel
 
+<Screen name="list-preview" caption="s sends the selected operation; the response appears under its header" />
+
 Select an item to see its preview on the right:
 
 - Request method, URI, and summary

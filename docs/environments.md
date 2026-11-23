@@ -57,7 +57,7 @@ environments:
 
 ## Variables and secrets
 
-The values of <code v-pre>{{env.NAME}}</code> for an environment come, in this order (later files win), from:
+The values of `{{env.NAME}}` for an environment come, in this order (later files win), from:
 
 1. the process environment;
 2. `.lazyapi/envs/<name>.env`: plain variables (base URLs, tenant ids, feature flags). **Commit it**;

@@ -137,7 +137,7 @@ Objetivo: chamar um request já definido (com body, headers e query salvos) de q
 
 ## Release
 
-- [ ] **v1.4.0**: fases 13 (seleção, diagnósticos), dados no runner, 14, 15, 16 (breaking: `pm` removido, layout `.lazyapi/`). Tag depois do merge na `main`; o `cd.yml` publica binários e a doc (`/v1/` e `/latest/`).
+- [ ] **v1.4.0**: fases 13 (seleção, diagnósticos), dados no runner, 14, 15, 16 (breaking: `pm` removido, layout `.lazyapi/`). Tag depois do merge na `main`; o `cd.yml` publica os binários e o `docs.yml` a doc em https://lazyapi.ia.br (atual em `/`, arquivo por major em `/v1/`).
 
 ## Fase 11 / Contínuo — qualidade de código
 

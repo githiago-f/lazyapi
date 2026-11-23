@@ -93,13 +93,13 @@ export function after(res) {
 
 ## Dynamic values and helpers
 
-<code v-pre>{{$name}}</code> in the URL, path params, query, headers or body is replaced when the request is sent, with a **new value at every occurrence**:
+`{{$name}}` in the URL, path params, query, headers or body is replaced when the request is sent, with a **new value at every occurrence**:
 
 ```json
 { "email": "{{$randomEmail}}", "name": "{{$randomFullName}}", "requestId": "{{$guid}}" }
 ```
 
-The built-ins use the Postman names (<code v-pre>{{$guid}}</code>, <code v-pre>{{$timestamp}}</code>, <code v-pre>{{$randomInt}}</code>, <code v-pre>{{$randomFirstName}}</code>, <code v-pre>{{$randomCity}}</code>, …), generated with [gofakeit](https://github.com/brianvoe/gofakeit). [`lazyapi fake`](/cli/fake) lists them with an example each.
+The built-ins use the Postman names (`{{$guid}}`, `{{$timestamp}}`, `{{$randomInt}}`, `{{$randomFirstName}}`, `{{$randomCity}}`, …), generated with [gofakeit](https://github.com/brianvoe/gofakeit). [`lazyapi fake`](/cli/fake) lists them with an example each.
 
 **Helpers.** Every function the operation's test script exports (other than `before` and `after`) is a dynamic value too, and it **replaces a built-in of the same name**:
 
@@ -122,7 +122,7 @@ test("the API keeps the generated SKU", () => {
 - An unknown name, or a helper that throws, fails the operation before sending (`request` check *dynamic values resolved*).
 - Requests sent with `lazyapi.send()` and from flows get the built-ins.
 
-**`faker` in scripts.** Every built-in is a method: <code v-pre>{{$randomFirstName}}</code> is `faker.firstName()`, <code v-pre>{{$randomUUID}}</code> is `faker.uuid()`. There are also `faker.int(min, max)`, `faker.float(min, max)`, `faker.pick(list)` and `faker.get("randomEmail")`.
+**`faker` in scripts.** Every built-in is a method: `{{$randomFirstName}}` is `faker.firstName()`, `{{$randomUUID}}` is `faker.uuid()`. There are also `faker.int(min, max)`, `faker.float(min, max)`, `faker.pick(list)` and `faker.get("randomEmail")`.
 
 ## Flows
 
@@ -168,8 +168,8 @@ Add `/// <reference path="./lazyapi.d.ts" />` to the top of a script for autocom
 |--------|-------------|
 | `request` | The request sent: `method`, `url`, `path`, `headers` (lower-cased), `query`, `params`, `body`, `json()` |
 | `response` | `status`, `statusText`, `headers` (lower-cased), `body`, `time` (ms), `header(name)`, `json()`, `text()`. `null` in the TUI before a request is sent |
-| `env` | `get`, `set`, `has`, `all` over environment variables (<code v-pre>{{env.X}}</code>). Changes last for the current run |
-| `vars` | Same API for run variables (<code v-pre>{{var.X}}</code>). During `run` (without `--parallel`), later operations see them |
+| `env` | `get`, `set`, `has`, `all` over environment variables (`{{env.X}}`). Changes last for the current run |
+| `vars` | Same API for run variables (`{{var.X}}`). During `run` (without `--parallel`), later operations see them |
 | `faker` | Fake data: `faker.email()`, `faker.uuid()`, `faker.int(min, max)`, `faker.pick(list)`, … (see [Dynamic values](#dynamic-values-and-helpers)) |
 | `lazyapi.send(target, opts?)` | Sends another operation synchronously and returns its response. `opts`: `params`, `query`, `headers`, `body` (objects are JSON-encoded) |
 | `test(name, fn)` | Registers a test. It fails if `fn` throws or returns a rejected promise |
