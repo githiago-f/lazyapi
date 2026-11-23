@@ -109,7 +109,9 @@ func WriteSecrets(specPath, name string, data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-	_, err = f.Write(data)
-	return p, err
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return "", err
+	}
+	return p, f.Close()
 }

@@ -48,14 +48,14 @@ func ListFake(args []string) error {
 		return enc.Encode(rows)
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TEMPLATE\tSCRIPT\tDESCRIPTION\tEXAMPLE")
+	_, _ = fmt.Fprintln(w, "TEMPLATE\tSCRIPT\tDESCRIPTION\tEXAMPLE")
 	for _, r := range rows {
 		ex := r.Example
 		if len([]rune(ex)) > 40 {
 			ex = string([]rune(ex)[:39]) + "…"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Template, r.Script, r.Description, ex)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Template, r.Script, r.Description, ex)
 	}
-	fmt.Fprintln(w, "\nA test script can add its own or replace these: export function randomSku() { return \"SKU-\" + faker.int(1, 999); } → {{$randomSku}}")
+	_, _ = fmt.Fprintln(w, "\nA test script can add its own or replace these: export function randomSku() { return \"SKU-\" + faker.int(1, 999); } → {{$randomSku}}")
 	return w.Flush()
 }

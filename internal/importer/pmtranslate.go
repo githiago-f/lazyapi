@@ -130,9 +130,10 @@ func matchParen(s string, open int) int {
 	for i := open; i < len(s); i++ {
 		c := s[i]
 		if quote != 0 {
-			if c == '\\' {
+			switch c {
+			case '\\':
 				i++
-			} else if c == quote {
+			case quote:
 				quote = 0
 			}
 			continue
