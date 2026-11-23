@@ -4,6 +4,8 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 
 ## Global
 
+<Screen name="help" caption="? shows every key of the current page" />
+
 | Key | Action |
 |-----|--------|
 | `ctrl+k` | Command palette: open an operation, run the spec / a tag / flows, switch environment, history, copy as cURL |

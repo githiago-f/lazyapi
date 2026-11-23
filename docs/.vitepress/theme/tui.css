@@ -1,0 +1,832 @@
+/*
+ * LazyAPI docs: the look of the TUI (internal/config/theme.go).
+ * Catppuccin Mocha (dark, default) and Latte (light). Mauve is the only
+ * focus/selection color, Peach the brand, Surface2 the idle border.
+ */
+
+:root {
+  --ctp-rosewater: #dc8a78;
+  --ctp-mauve: #8839ef;
+  --ctp-red: #d20f39;
+  --ctp-peach: #fe640b;
+  --ctp-yellow: #df8e1d;
+  --ctp-green: #40a02b;
+  --ctp-teal: #179299;
+  --ctp-sky: #04a5e5;
+  --ctp-sapphire: #209fb5;
+  --ctp-blue: #1e66f5;
+  --ctp-lavender: #7287fd;
+  --ctp-text: #4c4f69;
+  --ctp-subtext1: #5c5f77;
+  --ctp-subtext0: #6c6f85;
+  --ctp-overlay2: #7c7f93;
+  --ctp-overlay1: #8c8fa1;
+  --ctp-overlay0: #9ca0b0;
+  --ctp-surface2: #acb0be;
+  --ctp-surface1: #bcc0cc;
+  --ctp-surface0: #ccd0da;
+  --ctp-base: #eff1f5;
+  --ctp-mantle: #e6e9ef;
+  --ctp-crust: #dce0e8;
+}
+
+.dark {
+  --ctp-rosewater: #f5e0dc;
+  --ctp-mauve: #cba6f7;
+  --ctp-red: #f38ba8;
+  --ctp-peach: #fab387;
+  --ctp-yellow: #f9e2af;
+  --ctp-green: #a6e3a1;
+  --ctp-teal: #94e2d5;
+  --ctp-sky: #89dceb;
+  --ctp-sapphire: #74c7ec;
+  --ctp-blue: #89b4fa;
+  --ctp-lavender: #b4befe;
+  --ctp-text: #cdd6f4;
+  --ctp-subtext1: #bac2de;
+  --ctp-subtext0: #a6adc8;
+  --ctp-overlay2: #9399b2;
+  --ctp-overlay1: #7f849c;
+  --ctp-overlay0: #6c7086;
+  --ctp-surface2: #585b70;
+  --ctp-surface1: #45475a;
+  --ctp-surface0: #313244;
+  --ctp-base: #1e1e2e;
+  --ctp-mantle: #181825;
+  --ctp-crust: #11111b;
+}
+
+:root,
+.dark {
+  /* semantic, as in config/theme.go */
+  --t-accent: var(--ctp-mauve);
+  --t-on-accent: var(--ctp-crust);
+  --t-brand: var(--ctp-peach);
+  --t-border: var(--ctp-surface2);
+  --t-rule: var(--ctp-surface1);
+  --t-muted: var(--ctp-overlay1);
+  --t-go: var(--ctp-green);
+  --t-env: var(--ctp-teal);
+  --t-radius: 8px;
+
+  --t-get: var(--ctp-sapphire);
+  --t-post: var(--ctp-green);
+  --t-put: var(--ctp-yellow);
+  --t-patch: var(--ctp-peach);
+  --t-delete: var(--ctp-red);
+  --t-head: var(--ctp-teal);
+
+  --vp-font-family-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --t-font-ui: var(--vp-font-family-mono);
+
+  --vp-c-brand-1: var(--ctp-mauve);
+  --vp-c-brand-2: var(--ctp-lavender);
+  --vp-c-brand-3: var(--ctp-mauve);
+  --vp-c-brand-soft: color-mix(in srgb, var(--ctp-mauve) 16%, transparent);
+
+  --vp-c-bg: var(--ctp-base);
+  --vp-c-bg-alt: var(--ctp-mantle);
+  --vp-c-bg-elv: var(--ctp-mantle);
+  --vp-c-bg-soft: var(--ctp-surface0);
+
+  --vp-c-border: var(--ctp-surface2);
+  --vp-c-divider: var(--ctp-surface1);
+  --vp-c-gutter: var(--ctp-crust);
+
+  --vp-c-text-1: var(--ctp-text);
+  --vp-c-text-2: var(--ctp-subtext0);
+  --vp-c-text-3: var(--ctp-overlay1);
+
+  --vp-c-tip-1: var(--ctp-green);
+  --vp-c-tip-2: var(--ctp-green);
+  --vp-c-tip-soft: color-mix(in srgb, var(--ctp-green) 10%, transparent);
+  --vp-c-note-1: var(--ctp-blue);
+  --vp-c-note-soft: color-mix(in srgb, var(--ctp-blue) 10%, transparent);
+  --vp-c-info-1: var(--ctp-sapphire);
+  --vp-c-info-soft: color-mix(in srgb, var(--ctp-sapphire) 10%, transparent);
+  --vp-c-important-1: var(--ctp-mauve);
+  --vp-c-important-soft: color-mix(in srgb, var(--ctp-mauve) 10%, transparent);
+  --vp-c-warning-1: var(--ctp-yellow);
+  --vp-c-warning-2: var(--ctp-yellow);
+  --vp-c-warning-soft: color-mix(in srgb, var(--ctp-yellow) 10%, transparent);
+  --vp-c-danger-1: var(--ctp-red);
+  --vp-c-danger-2: var(--ctp-red);
+  --vp-c-danger-soft: color-mix(in srgb, var(--ctp-red) 10%, transparent);
+  --vp-c-caution-1: var(--ctp-red);
+  --vp-c-caution-soft: color-mix(in srgb, var(--ctp-red) 10%, transparent);
+
+  --vp-code-color: var(--ctp-peach);
+  --vp-code-bg: var(--ctp-surface0);
+  --vp-code-block-bg: var(--ctp-mantle);
+  --vp-code-block-divider-color: var(--ctp-surface1);
+  --vp-code-copy-code-bg: var(--ctp-surface0);
+  --vp-code-copy-code-hover-bg: var(--ctp-surface1);
+  --vp-code-copy-code-active-text: var(--ctp-green);
+  --vp-code-lang-color: var(--ctp-overlay1);
+
+  --vp-nav-bg-color: var(--ctp-base);
+  --vp-sidebar-bg-color: var(--ctp-mantle);
+  --vp-local-search-bg: var(--ctp-base);
+  --vp-local-search-result-bg: var(--ctp-mantle);
+  --vp-local-search-result-border: var(--ctp-surface1);
+  --vp-local-search-result-selected-bg: var(--ctp-mantle);
+  --vp-local-search-result-selected-border: var(--ctp-mauve);
+  --vp-local-search-highlight-bg: var(--ctp-mauve);
+  --vp-local-search-highlight-text: var(--ctp-crust);
+
+  --vp-button-brand-border: var(--ctp-mauve);
+  --vp-button-brand-text: var(--ctp-crust);
+  --vp-button-brand-bg: var(--ctp-mauve);
+  --vp-button-brand-hover-border: var(--ctp-lavender);
+  --vp-button-brand-hover-text: var(--ctp-crust);
+  --vp-button-brand-hover-bg: var(--ctp-lavender);
+
+  --vp-custom-block-tip-border: transparent;
+  --vp-custom-block-details-bg: var(--ctp-mantle);
+
+  --vp-home-hero-name-color: var(--ctp-peach);
+  --vp-layout-max-width: 1440px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--t-accent) 35%, transparent);
+}
+
+/* ---------- title bar (nav) ---------- */
+
+.VPNavBar,
+.VPNavBar.has-sidebar,
+.VPNavBar:not(.home) {
+  font-family: var(--t-font-ui);
+}
+
+.VPNavBar .divider-line,
+.VPNavBar.has-sidebar .divider-line {
+  background-color: var(--t-rule) !important;
+}
+
+.VPNavBar:not(.top) .divider-line,
+.VPNavBar .divider-line {
+  background-color: var(--t-rule);
+}
+
+.VPNavBarTitle .title {
+  font-family: var(--t-font-ui);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ctp-text);
+  gap: 8px;
+}
+
+.VPNavBarTitle .title .t-prompt {
+  color: var(--t-brand);
+  font-weight: 800;
+}
+
+.VPNavBarTitle .title .t-sep {
+  color: var(--t-muted);
+  font-weight: 400;
+}
+
+.VPNavBarTitle .title .t-sub {
+  color: var(--t-muted);
+  font-weight: 400;
+}
+
+.VPNavBarMenuLink,
+.VPNavBarMenuGroup .button {
+  font-family: var(--t-font-ui);
+  font-size: 13px !important;
+}
+
+.VPNavBarMenuLink.active {
+  color: var(--t-accent) !important;
+}
+
+.VPNavBarMenuLink.active::before {
+  content: "▸ ";
+}
+
+/* the version menu looks like the TUI env chip */
+.VPNavBarMenuGroup:last-of-type .button .text {
+  background: var(--t-env);
+  color: var(--ctp-crust);
+  padding: 0 8px;
+  border-radius: 3px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.VPNavBarMenuGroup:last-of-type .button .text .vpi-chevron-down {
+  color: var(--ctp-crust);
+}
+
+.VPMenu {
+  border-radius: var(--t-radius) !important;
+  border: 1px solid var(--t-accent) !important;
+  background: var(--ctp-mantle) !important;
+  font-family: var(--t-font-ui);
+}
+
+.VPMenuLink .link:hover {
+  background: var(--t-accent) !important;
+  color: var(--t-on-accent) !important;
+}
+
+/* search button: a filter field like the request list */
+.VPNavBarSearchButton,
+.DocSearch-Button {
+  font-family: var(--t-font-ui);
+}
+
+@media (min-width: 768px) {
+  .VPNavBarSearchButton {
+    border: 1px solid var(--t-border) !important;
+    border-radius: var(--t-radius) !important;
+    background: var(--ctp-mantle) !important;
+    min-width: 200px;
+    justify-content: space-between;
+  }
+
+  .VPNavBarSearchButton:hover {
+    border-color: var(--t-accent) !important;
+  }
+
+  .VPNavBarSearchButton .text::before {
+    content: "/ ";
+    color: var(--t-accent);
+  }
+}
+
+.VPNavBarSearchButton .keys,
+.VPNavBarSearchButton .key {
+  font-family: var(--t-font-ui);
+}
+
+/* ---------- sidebar: the request list ---------- */
+
+.VPSidebar {
+  font-family: var(--t-font-ui);
+  border-right: 1px solid var(--t-rule);
+  padding-bottom: 64px !important;
+}
+
+.VPSidebarItem.level-0 > .item > .text,
+.VPSidebarItem.level-0 > .item > .link > .text {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--t-muted) !important;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+.VPSidebarItem.level-0 > .item > .text::before {
+  content: "── ";
+  color: var(--t-border);
+}
+
+.VPSidebarItem.level-0 > .item > .text::after {
+  content: " ──";
+  color: var(--t-border);
+}
+
+.VPSidebarItem.level-1 .text {
+  font-size: 13px !important;
+  color: var(--ctp-subtext1);
+}
+
+.VPSidebarItem.level-1 > .item {
+  border-radius: 4px;
+  padding-left: 18px;
+  position: relative;
+}
+
+.VPSidebarItem.level-1 > .item::before {
+  content: "▸";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: transparent;
+  font-size: 12px;
+}
+
+.VPSidebarItem.level-1 > .item:hover::before {
+  color: var(--t-border);
+}
+
+.VPSidebarItem.is-active.level-1 > .item::before {
+  color: var(--t-accent);
+}
+
+.VPSidebarItem.is-active > .item .text,
+.VPSidebarItem.level-1.is-active > .item > .link > .text {
+  color: var(--t-accent) !important;
+  font-weight: 600;
+}
+
+.VPSidebarItem .indicator {
+  display: none !important;
+}
+
+.VPSidebarItem.collapsible .caret {
+  color: var(--t-muted);
+}
+
+/* ---------- content ---------- */
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.vp-doc h4 {
+  font-family: var(--t-font-ui);
+  letter-spacing: -0.01em;
+}
+
+.vp-doc h1 {
+  color: var(--t-brand);
+  font-size: 30px;
+}
+
+.vp-doc h2 {
+  border-top: 1px dashed var(--t-rule);
+  font-size: 21px;
+}
+
+.vp-doc h2::before {
+  content: "## ";
+  color: var(--t-border);
+}
+
+.vp-doc h3::before {
+  content: "### ";
+  color: var(--t-border);
+}
+
+.vp-doc a {
+  color: var(--t-accent);
+  text-decoration-color: color-mix(in srgb, var(--t-accent) 40%, transparent);
+}
+
+.vp-doc a:hover {
+  color: var(--ctp-lavender);
+}
+
+.vp-doc :not(pre) > code {
+  border-radius: 4px;
+  font-size: 0.86em;
+}
+
+.vp-doc a > code {
+  color: var(--t-accent);
+}
+
+.vp-doc blockquote {
+  border-left: 2px solid var(--t-brand);
+  color: var(--ctp-subtext0);
+}
+
+.vp-doc kbd,
+.t-kbd {
+  font-family: var(--t-font-ui);
+  font-size: 0.82em;
+  border: 1px solid var(--t-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: var(--ctp-mantle);
+  color: var(--t-accent);
+}
+
+/* code blocks: a bordered pane */
+.vp-doc div[class*="language-"] {
+  border: 1px solid var(--t-border);
+  border-radius: var(--t-radius) !important;
+  transition: border-color 0.15s;
+}
+
+.vp-doc div[class*="language-"]:hover,
+.vp-doc div[class*="language-"]:focus-within {
+  border-color: var(--t-accent);
+}
+
+@media (max-width: 639px) {
+  .vp-doc div[class*="language-"] {
+    border-radius: 0 !important;
+    border-left: 0;
+    border-right: 0;
+  }
+}
+
+.vp-doc div[class*="language-"] > span.lang {
+  font-family: var(--t-font-ui);
+  top: 4px;
+}
+
+.vp-doc div[class*="language-"] > span.lang::before {
+  content: "─ ";
+  color: var(--t-border);
+}
+
+.vp-code-group .tabs {
+  border: 1px solid var(--t-border);
+  border-bottom: 0;
+  border-radius: var(--t-radius) var(--t-radius) 0 0;
+  font-family: var(--t-font-ui);
+}
+
+.vp-code-group div[class*="language-"] {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+
+/* tables: box drawing */
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--t-border);
+  border-radius: var(--t-radius);
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .vp-doc table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+.vp-doc tr {
+  border: 0;
+  background: transparent !important;
+}
+
+.vp-doc th,
+.vp-doc td {
+  border: 0;
+  border-bottom: 1px solid var(--t-rule);
+  padding: 8px 14px;
+}
+
+.vp-doc th + th,
+.vp-doc td + td {
+  border-left: 1px solid var(--t-rule);
+}
+
+.vp-doc tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.vp-doc th {
+  font-family: var(--t-font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: lowercase;
+  color: var(--t-brand);
+  background: var(--ctp-mantle);
+}
+
+.vp-doc tbody tr:hover td {
+  background: color-mix(in srgb, var(--t-accent) 6%, transparent);
+}
+
+/* custom blocks: rounded panes with a title in the border */
+.vp-doc .custom-block {
+  border: 1px solid var(--t-border);
+  border-left-width: 3px;
+  border-radius: var(--t-radius);
+}
+
+.vp-doc .custom-block.tip { border-color: var(--ctp-green); }
+.vp-doc .custom-block.info { border-color: var(--ctp-sapphire); }
+.vp-doc .custom-block.note { border-color: var(--ctp-blue); }
+.vp-doc .custom-block.important { border-color: var(--ctp-mauve); }
+.vp-doc .custom-block.warning { border-color: var(--ctp-yellow); }
+.vp-doc .custom-block.danger,
+.vp-doc .custom-block.caution { border-color: var(--ctp-red); }
+
+.vp-doc .custom-block .custom-block-title {
+  font-family: var(--t-font-ui);
+  font-size: 12px;
+  text-transform: lowercase;
+}
+
+.vp-doc .custom-block.tip .custom-block-title { color: var(--ctp-green); }
+.vp-doc .custom-block.info .custom-block-title { color: var(--ctp-sapphire); }
+.vp-doc .custom-block.warning .custom-block-title { color: var(--ctp-yellow); }
+.vp-doc .custom-block.danger .custom-block-title { color: var(--ctp-red); }
+
+/* ---------- outline ---------- */
+
+.VPDocAsideOutline {
+  font-family: var(--t-font-ui);
+}
+
+.VPDocAsideOutline .content {
+  border-left: 1px solid var(--t-rule) !important;
+}
+
+.VPDocAsideOutline .outline-title {
+  font-size: 12px !important;
+  color: var(--t-muted);
+  text-transform: lowercase;
+}
+
+.VPDocAsideOutline .outline-title::before {
+  content: "── ";
+  color: var(--t-border);
+}
+
+.VPDocAsideOutline .outline-link {
+  font-size: 12.5px !important;
+}
+
+.VPDocAsideOutline .outline-link.active {
+  color: var(--t-accent) !important;
+}
+
+.VPDocAsideOutline .outline-marker {
+  background-color: var(--t-accent) !important;
+  width: 2px !important;
+}
+
+/* ---------- doc footer: pager as buttons ---------- */
+
+.VPDocFooter {
+  font-family: var(--t-font-ui);
+}
+
+.VPDocFooter .pager-link {
+  border: 1px solid var(--t-border) !important;
+  border-radius: var(--t-radius) !important;
+  transition: border-color 0.15s;
+}
+
+.VPDocFooter .pager-link:hover {
+  border-color: var(--t-accent) !important;
+}
+
+.VPDocFooter .pager-link .desc {
+  text-transform: lowercase;
+}
+
+.VPDocFooter .pager-link.prev .desc::before {
+  content: "[ ";
+  color: var(--t-accent);
+}
+
+.VPDocFooter .pager-link.next .desc::after {
+  content: " ]";
+  color: var(--t-accent);
+}
+
+.VPDocFooter .pager-link .title {
+  color: var(--ctp-text) !important;
+}
+
+.VPDocFooter .pager-link:hover .title {
+  color: var(--t-accent) !important;
+}
+
+.VPDocFooter .edit-link-button,
+.VPDocFooter .last-updated {
+  font-size: 12.5px;
+}
+
+.VPFooter {
+  font-family: var(--t-font-ui);
+  border-top: 1px solid var(--t-rule) !important;
+  background: var(--ctp-mantle);
+  padding-bottom: 56px !important;
+}
+
+/* ---------- search: a palette overlay (ctrl+k) ---------- */
+
+.VPLocalSearchBox .shell {
+  border: 1px solid var(--t-accent);
+  border-radius: var(--t-radius) !important;
+  font-family: var(--t-font-ui);
+}
+
+.VPLocalSearchBox .search-bar {
+  border-radius: 6px !important;
+  border-color: var(--t-border) !important;
+}
+
+.VPLocalSearchBox .search-bar:focus-within {
+  border-color: var(--t-accent) !important;
+}
+
+.VPLocalSearchBox .result {
+  border-radius: 6px !important;
+}
+
+.VPLocalSearchBox .result.selected .titles::before {
+  content: "▸ ";
+  color: var(--t-accent);
+}
+
+/* ---------- method badges ---------- */
+
+.t-method {
+  font-family: var(--t-font-ui);
+  font-weight: 700;
+  font-size: 0.85em;
+}
+
+.t-method.get { color: var(--t-get); }
+.t-method.post { color: var(--t-post); }
+.t-method.put { color: var(--t-put); }
+.t-method.patch { color: var(--t-patch); }
+.t-method.delete { color: var(--t-delete); }
+.t-method.head,
+.t-method.options { color: var(--t-head); }
+
+/* ---------- panes (used by the home page and in docs) ---------- */
+
+.t-pane {
+  position: relative;
+  border: 1px solid var(--t-border);
+  border-radius: var(--t-radius);
+  padding: 22px 20px 18px;
+  background: var(--vp-c-bg);
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.t-pane:hover,
+.t-pane:focus-within {
+  border-color: var(--t-accent);
+}
+
+.t-pane > .t-pane-title {
+  position: absolute;
+  top: -0.72em;
+  left: 14px;
+  padding: 0 6px;
+  background: var(--vp-c-bg);
+  font-family: var(--t-font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: var(--t-brand);
+}
+
+.t-pane:hover > .t-pane-title {
+  color: var(--t-accent);
+}
+
+/* ---------- help bar ---------- */
+
+.t-helpbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 16px;
+  font-family: var(--t-font-ui);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--t-muted);
+  background: var(--ctp-mantle);
+  border-top: 1px solid var(--t-rule);
+}
+
+.t-helpbar .k {
+  color: var(--ctp-subtext1);
+  font-weight: 600;
+}
+
+.t-helpbar .sep {
+  color: var(--ctp-surface2);
+}
+
+.t-helpbar .right {
+  margin-left: auto;
+  color: var(--t-muted);
+}
+
+.t-helpbar button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.t-helpbar button:hover .k {
+  color: var(--t-accent);
+}
+
+@media (max-width: 767px) {
+  .t-helpbar {
+    display: none;
+  }
+
+  .VPFooter {
+    padding-bottom: 24px !important;
+  }
+}
+
+/* ---------- help overlay (?) ---------- */
+
+.t-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--ctp-crust) 70%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.t-overlay .t-pane {
+  width: min(520px, calc(100vw - 32px));
+  border-color: var(--t-accent);
+  background: var(--ctp-base);
+  padding: 26px 24px 18px;
+}
+
+.t-overlay .t-pane > .t-pane-title {
+  color: var(--t-accent);
+  background: var(--ctp-base);
+}
+
+.t-overlay table {
+  width: 100%;
+  font-family: var(--t-font-ui);
+  font-size: 13px;
+  border-collapse: collapse;
+}
+
+.t-overlay td {
+  padding: 5px 0;
+  vertical-align: top;
+}
+
+.t-overlay td:first-child {
+  width: 40%;
+  color: var(--t-accent);
+  font-weight: 600;
+}
+
+.t-overlay .hint {
+  margin-top: 12px;
+  font-family: var(--t-font-ui);
+  font-size: 12px;
+  color: var(--t-muted);
+}
+
+/* ---------- home ---------- */
+
+.VPHome {
+  margin-bottom: 64px !important;
+}
+
+.VPHome .vp-doc h2 {
+  border-top: 0;
+  margin-top: 64px;
+}
+
+.VPHome .vp-doc h2:first-child {
+  margin-top: 16px;
+}
+
+/* ---------- buttons: the TUI's rounded boxes ---------- */
+
+.t-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: 1px solid var(--t-border);
+  border-radius: var(--t-radius);
+  font-family: var(--t-font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ctp-text) !important;
+  text-decoration: none !important;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.t-btn:hover,
+.t-btn:focus-visible {
+  border-color: var(--t-accent);
+  color: var(--t-accent) !important;
+}
+
+.t-btn.primary {
+  border-color: var(--t-accent);
+  color: var(--t-go) !important;
+}
+
+.t-btn.primary:hover,
+.t-btn.primary:focus-visible {
+  background: var(--t-accent);
+  color: var(--t-on-accent) !important;
+}

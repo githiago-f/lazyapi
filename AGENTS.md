@@ -204,6 +204,11 @@ go test ./...                        # Tests
 golangci-lint run                    # Lint (config: .golangci.yml)
 ```
 
+## Docs site
+
+- VitePress in `docs/` (theme in `docs/.vitepress/theme`: TUI look, Catppuccin, help bar). Published by `.github/workflows/docs.yml` (tags `v*` or manual) to https://lazyapi.ia.br: current docs at `/`, each major at `/v<major>/` (`DOCS_BASE`). Never hardcode `/lazyapi/` paths; old `/lazyapi/` and `/latest/` links are redirected client-side.
+- TUI screenshots in `docs/public/screens/*.svg` come from the real TUI: `cd docs && npm run screens` (tmux + `lazyapi mock`, `scripts/ansi2svg.mjs`). Regenerate them when the TUI changes.
+
 ## Known Issues
 
 - `config.DefaultConfig.Active` (current page) is package-level state: only one TUI program may run at a time (tests use `start`, which waits for the program to stop).

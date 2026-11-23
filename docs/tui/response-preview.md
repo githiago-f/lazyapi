@@ -8,6 +8,8 @@ The editor and the request list show responses in the same view. Both send reque
 
 ## Tabs
 
+<Screen name="list-checks" caption="The Checks tab: request, status, contract and each test()" />
+
 | Tab | Content |
 |-----|---------|
 | **Body** | Pretty-printed and syntax-highlighted (JSON, YAML, XML, HTML, JS, CSS). JSON keeps key order and is not HTML-escaped. `r` shows the raw body |

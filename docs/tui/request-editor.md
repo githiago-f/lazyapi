@@ -4,17 +4,7 @@ Open a request from the list to enter the editor. It shows the request details a
 
 ## Layout
 
-```
-┌───────────────────────────────────────────┐
-│ Method    Server URL    URI       [Send]  │
-├───────────────────────────────────────────┤
-├─────────────────────┬─────────────────────┤
-│ Docs Params Auth    │ 200 OK · 41 ms · ✓ 3│
-│ Headers Body Tests  │ Body Headers Checks │
-│                     │                     │
-│  Tab content        │  Response           │
-└─────────────────────┴─────────────────────┘
-```
+<Screen name="request-editor" caption="The editor after alt+enter: request tabs on the left, the response on the right" />
 
 ## Top controls
 

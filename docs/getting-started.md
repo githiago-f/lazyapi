@@ -18,6 +18,8 @@ This generates a minimal OpenAPI 3.0 template with your server URL.
 
 ## 3. Explore in the TUI
 
+<Screen name="list-preview" caption="The example spec against lazyapi mock" />
+
 ```bash
 ./lazyapi my-api.yml
 ```

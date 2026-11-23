@@ -10,20 +10,9 @@ The TUI is the default mode. Launch it with:
 
 ## Layout
 
-The screen is divided into three areas:
+The screen is divided into three areas: the **title bar** (spec and environment), the **page** and the **help bar** with the keys that work right now.
 
-```
-┌─────────────────────────────────────────┐
-│  Title Bar                               │
-├─────────────────────────────────────────┤
-│                                         │
-│  Main Content                            │
-│  (Request List or Request Editor)       │
-│                                         │
-├─────────────────────────────────────────┤
-│  Help Bar                                │
-└─────────────────────────────────────────┘
-```
+<Screen name="request-list" caption="lazyapi examples/openapi.yml: the request list, grouped by tag" />
 
 ## Pages
 

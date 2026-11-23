@@ -1,0 +1,99 @@
+name: Docs
+
+# Published at https://lazyapi.ia.br (GitHub Pages, gh-pages branch, CNAME).
+# Layout: the current docs at "/" and each major version at "/v<major>/".
+# Each build is made for the path it is served from (DOCS_BASE), so assets
+# and links resolve on the custom domain.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-pages
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags for the version, history for "last updated"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)"
+          fi
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major=${VERSION%%.*}" >> "$GITHUB_OUTPUT"
+          echo "docs version: $VERSION"
+
+      - name: Build
+        env:
+          DOCS_VERSION: ${{ steps.version.outputs.version }}
+          MAJOR: ${{ steps.version.outputs.major }}
+        run: |
+          cd docs
+          npm ci
+          bash scripts/extract-docs.sh
+
+          DOCS_BASE=/ npm run build
+          mkdir -p ../site
+          cp -r .vitepress/dist/. ../site/
+
+          DOCS_BASE="/v$MAJOR/" npm run build
+          mkdir -p "../site/v$MAJOR"
+          cp -r .vitepress/dist/. "../site/v$MAJOR/"
+
+      - name: Keep the other major versions
+        env:
+          MAJOR: ${{ steps.version.outputs.major }}
+        run: |
+          # The whole branch is replaced (no stale /latest or /lazyapi copies);
+          # only archived v<N>/ directories of other majors are carried over.
+          if git fetch --depth=1 origin gh-pages; then
+            mkdir -p old
+            git archive FETCH_HEAD | tar -x -C old
+            for d in old/v*/; do
+              [[ -d "$d" ]] || continue
+              name="$(basename "$d")"
+              [[ "$name" == "v$MAJOR" ]] && continue
+              # old builds made for /lazyapi/v<N>/ do not work on the domain
+              grep -q '/lazyapi/' "$d/index.html" 2>/dev/null && continue
+              cp -r "$d" "site/$name"
+            done
+          fi
+          touch site/.nojekyll
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          cname: lazyapi.ia.br
+          keep_files: false

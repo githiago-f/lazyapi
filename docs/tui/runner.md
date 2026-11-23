@@ -2,9 +2,13 @@
 
 ## Command palette
 
+<Screen name="palette" caption="ctrl+k: fuzzy search over operations, runs, flows and environments" />
+
 `ctrl+k` opens a fuzzy search over everything you can do: every operation (open it in the editor), test runs, flows, environments, the history and "copy as cURL". Type a few letters of each word, in any order (`get users`, `flow life`, `env prod`), then `enter`.
 
 ## Runner
+
+<Screen name="runner" caption="Run All operations from the palette: results stream in with a progress bar" />
 
 The runner runs operations and flows with the same engine as `lazyapi run` and shows results as they finish.
 
@@ -18,6 +22,8 @@ The run uses the active environment: its server, env file, vars, credentials and
 **Data files.** The palette also lists the CSV files and JSON arrays next to the spec and in `data/` (`Data · .lazyapi/data/users.csv → read-only operations`, `→ all operations`, `→ flows`). The run goes once per row, like [`run --data`](/cli/run#data-driven-runs): results are labeled `[#n]`, and the confirmation shows the number of rows.
 
 ## History
+
+<Screen name="history" caption="H: every response is recorded, without credentials" />
 
 Every request sent from the TUI (list or editor) is recorded per spec. `H` in the list (or the palette) opens it, newest first.
 
