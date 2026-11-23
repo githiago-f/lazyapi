@@ -15,6 +15,8 @@ The header shows a progress bar and the passed / failed / skipped counts. When t
 
 The run uses the active environment: its server, env file, vars, credentials and `http:` options.
 
+**Data files.** The palette also lists the CSV files and JSON arrays next to the spec and in `data/` (`Data · data/users.csv → read-only operations`, `→ all operations`, `→ flows`). The run goes once per row, like [`run --data`](/cli/run#data-driven-runs): results are labeled `[#n]`, and the confirmation shows the number of rows.
+
 ## History
 
 Every request sent from the TUI (list or editor) is recorded per spec. `H` in the list (or the palette) opens it, newest first.

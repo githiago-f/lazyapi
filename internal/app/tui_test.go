@@ -398,7 +398,7 @@ paths:
 	waitFor(t, tm, "JSON", "✓ valid")
 	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl})
 	tm.Type(",")
-	waitFor(t, tm, "✗ invalid")
+	waitFor(t, tm, "invalid character") // "✗ <line>: invalid character …"
 }
 
 func TestTUI_CtrlEInEditorDoesNotSaveExample(t *testing.T) {

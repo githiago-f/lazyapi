@@ -88,7 +88,7 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 
 - [x] Runs com data files: `run --data rows.csv|json` (uma iteração por linha, linha no env, `lazyapi.iteration`, `pm.iterationData`, `[#n]` nos relatórios), MCP `data_file`.
 - [ ] `formdata` (arquivos) no `pm.sendRequest`.
-- [ ] Runner no TUI com data file (escolher o arquivo pela paleta).
+- [x] Runner no TUI com data file: a paleta lista CSV e JSON (listas) ao lado do spec e em `data/`.
 
 ## Fase 13 — Editores de verdade
 
@@ -96,8 +96,8 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 - [x] Campos de uma linha com cores: templates (resolvido/faltando), host, `{params}`, query.
 - [x] Menu de autocomplete: variáveis após `{{` ou `$nome` (valores mascarados), API dos scripts no editor de Tests (`response.`, `expect(…).`, `lazyapi.`, `pm.`…).
 - [x] Visual: bordas arredondadas e apagadas, destaque só no foco, aba ativa com sublinhado grosso.
-- [ ] Hover/assinatura das funções da API no editor de Tests; diagnóstico de TypeScript (esbuild) ao vivo.
-- [ ] Seleção de texto (shift+setas) e copiar/recortar no editor.
+- [x] Assinatura da chamada sob o cursor e erros de sintaxe JS/TS ao vivo (esbuild) no editor de Tests.
+- [x] Seleção (shift+movimentos, alt+a), copiar (ctrl+c só com seleção), recortar (alt+x), colar (alt+v); digitar substitui, abrir aspas/parênteses envolve, tab indenta as linhas.
 
 ## Fase 11 / Contínuo — qualidade de código
 

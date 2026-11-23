@@ -46,6 +46,8 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | <code v-pre>{{</code> or `$name` | Open the variable menu; `↑`/`↓` choose, `tab` inserts, `esc` closes |
 | `alt+f` | Format the JSON body |
 | `ctrl+z` / `ctrl+y` | Undo / redo in Body, Tests and the description |
+| `shift` + movement, `alt+a` | Select in the code editor (`esc` clears) |
+| `ctrl+c` / `alt+x` / `alt+v` | Copy (only with a selection; otherwise quit) / cut / paste |
 | `esc` | Leave tab content, then back to the list |
 
 ### Tabs
