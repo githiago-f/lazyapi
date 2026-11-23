@@ -34,7 +34,7 @@ Flows:
 Data-driven:
   --data file         run everything once per row of a CSV (header row) or JSON (array of
                       objects) file; the row's values are added to the env ({{env.col}},
-                      env.get, pm.iterationData) and results carry "iteration"
+                      env.get) and results carry "iteration"
 
 Checks:
   --script file       test script for every operation (default: each x-lazyapi-tests)

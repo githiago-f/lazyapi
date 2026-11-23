@@ -52,9 +52,9 @@ lazyapi run api.yml --flow flows/signup.js --data users.json
 ```
 
 - CSV needs a header row. JSON is an array of objects; numbers and booleans become text, nested values JSON text.
-- In each iteration the row's values are added to the env: use <code v-pre>{{env.email}}</code> in params, headers and bodies (<code v-pre>--param id={{env.id}}</code>), `env.get("email")` in scripts, and `pm.iterationData.get("email")` in Postman scripts. Imported Postman <code v-pre>{{email}}</code> placeholders already read the env.
+- In each iteration the row's values are added to the env: use <code v-pre>{{env.email}}</code> in params, headers and bodies (<code v-pre>--param id={{env.id}}</code>) and `env.get("email")` in scripts. Imported Postman <code v-pre>{{email}}</code> placeholders already read the env.
 - Every iteration starts from the same env and vars: what a script sets in one row does not leak into the next.
-- Scripts see `lazyapi.iteration` (0-based) and `lazyapi.iterations` (`pm.info.iteration` / `iterationCount`).
+- Scripts see `lazyapi.iteration` (0-based) and `lazyapi.iterations`.
 - Results carry `"iteration"` (1-based) and labels end with `[#n]` in every output format; the report has `"iterations"`. `--bail` stops after the iteration with the first failure. At most 10 000 rows.
 
 ## Execution

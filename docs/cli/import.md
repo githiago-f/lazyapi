@@ -32,14 +32,14 @@ Inferred schemas list the observed properties but do not mark them required: one
 
 - Collections v2.0 and v2.1. Auth is taken from the collection, the folder or the request (bearer, basic, apikey). Bodies can be raw, urlencoded, formdata or graphql.
 - `{{name}}` becomes <code v-pre>{{env.name}}</code>. Collection variables are written to `.env.postman` next to the spec (mode 600; add it to `.gitignore`). A `postman` environment is created in `lazyapi.config.yml` when there is no config yet.
-- **Scripts run unchanged.** Pre-request scripts go into `before(req)` and test scripts into the operation's test file. The `pm` compatibility layer provides:
-  - `pm.test`;
-  - `pm.expect` with Chai-style chains: `to.be.ok`, `.to.equal`, `.eql`, `.include`, `.property`, `.an('array')`, `.above`, `.lengthOf`, `.not`, …;
-  - `pm.response` (`code`, `status`, `json()`, `text()`, `headers.get`, `responseTime`, `to.have.status`, `to.have.header`);
-  - `pm.request` (headers `add`/`upsert`/`remove` in the pre-request phase);
-  - `pm.environment` / `pm.variables` / `pm.collectionVariables` / `pm.globals` / `pm.iterationData`, all backed by `env`; `pm.info.iteration` follows `run --data`.
+- **Scripts are translated** to the native script API (there is no `pm` object). Pre-request scripts go into `before(req)` and test scripts into the operation's test file:
+  - `pm.test` → `test`; `pm.expect(x)` with Chai chains (`to.be.ok`, `.equal`, `.deep.equal`, `.eql`, `.include`, `.property(p).that.equals(v)`, `.an('array')`, `.above`, `.below`, `.lengthOf`, `.empty`, `.oneOf`, `.not`, …) → `expect(x)` matchers;
+  - `pm.response.to.have.status/header`, `to.be.ok` → `expect(response)…`; `pm.response.code`, `json()`, `text()`, `headers.get`, `responseTime` → `response.*`;
+  - `pm.request.headers.add/upsert/remove` (pre-request) → `req.headers`;
+  - `pm.environment` / `pm.iterationData` → `env`; `pm.variables` / `pm.collectionVariables` / `pm.globals` → `vars`; `pm.info.iteration` → `lazyapi.iteration`.
 
-  - `pm.sendRequest(url | {url, method, header, body}, callback)`: the URL is mapped to the spec operation it belongs to and sent with `lazyapi.send`, so it gets the same checks. The callback runs right away (scripts are synchronous) and the response is also returned. A URL that is not an operation of the spec fails with a message telling you to add it (for example with `lazyapi import curl`). `formdata` bodies are not supported.
+  Lines that cannot be translated (for example `pm.sendRequest`; use `lazyapi.send`) are commented out with `TODO(postman)`, and the header of the file says how many. If commenting a line would break the syntax, the original script is kept, commented out.
+  Postman dynamic variables such as <code v-pre>{{$guid}}</code> and <code v-pre>{{$randomEmail}}</code> are kept as they are.
 
 ### Environments
 

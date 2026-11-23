@@ -1,6 +1,6 @@
 // Package complete finds completions at the cursor of a text field or code
 // editor: {{env.X}} / $X variables and the script API (response., expect().,
-// lazyapi., env., pm., …). It is pure: the components render the menu.
+// lazyapi., env., …). It is pure: the components render the menu.
 package complete
 
 import (
@@ -140,11 +140,6 @@ var api = map[string][]member{
 	"vars":    {{"get()", "string | undefined"}, {"set()", "void"}, {"has()", "boolean"}, {"all()", "Record<string,string>"}},
 	"lazyapi": {{"send()", "(operation, options?) → response"}, {"iteration", "0-based data row"}, {"iterations", "rows"}},
 	"console": {{"log()", ""}, {"info()", ""}, {"warn()", ""}, {"error()", ""}},
-	"pm": {{"test()", "(name, fn)"}, {"expect()", "chai-style"}, {"response", "pm response"}, {"request", "pm request"},
-		{"environment", "scope"}, {"variables", "scope"}, {"collectionVariables", "scope"}, {"globals", "scope"},
-		{"iterationData", "scope"}, {"sendRequest()", "(req, callback)"}, {"info", "iteration, eventName"}},
-	"pm.response": {{"code", "number"}, {"status", "string"}, {"json()", "parsed body"}, {"text()", "string"},
-		{"headers", "list"}, {"responseTime", "ms"}, {"to", "assertions"}},
 }
 
 var matchers = []member{
@@ -158,7 +153,7 @@ var matchers = []member{
 
 var globals = []member{
 	{"test()", "(name, fn)"}, {"expect()", "(actual)"}, {"response", "the response"}, {"request", "the request"},
-	{"env", "environment"}, {"vars", "run variables"}, {"lazyapi", "send, iteration"}, {"console", "log"}, {"pm", "Postman API"},
+	{"env", "environment"}, {"vars", "run variables"}, {"lazyapi", "send, iteration"}, {"console", "log"},
 }
 
 // Script completes the script API after "object." and "expect(…).", and
@@ -205,7 +200,7 @@ func Script(text []rune, cursor int) (Result, bool) {
 }
 
 // objectBefore names the expression ending right before the dot at dot:
-// "response", "pm.response", "expect()" (for expect(...)), "expect().not".
+// "response", "expect()" (for expect(...)), "expect().not".
 func objectBefore(text []rune, dot int) string {
 	i := dot
 	if i > 0 && text[i-1] == ')' {
@@ -291,9 +286,6 @@ var signatures = map[string]string{
 	"response.header":        "response.header(name: string) → string | undefined",
 	"request.json":           "request.json<T>() → T",
 	"console.log":            "console.log(...values)",
-	"pm.test":                "pm.test(name: string, fn: () => void)",
-	"pm.expect":              "pm.expect(value) → chai assertion",
-	"pm.sendRequest":         "pm.sendRequest(url | {url, method, header, body}, callback(err, res))",
 	"toBe":                   "toBe(expected) — strict equality (===)",
 	"toEqual":                "toEqual(expected) — deep equality",
 	"toContain":              "toContain(item) — substring or array element",

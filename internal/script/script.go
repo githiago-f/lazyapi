@@ -25,9 +25,6 @@ import (
 //go:embed prelude.js
 var prelude string
 
-//go:embed postman.js
-var postmanCompat string
-
 //go:embed lazyapi.d.ts
 var Types string
 
@@ -74,7 +71,7 @@ type ExecData struct {
 	Contract ContractFunc // optional: enables expect(response).toMatchSchema()
 
 	// Iteration (0-based) and Iterations of a data-driven run (lazyapi
-	// .iteration, pm.info.iteration). Iterations 0 means a single run.
+	// .iteration, lazyapi.iterations). Iterations 0 means a single run.
 	Iteration, Iterations int
 }
 
@@ -190,10 +187,6 @@ func newRuntime(b *bridge, opts Options) (*goja.Runtime, func(), error) {
 	if _, err := vm.RunScript("lazyapi:prelude", prelude); err != nil {
 		stop()
 		return nil, nil, fmt.Errorf("internal prelude error: %s", jsError(err))
-	}
-	if _, err := vm.RunScript("lazyapi:postman", postmanCompat); err != nil {
-		stop()
-		return nil, nil, fmt.Errorf("internal postman layer error: %s", jsError(err))
 	}
 	if _, err := vm.RunString("var __lazyapi_module = { exports: {} };"); err != nil {
 		stop()

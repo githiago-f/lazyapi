@@ -55,12 +55,11 @@ internal/
   history/                 # TUI request history per spec (user cache dir, jsonl, 0600): no env/auth secrets, sensitive headers/query redacted, body templates kept; Replay
   diff/                    # Line diff (LCS with prefix/suffix trimming), hunks with folded context
   jq/                      # gojq wrapper: Apply(filter, body) with timeout, Check(filter)
-  importer/                # curl / Postman (+ environments: WriteEnvironment → .env.<name> + project.AddEnvironment) / HAR → spec operations (Apply: path templating, inferred schemas, security, tests); pm compat scripts
+  importer/                # curl / Postman (+ environments: WriteEnvironment → .env.<name> + project.AddEnvironment) / HAR → spec operations (Apply: path templating, inferred schemas, security, tests); pmtranslate.go: Postman scripts → native API (Chai chains → expect), TODO(postman) for the rest
   mock/                    # Mock server: routes spec paths, answers with examples or SchemaSample, validates requests (422), Prefer: code=/example=
   script/                  # JS/TS test engine: esbuild bundling + goja sandbox
     script.go              #   Run (post-response), Before (export function before(req)), native bridge, Format
     prelude.js             #   JS side of the API: test, expect matchers, console, LazyResponse
-    postman.js             #   `pm` compatibility layer (pm.test/expect with Chai subset, pm.response, variable scopes)
     bundle.go              #   Bundle() — CommonJS wrapped in (function(module, exports){...}) so exports exist before the body; esbuild plugin: https imports, local imports confined to Root, bare imports rejected
     modules.go             #   ModuleLoader — https fetch, disk cache, lazyapi.lock integrity, Offline/Reload/Frozen/AllowedHosts
     spec.go                #   SpecContext (lazyapi.send + contract; "METHOD https://…" targets mapped with store.MatchPath and sent to that host), ResolveTarget, OperationOptions
@@ -79,7 +78,7 @@ internal/
     code.go                #   CodeEditor — own line buffer (no textarea): highlight, gutter, pairs, indent, undo, JSON validate/format, completions
     menu.go                #   Completion — menu state (Move/Apply) and rendering
     syntax/                #   Line = runes + Kind per rune: Code (chroma), MarkTemplates, URL, Render(window, cursor)
-    complete/              #   Pure completion: Templates ({{ and $name), Script (response., expect()., lazyapi., pm.)
+    complete/              #   Pure completion: Templates ({{ and $name), Script (response., expect()., lazyapi.)
     scrollable/            #   Scrollable model wrapper with pgup/pgdown/mouse
       scrollable.go
     tabs/                  #   Tabbed container

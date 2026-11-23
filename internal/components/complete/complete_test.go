@@ -58,7 +58,6 @@ func TestScript(t *testing.T) {
 		"expect(response.json().id).toBe|": "toBe()",
 		"expect(x).not.toC|":               "toContain()",
 		"lazyapi.s|":                       "send()",
-		"pm.response.co|":                  "code",
 		"const a = 1;\nres|":               "response",
 		"  expect(r).toHave|":              "toHaveProperty()",
 	}

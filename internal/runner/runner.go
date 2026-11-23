@@ -97,8 +97,8 @@ type Options struct {
 	OnResult func(OpResult)
 
 	// Data runs everything once per row (data-driven run): the row's values
-	// are added to Env for that iteration ({{env.x}}, env.get, pm
-	// variables), and results carry Iteration.
+	// are added to Env for that iteration ({{env.x}}, env.get),
+	// and results carry Iteration.
 	Data []map[string]string
 
 	iteration, iterations int // set by Run for each Data row

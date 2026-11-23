@@ -67,8 +67,7 @@ paths:
 	script := `
 test("iteration " + lazyapi.iteration + "/" + lazyapi.iterations, () => {
   expect(env.get("name")).toBe(lazyapi.iteration === 0 ? "ana" : "bia");
-  expect(pm.info.iteration).toBe(lazyapi.iteration);
-  expect(pm.iterationData.get("id")).toBe(request.params.id);
+  expect(env.get("id")).toBe(request.params.id);
 });
 env.set("leak", "from " + lazyapi.iteration);
 test("rows are isolated", () => expect(env.get("leak")).toBe("from " + lazyapi.iteration));`

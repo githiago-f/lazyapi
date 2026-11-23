@@ -355,24 +355,35 @@ func scripts(events []pmEvent, listen string) []string {
 	return out
 }
 
-// postmanScript wraps Postman scripts for LazyAPI: pre-request code runs in
-// before(req) and test code at the top level, both with the `pm` object.
+// postmanScript translates Postman scripts to the LazyAPI API: pre-request
+// code runs in before(req), test code at the top level.
 func postmanScript(pre, tests []string) string {
 	if len(pre) == 0 && len(tests) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("// Imported from Postman. `pm` is LazyAPI's Postman compatibility layer;\n")
-	b.WriteString("// see `lazyapi types` for the native API (test, expect, lazyapi.send).\n\n")
+	todos := 0
+	var body strings.Builder
 	if len(pre) > 0 {
-		b.WriteString("export function before(req) {\n  pm.__before(req, () => {\n")
-		for _, line := range strings.Split(strings.Join(pre, "\n\n"), "\n") {
-			b.WriteString("    " + line + "\n")
+		code, n := translatePostman(strings.Join(pre, "\n\n"), true)
+		todos += n
+		body.WriteString("export function before(req) {\n")
+		for _, line := range strings.Split(code, "\n") {
+			body.WriteString("  " + line + "\n")
 		}
-		b.WriteString("  });\n}\n\n")
+		body.WriteString("}\n\n")
 	}
-	b.WriteString(strings.Join(tests, "\n\n"))
+	if len(tests) > 0 {
+		code, n := translatePostman(strings.Join(tests, "\n\n"), false)
+		todos += n
+		body.WriteString(code + "\n")
+	}
+	b.WriteString("// Imported from Postman and translated to the LazyAPI script API (see `lazyapi types`).\n")
+	if todos > 0 {
+		fmt.Fprintf(&b, "// %d line(s) marked TODO(postman) could not be translated: rewrite them.\n", todos)
+	}
 	b.WriteString("\n")
+	b.WriteString(body.String())
 	return b.String()
 }
 

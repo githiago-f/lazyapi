@@ -115,7 +115,7 @@ lazyapi types                                # script API (TypeScript definition
 
 TLS (`--insecure`, `--ca-cert`, mTLS), proxies, redirects and body limits can be set per run or per environment. Results include timing (DNS, connect, TLS, TTFB) and cookies.
 
-Coming from Postman? `lazyapi import postman` converts a collection into operations and keeps its scripts running through a `pm` compatibility layer. Folders become tags, and tokens go to an env file, not into the spec.
+Coming from Postman? `lazyapi import postman` converts a collection into operations and translates its scripts to the native `test`/`expect` API. Folders become tags, and tokens go to an env file, not into the spec.
 
 Named environments and credentials (bearer, basic, API key, OAuth2 client credentials/password with automatic tokens) live in `lazyapi.config.yml`. See [docs/environments.md](docs/environments.md).
 

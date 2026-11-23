@@ -119,7 +119,7 @@ Flows run sequentially after the operations and share `env` and `vars` with them
 
 ## Postman scripts
 
-Collections imported with [`lazyapi import postman`](/cli/import) keep their scripts. A built-in `pm` object provides `pm.test`, `pm.expect` (Chai-style chains), `pm.response`, `pm.request` and the variable scopes, so they run without changes. New scripts should prefer the native `test`/`expect` API.
+There is no `pm` object. [`lazyapi import postman`](/cli/import) translates collection scripts to this API (`pm.test` → `test`, Chai chains → `expect` matchers, `pm.environment` → `env`, …) and comments out, with `TODO(postman)`, what it cannot translate.
 
 ## Editor support
 
