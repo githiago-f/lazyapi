@@ -49,13 +49,14 @@ OpenAPI YAML file
 
 - **OpenAPI is the source of truth** — every `.yml`/`.yaml` file is parsed as OpenAPI 3.x
 - **No database** — everything is file-based
-- **Session state in temp files** — unsaved edits live in `os.TempDir()/lazyapi/`
+- **Git-native workspace** — everything for a spec lives in `.lazyapi/` next to it (config, envs, tests, flows, data, lockfile; secrets and local state git-ignored). See [Environments](/environments)
+- **Session state in `.lazyapi/.local/`** — unsaved edits, drafts and history (git-ignored)
 - **Auth secrets never persist** — security scheme definitions are saved, but runtime values (passwords, tokens) are session-only
 
-## Temp file system
+## Local state
 
 ```
-os.TempDir()/lazyapi/<sanitized-abs-path>/
+<spec dir>/.lazyapi/.local/drafts/
   tmp.<METHOD>.<sanitized-path>   # OpenAPI-ref operations
   draft.new.<N>                    # New unsaved requests
 ```

@@ -29,7 +29,7 @@ JSON bodies are compared with sorted keys, so only real changes show up.
 
 ### What is stored
 
-History files live in the user cache directory (`~/.cache/lazyapi/history/` on Linux), one per spec, with the newest 200 requests and `0600` permissions. Credentials are not stored:
+History lives in `.lazyapi/.local/history.jsonl` next to the spec (git-ignored; `LAZYAPI_HISTORY_DIR` moves it elsewhere), with the newest 200 requests and `0600` permissions. Credentials are not stored:
 
 - environment values and auth secrets are never written;
 - headers and query parameters that look like credentials (`Authorization`, `Cookie`, `*token*`, `*key*`, `*secret*`, `*password*`) are redacted unless they are a plain <code v-pre>{{env.X}}</code> reference;

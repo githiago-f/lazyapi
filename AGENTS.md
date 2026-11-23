@@ -51,8 +51,9 @@ internal/
   report/                  # Renders runner results: pretty (FormatOp/WriteSummary), json, junit, tap; body policy
   inspect/                 # ListOperations, Describe (with referenced schemas), Validate (OpenAPI + scripts compile)
   mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled) + Tools confined to a root dir
+  workspace/               # .lazyapi/ layout next to the spec: Config, EnvFile (committed), SecretsFile (git-ignored), Local, EnvFiles, Ensure (.gitignore), WriteSecrets
   project/                 # .lazyapi/config.yml: named environments (server, env file, vars, auth secrets), Find/Select/Resolve
-  history/                 # TUI request history per spec (user cache dir, jsonl, 0600): no env/auth secrets, sensitive headers/query redacted, body templates kept; Replay
+  history/                 # TUI request history per spec (.lazyapi/.local/history.jsonl, 0600; LAZYAPI_HISTORY_DIR overrides): no env/auth secrets, sensitive headers/query redacted, body templates kept; Replay
   diff/                    # Line diff (LCS with prefix/suffix trimming), hunks with folded context
   fake/                    # {{$name}} built-ins (Postman names) over gofakeit: Value, Vars, JSName (faker.* in scripts), Seed
   jq/                      # gojq wrapper: Apply(filter, body) with timeout, Check(filter)
@@ -141,7 +142,7 @@ internal/
 - **OpenAPI as source of truth** — every `.yml`/`.yaml` file parsed as OpenAPI 3.x via `openapi3.Loader`. `IsOpenAPIFile()` checks for `openapi` or `swagger` root keys via YAML unmarshal.
 - **Test scripts** — JavaScript/TypeScript files next to the spec (default `.lazyapi/tests/<operationId|method_path>.js`) and referenced per operation by the `x-lazyapi-tests` extension. Paths must stay inside the spec directory. `OperationToRequest` loads them into `Request.Tests`; `SaveFile` writes them via `SaveOperationTests`. The CLI never reads test scripts from temp files.
 - **Errors** — `tea.Cmd` wrappers return `store.ErrorMsg{Message}` on failure; the TUI shows it as a notification. Never return `tea.Quit`/`tea.Println` as a `tea.Msg` and never `panic` in store code.
-- **Temp/draft files** — stored in `os.TempDir()/lazyapi/<sanitized-abs-path>/`. Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
+- **Temp/draft files** — stored in `.lazyapi/.local/drafts/` next to the spec (git-ignored; `workspace.Ensure` writes the .gitignore before anything goes there). Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
 - **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]model.RequestItem` with Tags), `OperationToRequest` (pre-fills path params and required query/header params from spec examples), `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
 - **`Glob`** — custom double-star (`**`) glob in `filepath.go` using `strings.Split` + `filepath.Walk`.
 

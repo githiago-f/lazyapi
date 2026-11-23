@@ -1,0 +1,3 @@
+# Written by lazyapi: credentials and local state are never committed.
+secrets/
+.local/

@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"github.com/githiago-f/lazyapi/internal/workspace"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -82,8 +83,16 @@ func Dir() string {
 	return filepath.Join(base, "lazyapi", "history")
 }
 
-// File is the history file for a spec ("" spec: requests without one).
+// File is the history file for a spec: .lazyapi/.local/history.jsonl next
+// to it (git-ignored), or under LAZYAPI_HISTORY_DIR when set. Requests
+// without a spec go to the user cache dir.
 func File(spec string) string {
+	if os.Getenv("LAZYAPI_NO_HISTORY") != "" {
+		return ""
+	}
+	if spec != "" && os.Getenv("LAZYAPI_HISTORY_DIR") == "" {
+		return filepath.Join(workspace.Local(spec), "history.jsonl")
+	}
 	dir := Dir()
 	if dir == "" {
 		return ""
@@ -225,6 +234,11 @@ func Append(e Entry) error {
 	}
 	mu.Lock()
 	defer mu.Unlock()
+	if e.Spec != "" && os.Getenv("LAZYAPI_HISTORY_DIR") == "" {
+		if _, err := workspace.Ensure(e.Spec); err != nil { // .gitignore first
+			return err
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
