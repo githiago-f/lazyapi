@@ -38,8 +38,8 @@ JSON bodies are compared with sorted keys, so only real changes show up.
 History lives in `.lazyapi/.local/history.jsonl` next to the spec (git-ignored; `LAZYAPI_HISTORY_DIR` moves it elsewhere), with the newest 200 requests and `0600` permissions. Credentials are not stored:
 
 - environment values and auth secrets are never written;
-- headers and query parameters that look like credentials (`Authorization`, `Cookie`, `*token*`, `*key*`, `*secret*`, `*password*`) are redacted unless they are a plain <code v-pre>{{env.X}}</code> reference;
-- bodies are stored as written in the editor, so <code v-pre>{{env.PASSWORD}}</code> stays a template;
+- headers and query parameters that look like credentials (`Authorization`, `Cookie`, `*token*`, `*key*`, `*secret*`, `*password*`) are redacted unless they are a plain `{{env.X}}` reference;
+- bodies are stored as written in the editor, so `{{env.PASSWORD}}` stays a template;
 - console output and response cookies are dropped, and bodies over 256 KB are cut.
 
 Replaying a redacted header uses the operation's current value. `X` in the history deletes it (after `y`). Set `LAZYAPI_NO_HISTORY=1` to disable the history, or `LAZYAPI_HISTORY_DIR` to keep it somewhere else.

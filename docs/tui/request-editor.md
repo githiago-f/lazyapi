@@ -10,7 +10,7 @@ Open a request from the list to enter the editor. It shows the request details a
 
 - **Method** — select from GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD
 - **Server URL** — picked from the spec's `servers` list
-- **URI** — the endpoint path, with `&#123;&#123;env.X&#125;&#125;` support
+- **URI** — the endpoint path, with `{{env.X}}` support
 - **Send** — press `Enter` on the Send button, or `alt+enter` from any field. The response, status/contract checks and test results appear on the right ([Response View](./response-preview.md))
 
 Opening an operation pre-fills path parameters, required query/header parameters and the request body from the spec's examples. Bodies can be edited in `$EDITOR` with `ctrl+x`.
@@ -19,11 +19,11 @@ When the spec declares a request body schema but no example, the editor builds o
 
 ## Templates
 
-<code v-pre>{{env.NAME}}</code> and <code v-pre>{{var.NAME}}</code> work in every field and editor, and are colored as you type: teal when the active environment has a value, **red underlined** when it does not.
+`{{env.NAME}}` and `{{var.NAME}}` work in every field and editor, and are colored as you type: teal when the active environment has a value, **red underlined** when it does not.
 
-- Type <code v-pre>{{</code> or the shortcut `$` (`$TOK`) to open the completion menu: the env file's variables and the environment's vars, with values masked when they look like credentials. `↑`/`↓` choose, `tab` (or `enter`) inserts <code v-pre>{{env.TOKEN}}</code>, `esc` closes the menu.
-- References without a value are also listed in the bottom bar (<code v-pre>⚠ no value: {{env.TOKEN}}</code>), because they would be sent as empty strings. Vars set by scripts at run time (`vars.set`, `before()`) are not known before sending.
-- A password field shows its value when it is only references (<code v-pre>{{env.PASSWORD}}</code> holds no secret).
+- Type `{{` or the shortcut `$` (`$TOK`) to open the completion menu: the env file's variables and the environment's vars, with values masked when they look like credentials. `↑`/`↓` choose, `tab` (or `enter`) inserts `{{env.TOKEN}}`, `esc` closes the menu.
+- References without a value are also listed in the bottom bar (`⚠ no value: {{env.TOKEN}}`), because they would be sent as empty strings. Vars set by scripts at run time (`vars.set`, `before()`) are not known before sending.
+- A password field shows its value when it is only references (`{{env.PASSWORD}}` holds no secret).
 - The URL field also colors the host, `{path}` parameters and query keys.
 
 ## Tabs
@@ -86,7 +86,7 @@ Body, Tests and the Docs description use the same editor:
 - **clipboard**: `ctrl+c` copies the selection (with nothing selected it quits, as everywhere), `alt+x` cuts, `alt+v` pastes from the system clipboard (terminal paste works too);
 - `home` goes to the indentation, then column 0; `ctrl+home` / `ctrl+end`; `alt+←` / `alt+→` move by word; `ctrl+w` deletes the word before the cursor; `ctrl+u` deletes to the line start;
 - in Tests, syntax errors as you type (JavaScript and TypeScript, checked with esbuild: the line gets a red `●`, the message goes to the status line) and the **signature** of the call the cursor is in (`ƒ lazyapi.send(target, options?)`, `toHaveProperty(path, value?)`, …);
-- dynamic values: <code v-pre>{{$</code> (or `$name`) offers the built-in faker variables and the helpers the Tests script exports, with a description; unknown names are drawn as missing and listed in the help bar;
+- dynamic values: `{{$` (or `$name`) offers the built-in faker variables and the helpers the Tests script exports, with a description; unknown names are drawn as missing and listed in the help bar;
 - in Tests, completions for the script API as you type: `response.` (`status`, `json()`, …), `expect(…).` (every matcher), `lazyapi.`, `env.`, `vars.` and the globals. Methods insert `()` with the cursor inside.
 
 `esc` closes an open menu first, then leaves the editor.

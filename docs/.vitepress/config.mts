@@ -97,6 +97,14 @@ export default defineConfig({
   ],
 
   markdown: {
+    // Inline code is never a Vue template: `{{env.X}}` shows as written.
+    config(md) {
+      const inline = md.renderer.rules.code_inline!
+      md.renderer.rules.code_inline = (tokens, idx, options, env, self) => {
+        tokens[idx].attrSet("v-pre", "")
+        return inline(tokens, idx, options, env, self)
+      }
+    },
     theme: {
       light: "catppuccin-latte",
       dark: "catppuccin-mocha",
