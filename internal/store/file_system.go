@@ -3,6 +3,7 @@ package store
 
 import (
 	"fmt"
+	"github.com/githiago-f/lazyapi/internal/workspace"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -147,18 +148,25 @@ func SaveResponseExampleCmd(ref model.OpenAPIRef, statusCode int, header http.He
 
 var newDraftCounter int
 
+// tempDirForFile is where the TUI keeps unsaved edits and drafts of a
+// spec: .lazyapi/.local/drafts next to it (git-ignored).
 func tempDirForFile(filePath string) string {
-	abs, err := filepath.Abs(filePath)
-	if err != nil {
-		abs = filePath
+	if abs, err := filepath.Abs(filePath); err == nil {
+		filePath = abs
 	}
-	safe := sanitizePath(abs)
-	return filepath.Join(os.TempDir(), "lazyapi", safe)
+	return filepath.Join(workspace.Local(filePath), "drafts")
+}
+
+// ensureLocal creates the workspace (with its .gitignore) before anything
+// is written to .lazyapi/.local.
+func ensureLocal(filePath string) {
+	_, _ = workspace.Ensure(filePath)
 }
 
 func NewDraftPath(filePath string) string {
 	newDraftCounter++
 	dir := tempDirForFile(filePath)
+	ensureLocal(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return ""
 	}
@@ -354,6 +362,7 @@ func SaveTempFile(data model.Request) tea.Cmd {
 		} else {
 			path = TempPath(data.FileName)
 		}
+		ensureLocal(data.FileName)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return ErrorMsg{Message: fmt.Sprintf("Error creating temp directory: %v", err)}
 		}

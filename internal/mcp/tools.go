@@ -94,7 +94,7 @@ var toolList = []tool{
 			"headers":     strMap("Request headers"),
 			"body":        map[string]any{"description": "Request body: a string is sent as-is, anything else is JSON-encoded"},
 			"env_file":    str("Environment file for {{env.NAME}} templates, relative to the root"),
-			"env_name":    str("Named environment from lazyapi.config.yml (server, env file, vars, credentials, TLS/proxy)"),
+			"env_name":    str("Named environment from .lazyapi/config.yml (server, env file, vars, credentials, TLS/proxy)"),
 			"insecure":    boolean("Skip TLS certificate verification (self-signed development servers)"),
 			"no_contract": boolean("Skip response schema validation"),
 			"dry_run":     boolean("Resolve the request without sending it"),
@@ -119,28 +119,28 @@ var toolList = []tool{
 			"no_contract":   boolean("Skip response schema validation"),
 			"bail":          boolean("Stop after the first failure"),
 			"dry_run":       boolean("List what would be sent without sending"),
-			"include_flows": boolean("Also run every flows/*.js next to the spec, after the operations"),
+			"include_flows": boolean("Also run every .lazyapi/flows/*.js next to the spec, after the operations"),
 			"data_file":     str("CSV (header row) or JSON (array of objects) file, relative to the root: run everything once per row, with the row's values added to the env; results carry iteration"),
 		}),
 		call: (*Tools).runTests,
 	},
 	{
 		Name: "run_flow",
-		Description: "Run a flow script (flows/<name>.js): several operations in order via lazyapi.send(), sharing vars. " +
+		Description: "Run a flow script (.lazyapi/flows/<name>.js): several operations in order via lazyapi.send(), sharing vars. " +
 			"Every request is checked (request, status, contract) and test() calls are reported. Returns steps and checks.",
 		InputSchema: obj([]string{"spec", "flow"}, map[string]any{
 			"spec":        specArg,
-			"flow":        str("Flow file relative to the root (e.g. api/flows/checkout.js), or a name under the spec's flows/ directory"),
+			"flow":        str("Flow file relative to the root (e.g. api/.lazyapi/flows/checkout.js), or a name under the spec's flows/ directory"),
 			"server":      str("Server URL, or index into the spec's servers"),
 			"env_file":    str("Environment file, relative to the root"),
-			"env_name":    str("Named environment from lazyapi.config.yml"),
+			"env_name":    str("Named environment from .lazyapi/config.yml"),
 			"no_contract": boolean("Skip request/response schema checks for each step"),
 		}),
 		call: (*Tools).runFlow,
 	},
 	{
 		Name: "write_flow",
-		Description: "Create or replace flows/<name>.js next to the spec. A flow calls lazyapi.send(operationId, {params, query, headers, body}) " +
+		Description: "Create or replace .lazyapi/flows/<name>.js next to the spec. A flow calls lazyapi.send(operationId, {params, query, headers, body}) " +
 			"in order and asserts with test()/expect(); use vars.set/get to pass ids between steps. Returns the path and any compile error.",
 		InputSchema: obj([]string{"spec", "name", "source"}, map[string]any{
 			"spec":   specArg,
@@ -170,7 +170,7 @@ var toolList = []tool{
 			"headers":  strMap("Request headers"),
 			"body":     map[string]any{"description": "Request body: a string is sent as-is, anything else is JSON-encoded"},
 			"env_file": str("Environment file, relative to the root"),
-			"env_name": str("Named environment from lazyapi.config.yml"),
+			"env_name": str("Named environment from .lazyapi/config.yml"),
 		}),
 		call: (*Tools).exportCurl,
 	},
@@ -364,7 +364,7 @@ func (t *Tools) options(a runArgs) (string, runner.Options, error) {
 	if err != nil {
 		return "", runner.Options{}, err
 	}
-	envMap, err := env.NewStore(sel.EnvFile).Load()
+	envMap, err := env.NewStore(sel.EnvFiles...).Load()
 	if err != nil {
 		return "", runner.Options{}, fmt.Errorf("loading env file: %w", err)
 	}

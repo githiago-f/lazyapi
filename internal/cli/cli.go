@@ -8,7 +8,7 @@ import (
 )
 
 // Commands lists the first words that select CLI mode instead of the TUI.
-var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "mcp", "mock", "import", "help"}
+var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "fake", "mcp", "mock", "import", "help"}
 
 // Run executes a CLI command and exits with its status code
 // (0 ok, 1 a check failed, 2 usage error, 3 something could not run).
@@ -94,6 +94,9 @@ func run(args []string) error {
 		fmt.Print(script.Types)
 		return nil
 
+	case "fake":
+		return ListFake(args[1:])
+
 	case "mcp":
 		return ServeMCP(args[1:])
 
@@ -125,6 +128,7 @@ Usage:
   lazyapi describe <spec.yml> <operation> [--json]  Parameters, bodies, responses and schemas of an operation
   lazyapi validate spec <spec.yml> [--json]         Validate the spec and its test scripts
   lazyapi types                                     Print the test script API (TypeScript definitions)
+  lazyapi fake [name] [--json]                      List the {{$dynamic}} variables (faker), or generate one
 
   Agents and local development
   lazyapi mcp [--root dir]                          Serve the tools above over MCP (stdio)
@@ -143,7 +147,7 @@ Common flags: --server, --env, --param k=v, --query k=v, --header k=v, --timeout
 
 Test scripts are JavaScript/TypeScript files next to the spec, referenced per
 operation by x-lazyapi-tests. They may import relative files and https://
-modules (pinned in lazyapi.lock). Responses are validated against the OpenAPI
+modules (pinned in .lazyapi/lazyapi.lock). Responses are validated against the OpenAPI
 schema automatically.
 
 Exit status: 0 all passed, 1 a check failed, 2 usage error, 3 something could not run.`)

@@ -104,7 +104,8 @@ func TestHTTP_FromEnvironmentConfig(t *testing.T) {
 	srv := tlsServer(t)
 	spec := writeSpec(t, httpSpec)
 	cfg := fmt.Sprintf("default: dev\nenvironments:\n  dev:\n    server: %s\n    http:\n      insecure: true\n      noRedirects: true\n", srv.URL)
-	if err := os.WriteFile(filepath.Join(filepath.Dir(spec), "lazyapi.config.yml"), []byte(cfg), 0o644); err != nil {
+	_ = os.MkdirAll(filepath.Join(filepath.Dir(spec), ".lazyapi"), 0o755)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(spec), ".lazyapi", "config.yml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	res, err := sendJSON(t, spec, "--op", "moved")

@@ -37,66 +37,103 @@ func loadSystemEnv() map[string]string {
 }
 
 // Store is a stateful wrapper around Load that caches the result and only
-// re-reads the file when its content hash changes.
+// re-reads the files when their content changes. It merges several env
+// files in order (later files win): an environment's committed variables,
+// then its secrets, then an explicit --env file.
 type Store struct {
-	filepath string
-	env      map[string]string
-	hash     string
+	paths []string
+	env   map[string]string
+	hash  string
 }
 
-func NewStore(filepath string) *Store {
-	return &Store{filepath: filepath}
+// NewStore reads the given env files ("" entries are ignored).
+func NewStore(paths ...string) *Store {
+	s := &Store{}
+	s.SetPaths(paths...)
+	return s
 }
 
-// Path returns the env file in use ("" means system environment only).
-func (s *Store) Path() string { return s.filepath }
+// Path returns the last env file in use ("" means system environment only).
+func (s *Store) Path() string {
+	if len(s.paths) == 0 {
+		return ""
+	}
+	return s.paths[len(s.paths)-1]
+}
+
+// Paths returns every env file in use, in merge order.
+func (s *Store) Paths() []string { return append([]string(nil), s.paths...) }
 
 // SetPath switches to another env file and drops the cache.
-func (s *Store) SetPath(path string) {
-	s.filepath = path
+func (s *Store) SetPath(path string) { s.SetPaths(path) }
+
+// SetPaths switches to other env files and drops the cache.
+func (s *Store) SetPaths(paths ...string) {
+	s.paths = nil
+	for _, p := range paths {
+		if p != "" {
+			s.paths = append(s.paths, p)
+		}
+	}
 	s.env = nil
 	s.hash = ""
 }
 
-// Load returns the current environment map, re-reading the file only if its
-// content has changed since the last call. Thread-safe for single-goroutine
-// TUI use (bubbletea is single-threaded).
+func (s *Store) read() ([]string, string, error) {
+	var datas []string
+	h := md5.New()
+	for _, p := range s.paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return nil, "", err
+		}
+		datas = append(datas, string(data))
+		h.Write([]byte(p))
+		h.Write(data)
+	}
+	return datas, hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// Load returns the current environment map, re-reading the files only if
+// their content has changed since the last call. Thread-safe for
+// single-goroutine TUI use (bubbletea is single-threaded).
 func (s *Store) Load() (map[string]string, error) {
-	if s.filepath == "" {
+	if len(s.paths) == 0 {
 		if s.env == nil {
 			s.env = loadSystemEnv()
 		}
 		return s.env, nil
 	}
-
-	data, err := os.ReadFile(s.filepath)
+	datas, hash, err := s.read()
 	if err != nil {
 		return nil, err
 	}
-
-	h := md5.Sum(data)
-	hash := hex.EncodeToString(h[:])
-
 	if hash == s.hash && s.env != nil {
 		return s.env, nil
 	}
-
-	s.env = mergeDotenv(loadSystemEnv(), string(data))
-	s.hash = hash
+	env := loadSystemEnv()
+	for _, d := range datas {
+		env = mergeDotenv(env, d)
+	}
+	s.env, s.hash = env, hash
 	return s.env, nil
 }
 
-// FileValues returns only the variables defined in the env file (not the
+// FileValues returns only the variables defined in the env files (not the
 // process environment); nil when there is no file.
 func (s *Store) FileValues() map[string]string {
-	if s.filepath == "" {
+	if len(s.paths) == 0 {
 		return nil
 	}
-	data, err := os.ReadFile(s.filepath)
+	datas, _, err := s.read()
 	if err != nil {
 		return nil
 	}
-	return mergeDotenv(nil, string(data))
+	var out map[string]string
+	for _, d := range datas {
+		out = mergeDotenv(out, d)
+	}
+	return out
 }
 
 // ForceReload always re-reads the file and updates the cache.

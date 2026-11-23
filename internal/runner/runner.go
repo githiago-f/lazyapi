@@ -97,8 +97,8 @@ type Options struct {
 	OnResult func(OpResult)
 
 	// Data runs everything once per row (data-driven run): the row's values
-	// are added to Env for that iteration ({{env.x}}, env.get, pm
-	// variables), and results carry Iteration.
+	// are added to Env for that iteration ({{env.x}}, env.get),
+	// and results carry Iteration.
 	Data []map[string]string
 
 	iteration, iterations int // set by Run for each Data row
@@ -392,8 +392,11 @@ func Prepare(ctx context.Context, spec *openapi3.T, specPath string, ref model.O
 		return req, errors.New(reason)
 	}
 	source, sopts, err := loadScript(spec, specPath, t, opts)
-	if err != nil || source == "" {
+	if err != nil {
 		return req, err
+	}
+	if source == "" {
+		return req.WithDynamic(script.Dynamic)
 	}
 	data := script.ExecData{Request: req, Env: req.Env, Vars: req.Vars}
 	in := ExchangeInput{Spec: spec, SpecPath: specPath, Ref: &ref, Auth: opts.Auth, Iteration: opts.iteration, Iterations: opts.iterations}
@@ -402,9 +405,7 @@ func Prepare(ctx context.Context, spec *openapi3.T, specPath string, ref model.O
 	if br.Error != "" {
 		return req, errors.New(br.Error)
 	}
-	if br.Defined {
-		req = br.Request
-	}
+	req = br.Request
 	return req, opts.Modules.SaveLock()
 }
 
@@ -497,27 +498,42 @@ func Exchange(ctx context.Context, in ExchangeInput) OpResult {
 	return exchange(ctx, res, in)
 }
 
+// notSent fails an operation whose request could not be prepared.
+func notSent(res OpResult, req model.Request, dynamic bool, msg string) OpResult {
+	res.Request = requestInfo(req)
+	if dynamic {
+		res.Checks = append(res.Checks, Check{Kind: CheckRequest, Name: "dynamic values resolved", Message: msg})
+		res.Reason = "not sent: " + msg
+	} else {
+		res.Checks = append(res.Checks, Check{Kind: CheckScript, Name: "before() ran without errors", Message: msg})
+		res.Reason = "not sent: before() failed"
+	}
+	res.Outcome = Failed
+	return res
+}
+
 func exchange(ctx context.Context, res OpResult, in ExchangeInput) OpResult {
 	req := in.Request
 	if in.Script != "" && in.ScriptOptions.Filename != "" && in.SpecPath != "" {
 		res.TestsFile = relToSpec(in.SpecPath, in.ScriptOptions.Filename)
 	}
 
-	// before(req) may change the request (auth, signatures, bodies) first.
-	if in.Script != "" && strings.Contains(in.Script, "before") {
+	// {{$name}} values (helpers exported by the script, else the faker),
+	// then before(req), which may change the request (auth, signatures).
+	dynamic := len(req.DynamicRefs()) > 0
+	if in.Script != "" && (dynamic || strings.Contains(in.Script, "before")) {
 		data := script.ExecData{Request: req, Env: req.Env, Vars: req.Vars}
 		in.bind(&data, req)
 		br := script.Before(in.Script, data, in.ScriptOptions)
 		res.Logs = append(res.Logs, br.Logs...)
 		if br.Error != "" {
-			res.Request = requestInfo(req)
-			res.Checks = append(res.Checks, Check{Kind: CheckScript, Name: "before() ran without errors", Message: br.Error})
-			res.Outcome = Failed
-			res.Reason = "not sent: before() failed"
-			return res
+			return notSent(res, req, br.Dynamic, br.Error)
 		}
-		if br.Defined {
-			req = br.Request
+		req = br.Request
+	} else if dynamic {
+		var err error
+		if req, err = req.WithDynamic(script.Dynamic); err != nil {
+			return notSent(res, req, true, err.Error())
 		}
 	}
 	res.Request = requestInfo(req)

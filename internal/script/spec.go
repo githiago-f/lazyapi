@@ -25,7 +25,7 @@ type SpecContext struct {
 	Vars      map[string]string
 	Timeout   time.Duration
 
-	// Auth fills credentials by security scheme name (lazyapi.config.yml).
+	// Auth fills credentials by security scheme name (.lazyapi/config.yml).
 	Auth map[string]model.AuthSecrets
 
 	// HTTPClient and MaxBody are applied to every request (nil/0: defaults).
@@ -109,6 +109,10 @@ func (c *SpecContext) Send(target string, opts SendOptions) (*Response, error) {
 		if !hasHeader(req.Headers, "Content-Type") {
 			req.Headers["Content-Type"] = "application/json"
 		}
+	}
+	if req, err = req.WithDynamic(Dynamic); err != nil {
+		c.observe(ref, req, nil, err)
+		return nil, err
 	}
 	if missing := req.MissingPathParams(); len(missing) > 0 {
 		err := fmt.Errorf("missing path parameter(s) %s (pass them in options.params)", strings.Join(missing, ", "))

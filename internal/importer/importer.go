@@ -56,7 +56,7 @@ type Result struct {
 	Notes   []string `json:"notes,omitempty"`
 	Files   []string `json:"files,omitempty"` // test scripts and other files written
 	// Auth holds credentials that were only references ({{env.token}}), by
-	// security scheme: safe to write to lazyapi.config.yml (the secret
+	// security scheme: safe to write to .lazyapi/config.yml (the secret
 	// itself stays in the env file).
 	Auth map[string]model.AuthSecrets `json:"-"`
 }
@@ -172,7 +172,7 @@ func applyOne(spec *openapi3.T, specPath string, r Request, res *Result) (string
 			if templated(h.Value) {
 				res.setAuth("apiKeyAuth", func(a *model.AuthSecrets) { a.Value = strings.TrimSpace(h.Value) })
 			} else {
-				res.note("%s: the %s value was not copied into the spec; set it in lazyapi.config.yml under auth.apiKeyAuth.value", label, h.Key)
+				res.note("%s: the %s value was not copied into the spec; set it in .lazyapi/config.yml under auth.apiKeyAuth.value", label, h.Key)
 			}
 		case !skipHeaders[name]:
 			op.AddParameter(param("header", h.Key, h.Value, false))
@@ -396,7 +396,7 @@ func addAuth(spec *openapi3.T, op *openapi3.Operation, value string, res *Result
 			res.setAuth("bearerAuth", func(a *model.AuthSecrets) { a.Token = token })
 			return
 		}
-		res.note("bearer tokens were not copied into the spec; set one in lazyapi.config.yml under auth.bearerAuth.token")
+		res.note("bearer tokens were not copied into the spec; set one in .lazyapi/config.yml under auth.bearerAuth.token")
 	case "basic":
 		addSecurity(spec, op, "basicAuth", &openapi3.SecurityScheme{Type: "http", Scheme: "basic"})
 		if raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(value[len(scheme):])); err == nil {
@@ -405,14 +405,14 @@ func addAuth(spec *openapi3.T, op *openapi3.Operation, value string, res *Result
 				return
 			}
 		}
-		res.note("basic credentials were not copied into the spec; set them in lazyapi.config.yml under auth.basicAuth")
+		res.note("basic credentials were not copied into the spec; set them in .lazyapi/config.yml under auth.basicAuth")
 	default:
 		addSecurity(spec, op, "apiKeyAuth", &openapi3.SecurityScheme{Type: "apiKey", In: "header", Name: "Authorization"})
 		if templated(value) {
 			res.setAuth("apiKeyAuth", func(a *model.AuthSecrets) { a.Value = strings.TrimSpace(value) })
 			return
 		}
-		res.note("the Authorization value was not copied into the spec; set it in lazyapi.config.yml under auth.apiKeyAuth.value")
+		res.note("the Authorization value was not copied into the spec; set it in .lazyapi/config.yml under auth.apiKeyAuth.value")
 	}
 }
 

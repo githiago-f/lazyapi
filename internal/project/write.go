@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
+	"github.com/githiago-f/lazyapi/internal/workspace"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,6 +20,14 @@ func AddEnvironment(path, name string, e Environment) (created bool, err error) 
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		created = true
+		if filepath.Base(filepath.Dir(path)) == workspace.Dir {
+			// .lazyapi/ with its .gitignore (secrets/ and .local/)
+			if _, err := workspace.Ensure(filepath.Join(filepath.Dir(filepath.Dir(path)), "spec")); err != nil {
+				return false, err
+			}
+		} else if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return false, err
+		}
 		data = []byte("# Named environments: lazyapi run <spec> --env-name <name> (ctrl+v in the TUI).\nenvironments: {}\n")
 	case err != nil:
 		return false, err

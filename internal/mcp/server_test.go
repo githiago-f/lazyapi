@@ -216,7 +216,7 @@ func TestTools_AgentLoop(t *testing.T) {
 	// Write a test, read it back, run everything.
 	w, text, isErr := c.tool("write_test", map[string]any{"spec": "api/spec.yml", "operation": "getUser",
 		"source": `test("has id", () => expect(response.json()).toHaveProperty("id"));`})
-	if isErr || w["path"] != "api/tests/getUser.js" || w["compileError"] != nil {
+	if isErr || w["path"] != "api/.lazyapi/tests/getUser.js" || w["compileError"] != nil {
 		t.Errorf("write_test = %s", text)
 	}
 	r, _, _ := c.tool("read_test", map[string]any{"spec": "api/spec.yml", "operation": "getUser"})
@@ -224,7 +224,7 @@ func TestTools_AgentLoop(t *testing.T) {
 		t.Errorf("read_test = %v", r)
 	}
 	raw, _ := os.ReadFile(filepath.Join(root, "api", "spec.yml"))
-	if !strings.Contains(string(raw), "x-lazyapi-tests: tests/getUser.js") {
+	if !strings.Contains(string(raw), "x-lazyapi-tests: .lazyapi/tests/getUser.js") {
 		t.Errorf("spec not linked:\n%s", raw)
 	}
 
@@ -299,7 +299,7 @@ func TestTools_Flows(t *testing.T) {
 	w, text, isErr := c.tool("write_flow", map[string]any{"spec": "api/spec.yml", "name": "signup",
 		"source": `const r = lazyapi.send("createUser"); test("created", () => expect(r).toHaveStatus(201));
 const u = lazyapi.send("getUser", { params: { id: "1" } }); test("readable", () => expect(u.json().id).toBe(1));`})
-	if isErr || w["path"] != "api/flows/signup.js" || w["compileError"] != nil {
+	if isErr || w["path"] != "api/.lazyapi/flows/signup.js" || w["compileError"] != nil {
 		t.Fatalf("write_flow = %s", text)
 	}
 

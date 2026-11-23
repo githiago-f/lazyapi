@@ -15,7 +15,7 @@ import (
 )
 
 // AuthSecrets are the credentials for one security scheme, usually coming
-// from lazyapi.config.yml. Values may use {{env.X}} templates.
+// from .lazyapi/config.yml. Values may use {{env.X}} templates.
 type AuthSecrets struct {
 	Token        string `yaml:"token,omitempty"`        // http bearer
 	Username     string `yaml:"username,omitempty"`     // http basic, oauth2 password grant

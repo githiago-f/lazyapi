@@ -13,7 +13,7 @@ LazyAPI uses your OpenAPI spec as the single source of truth, so there are no co
 ```text
              ┌── TUI ─────── explore, send, edit, debug        (humans)
 OpenAPI ─────┼── CLI ─────── run · send · describe · validate   (CI, scripts)
-+ tests/*.js └── MCP ─────── list · describe · send · write_test · run   (agents)
++ .lazyapi/tests/*.js └── MCP ─────── list · describe · send · write_test · run   (agents)
                   │
                   └─ every response is checked: request · status · contract · your tests
 ```
@@ -62,12 +62,12 @@ paths:
   /users/{id}:
     get:
       operationId: getUser
-      x-lazyapi-tests: tests/getUser.js
+      x-lazyapi-tests: .lazyapi/tests/getUser.js
 ```
 
 ```js
-// tests/getUser.js
-import { z } from "https://esm.sh/zod@3.23.8";   // URL imports, pinned in lazyapi.lock
+// .lazyapi/tests/getUser.js
+import { z } from "https://esm.sh/zod@3.23.8";   // URL imports, pinned in .lazyapi/lazyapi.lock
 import { login, bearer } from "./helpers.js";     // relative imports
 
 test("returns the user", () => {
@@ -83,25 +83,25 @@ test("chained call with a token", () => {
 
 A script can also `export function before(req)` to change the request before it is sent (auth, signatures, bodies).
 
-Scenarios across operations go in **flows** (`flows/*.js`). A flow calls `lazyapi.send()` in order, and every step is checked against the spec automatically:
+Scenarios across operations go in **flows** (`.lazyapi/flows/*.js`). A flow calls `lazyapi.send()` in order, and every step is checked against the spec automatically:
 
 ```js
-// flows/userLifecycle.js
+// .lazyapi/flows/userLifecycle.js
 const created = lazyapi.send("createUser", { body: { name: "Ana", email: "ana@example.com" } });
 test("created", () => expect(created).toHaveStatus(201));
 const removed = lazyapi.send("deleteUser", { params: { id: String(created.json().id) } });
 test("deleted", () => expect(removed).toHaveStatus(204));
 ```
 
-Scripts run in a sandbox with `request`, `response`, `env`, `vars`, `lazyapi.send`, `test`, `expect` (Jest-style matchers) and `console`. Run `lazyapi types` for the TypeScript definitions. Details: [docs/scripting.md](docs/scripting.md).
+Scripts run in a sandbox with `request`, `response`, `env`, `vars`, `lazyapi.send`, `faker`, `test`, `expect` (Jest-style matchers) and `console`. Requests can use fake data with `{{$randomEmail}}`, `{{$guid}}`, … (`lazyapi fake` lists them), and a script's exported functions become dynamic values too: `export function randomSku() { … }` → `{{$randomSku}}`. Run `lazyapi types` for the TypeScript definitions. Details: [docs/scripting.md](docs/scripting.md).
 
 ## CLI
 
 ```bash
 lazyapi run api.yml [--tag users] [--op getUser] [--methods all] [--parallel 8] [--retries 2] [--bail]
 lazyapi run api.yml --output json|junit|tap [--output-file report.xml]
-lazyapi run api.yml --flows                  # operations, then every flows/*.js
-lazyapi run api.yml --env-name staging       # server, env file, vars, credentials from lazyapi.config.yml
+lazyapi run api.yml --flows                  # operations, then every .lazyapi/flows/*.js
+lazyapi run api.yml --env-name staging       # server, env file, vars, credentials from .lazyapi/config.yml
 lazyapi send request api.yml --op createUser --body @user.json --param id=1 --output json
 lazyapi list ops api.yml --json
 lazyapi describe api.yml getUser --json      # params, bodies, responses, referenced schemas
@@ -111,13 +111,14 @@ lazyapi import postman shop.json --into api.yml   # also: curl '<command>', har 
 lazyapi send request api.yml --op getUser --output curl
 lazyapi send request api.yml --op upload --file avatar=./me.png --form caption=hi
 lazyapi types                                # script API (TypeScript definitions)
+lazyapi fake                                 # {{$dynamic}} variables (faker)
 ```
 
 TLS (`--insecure`, `--ca-cert`, mTLS), proxies, redirects and body limits can be set per run or per environment. Results include timing (DNS, connect, TLS, TTFB) and cookies.
 
-Coming from Postman? `lazyapi import postman` converts a collection into operations and keeps its scripts running through a `pm` compatibility layer. Folders become tags, and tokens go to an env file, not into the spec.
+Coming from Postman? `lazyapi import postman` converts a collection into operations and translates its scripts to the native `test`/`expect` API. Folders become tags, and tokens go to `.lazyapi/secrets/`, never into the spec.
 
-Named environments and credentials (bearer, basic, API key, OAuth2 client credentials/password with automatic tokens) live in `lazyapi.config.yml`. See [docs/environments.md](docs/environments.md).
+**Git-native.** Everything lives in `.lazyapi/` next to the spec and is committed with it: `config.yml` (named environments: server, vars, HTTP options, credentials per security scheme — bearer, basic, API key, OAuth2 with automatic tokens), `envs/<name>.env` (variables), `tests/`, `flows/`, `data/` and `lazyapi.lock`. Secrets go to `secrets/<name>.env` and local state to `.local/`, both git-ignored by the `.gitignore` LazyAPI writes there. See [docs/environments.md](docs/environments.md).
 
 By default, `run` only sends `GET`, `HEAD` and `OPTIONS` (reads first, deletes last); pass `--methods all` to include writes. Path parameters come from `--param` or the spec's examples, and the CLI never invents values.
 

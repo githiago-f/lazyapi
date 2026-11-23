@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"github.com/githiago-f/lazyapi/internal/workspace"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -16,6 +18,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/components/complete"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/env"
+	"github.com/githiago-f/lazyapi/internal/fake"
 	"github.com/githiago-f/lazyapi/internal/history"
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/runner"
@@ -33,6 +36,7 @@ type (
 		flows     []string // flows to run after the operations
 		onlyFlows bool
 		title     string
+		data      string // data file: run once per row
 	}
 	useEnvMsg      struct{ name string } // named environment ("" = none)
 	useEnvFileMsg  struct{ path string } // env file when there is no config
@@ -105,6 +109,18 @@ func (t Tui) paletteCommands() []palette.Command {
 			rel, _ := filepath.Rel(filepath.Dir(spec), f)
 			add("Flow", rel+suffix, "", runTestsMsg{spec: spec, flows: []string{f}, onlyFlows: true, title: rel})
 		}
+
+		for _, d := range dataFiles(spec) {
+			rel, _ := filepath.Rel(filepath.Dir(spec), d)
+			add("Data", rel+" → read-only operations"+suffix, "once per row",
+				runTestsMsg{spec: spec, methods: runner.SafeMethods, data: d, title: filepath.Base(spec) + " × " + rel})
+			add("Data", rel+" → all operations"+suffix, "asks first",
+				runTestsMsg{spec: spec, data: d, title: filepath.Base(spec) + " × " + rel + " · all methods"})
+			if len(flows) > 0 {
+				add("Data", rel+" → flows"+suffix, "asks first",
+					runTestsMsg{spec: spec, flows: flows, onlyFlows: true, data: d, title: "flows × " + rel})
+			}
+		}
 	}
 
 	for _, it := range t.requestList.Items() {
@@ -165,6 +181,13 @@ func (t Tui) startRun(msg runTestsMsg) (Tui, tea.Cmd) {
 	if msg.tag != "" {
 		opts.Filter.Tags = []string{msg.tag}
 	}
+	if msg.data != "" {
+		rows, err := runner.LoadData(msg.data)
+		if err != nil {
+			return t, notify("Data file: "+err.Error(), components.Error)
+		}
+		opts.Data = rows
+	}
 	if e := t.activeEnv; e != nil {
 		opts.EnvName, opts.Vars, opts.Auth = e.Name, e.Vars, e.Auth
 		opts.Server = e.Server
@@ -197,10 +220,14 @@ func (t Tui) beginRun(run runview.Run) (Tui, tea.Cmd) {
 func (t Tui) confirmRunText() string {
 	r := t.confirmRun
 	question := "Run every operation, including POST/PUT/PATCH/DELETE?"
-	what := plural(runner.PlannedCount(r.Spec, r.SpecPath, r.Options), "operation")
+	rows := max(1, len(r.Options.Data))
+	what := plural(runner.PlannedCount(r.Spec, r.SpecPath, r.Options)/rows, "operation")
 	if r.Options.SkipOperations {
 		question = "Run flows? They may create, change or delete data."
 		what = plural(len(r.Options.Flows), "flow")
+	}
+	if len(r.Options.Data) > 0 {
+		what += " × " + plural(len(r.Options.Data), "row")
 	}
 	return fmt.Sprintf("%s\n\n%s\n%s · env: %s\n\n%s",
 		confirmTitle.Render(question),
@@ -292,6 +319,9 @@ func (t Tui) replay(e history.Entry) (Tui, tea.Cmd) {
 type templateSource struct {
 	store *env.Store
 	vars  map[string]string
+	// helpers are the functions the editor's test script exports: they
+	// resolve {{$name}} like the built-in faker variables.
+	helpers []string
 }
 
 func (s *templateSource) Vars() []complete.Var {
@@ -302,10 +332,22 @@ func (s *templateSource) Vars() []complete.Var {
 	for k, v := range s.vars {
 		out = append(out, complete.Var{Ref: "var." + k, Value: v})
 	}
+	for _, h := range s.helpers {
+		out = append(out, complete.Var{Ref: "$" + h, Detail: "helper from the test script"})
+	}
+	for _, v := range fake.Vars() {
+		if !slices.Contains(s.helpers, v.Name) {
+			out = append(out, complete.Var{Ref: "$" + v.Name, Detail: v.Description})
+		}
+	}
 	return out
 }
 
 func (s *templateSource) Has(ref string) bool {
+	if name, ok := strings.CutPrefix(ref, "$"); ok {
+		_, builtin := fake.Value(name)
+		return builtin || slices.Contains(s.helpers, name)
+	}
 	scope, name, _ := strings.Cut(ref, ".")
 	switch scope {
 	case "env":
@@ -343,6 +385,42 @@ func (t Tui) missingRefs() []string {
 		inputs = append(inputs, a.Username, a.Password, a.Token, a.KeyValue, a.ClientID, a.ClientSecret, a.AccessToken)
 	}
 	missing := env.Missing(env.Context{Env: envMap, Vars: vars}, inputs...)
+	t.templates.helpers = script.HelperNames(req.Tests)
+	for _, name := range env.DynamicRefs(inputs...) {
+		if !t.templates.Has("$" + name) {
+			missing = append(missing, "$"+name)
+		}
+	}
 	sort.Strings(missing)
 	return missing
+}
+
+// dataFiles lists data files for data-driven runs next to the spec: CSV
+// files, and JSON files holding an array, in the spec's directory and in
+// data/ under it.
+func dataFiles(spec string) []string {
+	dir := filepath.Dir(spec)
+	var out []string
+	for _, pattern := range []string{"*.csv", "*.json", workspace.DataDir + "/*.csv", workspace.DataDir + "/*.json"} {
+		matches, _ := filepath.Glob(filepath.Join(dir, pattern))
+		for _, m := range matches {
+			if strings.HasSuffix(m, ".json") && !isJSONArray(m) {
+				continue // package.json, lockfiles, Postman exports…
+			}
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// isJSONArray reports whether a (small) JSON file starts with "[".
+func isJSONArray(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	buf := make([]byte, 512)
+	n, _ := f.Read(buf)
+	return strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(string(buf[:n]), "\ufeff")), "[")
 }

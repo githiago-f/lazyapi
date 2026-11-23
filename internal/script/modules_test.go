@@ -88,7 +88,7 @@ func scriptFor(c *cdn) string {
 
 func readLock(t *testing.T, dir string) lockFile {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, LockFileName))
+	data, err := os.ReadFile(filepath.Join(dir, ".lazyapi", LockFileName))
 	if err != nil {
 		t.Fatalf("lockfile: %v", err)
 	}

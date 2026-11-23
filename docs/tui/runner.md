@@ -9,11 +9,13 @@
 The runner runs operations and flows with the same engine as `lazyapi run` and shows results as they finish.
 
 - `R` in the request list runs the spec's read-only operations (`GET`, `HEAD`, `OPTIONS`).
-- The palette also offers **All operations** (writes included), each **Tag**, **All flows** and each `flows/*.js`. Runs that may change data (every method, or flows) ask `y`/`N` first and show the environment they will use.
+- The palette also offers **All operations** (writes included), each **Tag**, **All flows** and each `.lazyapi/flows/*.js`. Runs that may change data (every method, or flows) ask `y`/`N` first and show the environment they will use.
 
 The header shows a progress bar and the passed / failed / skipped counts. When the run ends, the cursor jumps to the first failure. The right side is the [response view](./response-preview) of the selected result (status, body, checks, console, timeline), and for a flow it lists every request the flow sent. `enter` on a flow expands it into its steps (`▸`/`▾`): selecting a step shows that request, its response and its automatic checks (request, status, contract). `F` keeps only failures, `e` opens the operation in the editor, `R` runs again, `esc` stops a run in progress.
 
 The run uses the active environment: its server, env file, vars, credentials and `http:` options.
+
+**Data files.** The palette also lists the CSV files and JSON arrays next to the spec and in `data/` (`Data · .lazyapi/data/users.csv → read-only operations`, `→ all operations`, `→ flows`). The run goes once per row, like [`run --data`](/cli/run#data-driven-runs): results are labeled `[#n]`, and the confirmation shows the number of rows.
 
 ## History
 
@@ -27,7 +29,7 @@ JSON bodies are compared with sorted keys, so only real changes show up.
 
 ### What is stored
 
-History files live in the user cache directory (`~/.cache/lazyapi/history/` on Linux), one per spec, with the newest 200 requests and `0600` permissions. Credentials are not stored:
+History lives in `.lazyapi/.local/history.jsonl` next to the spec (git-ignored; `LAZYAPI_HISTORY_DIR` moves it elsewhere), with the newest 200 requests and `0600` permissions. Credentials are not stored:
 
 - environment values and auth secrets are never written;
 - headers and query parameters that look like credentials (`Authorization`, `Cookie`, `*token*`, `*key*`, `*secret*`, `*password*`) are redacted unless they are a plain <code v-pre>{{env.X}}</code> reference;

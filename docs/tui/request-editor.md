@@ -75,7 +75,7 @@ Select the type from the dropdown.
 
 The code editor, in JavaScript, for the operation's test script (see [Test Scripts](../scripting.md)). Scripts can use `request`, `response`, `env`, `vars`, `lazyapi.send()`, `test()` and `expect()`, and may import relative files or `https://` modules.
 
-Press `F5` to run the script against the last response. Results, failure messages and `console` output appear below the editor. When you save (`ctrl+o`), the script is written to `tests/<operationId>.js` next to the spec and linked through `x-lazyapi-tests`.
+Press `F5` to run the script against the last response. Results, failure messages and `console` output appear below the editor. When you save (`ctrl+o`), the script is written to `.lazyapi/tests/<operationId>.js` next to the spec and linked through `x-lazyapi-tests`.
 
 ```js
 test("status is 200", () => expect(response).toHaveStatus(200));
@@ -92,8 +92,12 @@ Body, Tests and the Docs description use the same editor:
 - `tab` / `shift+tab` indent and dedent (two spaces);
 - `alt+f` formats JSON (key order kept);
 - `ctrl+z` / `ctrl+y` undo and redo; pasting keeps line breaks;
+- **selection**: `shift` + any movement (arrows, `home`/`end`, `alt+←/→`, `pgup`/`pgdown`) selects, `alt+a` selects everything, `esc` clears it. Typing replaces the selection, and an opening bracket or quote wraps it; `tab` / `shift+tab` indent or dedent the selected lines; `backspace` deletes it;
+- **clipboard**: `ctrl+c` copies the selection (with nothing selected it quits, as everywhere), `alt+x` cuts, `alt+v` pastes from the system clipboard (terminal paste works too);
 - `home` goes to the indentation, then column 0; `ctrl+home` / `ctrl+end`; `alt+←` / `alt+→` move by word; `ctrl+w` deletes the word before the cursor; `ctrl+u` deletes to the line start;
-- in Tests, completions for the script API as you type: `response.` (`status`, `json()`, …), `expect(…).` (every matcher), `lazyapi.`, `env.`, `vars.`, `pm.`, `pm.response.` and the globals. Methods insert `()` with the cursor inside.
+- in Tests, syntax errors as you type (JavaScript and TypeScript, checked with esbuild: the line gets a red `●`, the message goes to the status line) and the **signature** of the call the cursor is in (`ƒ lazyapi.send(target, options?)`, `toHaveProperty(path, value?)`, …);
+- dynamic values: <code v-pre>{{$</code> (or `$name`) offers the built-in faker variables and the helpers the Tests script exports, with a description; unknown names are drawn as missing and listed in the help bar;
+- in Tests, completions for the script API as you type: `response.` (`status`, `json()`, …), `expect(…).` (every matcher), `lazyapi.`, `env.`, `vars.` and the globals. Methods insert `()` with the cursor inside.
 
 `esc` closes an open menu first, then leaves the editor.
 

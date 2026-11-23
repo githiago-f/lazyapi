@@ -19,7 +19,7 @@ Selection:
   --grep regex        only operations whose "METHOD /path operationId summary" matches
 
 Execution:
-  --env-name name     environment from lazyapi.config.yml (server, env file, vars, credentials)
+  --env-name name     environment from .lazyapi/config.yml (server, env file, vars, credentials)
   --server url|index  --env file  --param k=v  --query k=v  --header k=v  --timeout 30s
   --parallel N        run N operations concurrently (env/vars are isolated per operation)
   --retries N         retry network errors and 5xx responses N times
@@ -27,14 +27,14 @@ Execution:
   --dry-run           show what would be sent
 
 Flows:
-  --flows             also run every flows/*.js next to the spec (after the operations)
+  --flows             also run every .lazyapi/flows/*.js next to the spec (after the operations)
   --flow file         run only this flow (repeatable); no operations are run
   --flow-timeout 5m   maximum run time of one flow
 
 Data-driven:
   --data file         run everything once per row of a CSV (header row) or JSON (array of
                       objects) file; the row's values are added to the env ({{env.col}},
-                      env.get, pm.iterationData) and results carry "iteration"
+                      env.get) and results carry "iteration"
 
 Checks:
   --script file       test script for every operation (default: each x-lazyapi-tests)
@@ -59,7 +59,7 @@ func RunTests(args []string) error {
 	bail := fs.Bool("bail", false, "stop after the first failure")
 	var flows listFlag
 	fs.Var(&flows, "flow", "run only this flow script (repeatable)")
-	allFlows := fs.Bool("flows", false, "also run every flows/*.js next to the spec, after the operations")
+	allFlows := fs.Bool("flows", false, "also run every .lazyapi/flows/*.js next to the spec, after the operations")
 	dataFile := fs.String("data", "", "CSV or JSON data file: run once per row")
 	flowTimeout := fs.Duration("flow-timeout", runner.DefaultFlowTimeout, "maximum run time of one flow")
 

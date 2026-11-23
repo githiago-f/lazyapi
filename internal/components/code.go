@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/atotto/clipboard"
+	"github.com/evanw/esbuild/pkg/api"
 	"regexp"
 	"strings"
 
@@ -36,6 +38,7 @@ type CodeEditor struct {
 	buf      [][]rune // never empty: at least one (empty) line
 	row, col int      // cursor
 	wantCol  int      // column kept while moving up and down
+	anchor   *textPos // selection: from anchor to the cursor (nil: none)
 
 	width, height int // outer size, border included
 	top, left     int // scroll
@@ -53,6 +56,22 @@ type CodeEditor struct {
 	problem    *Problem
 }
 
+type textPos struct{ row, col int }
+
+func (p textPos) before(o textPos) bool { return p.row < o.row || p.row == o.row && p.col < o.col }
+
+// Clipboard is how the editor copies and pastes (replaced in tests).
+var Clipboard interface {
+	WriteAll(string) error
+	ReadAll() (string, error)
+} = SystemClipboard{}
+
+// SystemClipboard uses the OS clipboard.
+type SystemClipboard struct{}
+
+func (SystemClipboard) WriteAll(s string) error  { return clipboard.WriteAll(s) }
+func (SystemClipboard) ReadAll() (string, error) { return clipboard.ReadAll() }
+
 type snapshot struct {
 	text     string
 	row, col int
@@ -69,14 +88,15 @@ type Problem struct {
 const indentUnit = "  "
 
 var (
-	codeBox       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2))
-	gutterStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Surface2))
-	gutterCurrent = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Bold(true)
-	gutterError   = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red)).Bold(true)
-	statusStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
-	statusOK      = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green))
-	statusBad     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red))
-	langBadge     = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Crust)).Background(lipgloss.Color(config.Mauve)).Bold(true).Padding(0, 1)
+	codeBox        = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2))
+	gutterStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Surface2))
+	gutterCurrent  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Bold(true)
+	gutterError    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red)).Bold(true)
+	statusStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
+	statusOK       = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green))
+	statusBad      = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Red))
+	signatureStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender))
+	langBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Crust)).Background(lipgloss.Color(config.Mauve)).Bold(true).Padding(0, 1)
 )
 
 // NewCodeEditor returns an editor for lang.
@@ -102,6 +122,89 @@ func (c *CodeEditor) SetValue(s string) {
 	c.row, c.col, c.wantCol = 0, 0, 0
 	c.top, c.left, c.menu = 0, 0, nil
 	c.undo, c.redo = nil, nil
+	c.anchor = nil
+}
+
+// selection returns the selected range in order (ok false when empty).
+func (c CodeEditor) selection() (from, to textPos, ok bool) {
+	if c.anchor == nil {
+		return textPos{}, textPos{}, false
+	}
+	a, b := *c.anchor, textPos{c.row, c.col}
+	if b.before(a) {
+		a, b = b, a
+	}
+	return a, b, a != b
+}
+
+// HasSelection reports whether text is selected (ctrl+c then copies it
+// instead of quitting).
+func (c CodeEditor) HasSelection() bool {
+	_, _, ok := c.selection()
+	return ok
+}
+
+// SelectedText returns the selected text.
+func (c CodeEditor) SelectedText() string {
+	from, to, ok := c.selection()
+	if !ok {
+		return ""
+	}
+	if from.row == to.row {
+		return string(c.buf[from.row][from.col:to.col])
+	}
+	parts := []string{string(c.buf[from.row][from.col:])}
+	for r := from.row + 1; r < to.row; r++ {
+		parts = append(parts, string(c.buf[r]))
+	}
+	parts = append(parts, string(c.buf[to.row][:to.col]))
+	return strings.Join(parts, "\n")
+}
+
+// deleteSelection removes the selected text (no checkpoint).
+func (c *CodeEditor) deleteSelection() bool {
+	from, to, ok := c.selection()
+	c.anchor = nil
+	if !ok {
+		return false
+	}
+	head := append([]rune{}, c.buf[from.row][:from.col]...)
+	tail := c.buf[to.row][to.col:]
+	c.buf[from.row] = append(head, tail...)
+	c.buf = append(c.buf[:from.row+1], c.buf[to.row+1:]...)
+	c.row, c.col = from.row, from.col
+	return true
+}
+
+// shiftLines indents (+1) or dedents (-1) the lines of the selection.
+func (c *CodeEditor) shiftLines(dir int) {
+	from, to, _ := c.selection()
+	last := to.row
+	if to.col == 0 && to.row > from.row {
+		last-- // a selection ending at column 0 does not include that line
+	}
+	for r := from.row; r <= last; r++ {
+		if dir > 0 {
+			c.buf[r] = append([]rune(indentUnit), c.buf[r]...)
+			continue
+		}
+		n := min(len(indentUnit), len(leadingSpaces(c.buf[r])))
+		c.buf[r] = c.buf[r][n:]
+	}
+	shift := func(p *textPos) {
+		if p.row >= from.row && p.row <= last {
+			if dir > 0 {
+				p.col += len(indentUnit)
+			} else {
+				p.col = max(0, p.col-len(indentUnit))
+			}
+		}
+	}
+	cur := textPos{c.row, c.col}
+	shift(&cur)
+	shift(c.anchor)
+	c.row, c.col = cur.row, cur.col
+	c.clampCursor()
 }
 
 func (c *CodeEditor) Focus() { c.focused = true }
@@ -110,8 +213,10 @@ func (c *CodeEditor) Blur()  { c.focused = false; c.menu = nil }
 // SetSize sets the outer size (border included).
 func (c *CodeEditor) SetSize(w, h int) { c.width, c.height = w, h }
 
-// Completing reports whether the completion menu is open.
-func (c CodeEditor) Completing() bool { return c.menu != nil }
+// Completing reports whether the editor needs esc/tab/arrows itself: a
+// completion menu is open or text is selected (esc clears the selection,
+// tab indents it).
+func (c CodeEditor) Completing() bool { return c.menu != nil || c.HasSelection() }
 
 // Problem returns the current validation error, if any.
 func (c *CodeEditor) Problem() *Problem {
@@ -296,6 +401,95 @@ func leadingSpaces(l []rune) string {
 	return string(l[:i])
 }
 
+// selectionKey handles selecting (shift+movement, alt+a), the clipboard
+// (ctrl+c copy, alt+x cut, alt+v paste) and keys that act on a selection.
+func (c *CodeEditor) selectionKey(k tea.KeyPressMsg) (bool, tea.Cmd) {
+	s := k.String()
+	if strings.Contains(s, "shift+") && s != "shift+tab" {
+		base := strings.Replace(s, "shift+", "", 1)
+		if c.anchor == nil {
+			c.anchor = &textPos{c.row, c.col}
+		}
+		if c.move(base) {
+			return true, nil
+		}
+		if !c.HasSelection() {
+			c.anchor = nil
+		}
+		return false, nil
+	}
+	switch s {
+	case "alt+a":
+		c.anchor = &textPos{0, 0}
+		c.row = len(c.buf) - 1
+		c.col = len(c.buf[c.row])
+		return true, nil
+	case "alt+v":
+		text, err := Clipboard.ReadAll()
+		if err != nil {
+			return true, notifyCmd("Clipboard unavailable: "+err.Error(), Error)
+		}
+		c.checkpoint()
+		c.deleteSelection()
+		c.insert(strings.ReplaceAll(text, "\r\n", "\n"))
+		return true, nil
+	}
+	if !c.HasSelection() {
+		return false, nil
+	}
+	switch s {
+	case "ctrl+c", "alt+x":
+		if err := Clipboard.WriteAll(c.SelectedText()); err != nil {
+			return true, notifyCmd("Clipboard unavailable: "+err.Error(), Error)
+		}
+		if s == "alt+x" {
+			c.checkpoint()
+			c.deleteSelection()
+			return true, notifyCmd("✓ Cut", Success)
+		}
+		return true, notifyCmd("✓ Copied", Success)
+	case "esc":
+		c.anchor = nil
+		return true, nil
+	case "tab", "shift+tab":
+		c.checkpoint()
+		if s == "tab" {
+			c.shiftLines(1)
+		} else {
+			c.shiftLines(-1)
+		}
+		return true, nil
+	case "backspace", "ctrl+h", "delete", "ctrl+d":
+		c.checkpoint()
+		c.deleteSelection()
+		return true, nil
+	}
+	// Typing replaces the selection; an opening bracket or quote wraps it.
+	if k.Text != "" && k.Mod&(tea.ModCtrl|tea.ModAlt) == 0 {
+		c.checkpoint()
+		r := []rune(k.Text)
+		if closer, ok := pairs[r[0]]; ok && len(r) == 1 {
+			text := c.SelectedText()
+			c.deleteSelection()
+			c.insert(string(r[0]) + text + string(closer))
+			return true, nil
+		}
+		c.deleteSelection()
+		c.insert(k.Text)
+		return true, nil
+	}
+	if s == "enter" {
+		c.checkpoint()
+		c.deleteSelection()
+		return false, nil // the newline itself is a normal edit
+	}
+	return false, nil
+}
+
+func notifyCmd(msg string, kind NotificationType) tea.Cmd {
+	return func() tea.Msg { return ShowNotificationMsg{Message: msg, Type: kind} }
+}
+
 // edit applies an editing key; false if k is not one.
 func (c *CodeEditor) edit(k tea.KeyPressMsg) bool {
 	line := c.buf[c.row]
@@ -447,7 +641,12 @@ func (c CodeEditor) Update(msg tea.Msg) (CodeEditor, tea.Cmd) {
 		}
 	}
 	before := c.Value()
+	if handled, cmd := c.selectionKey(k); handled {
+		c.after(c.Value() != before)
+		return c, cmd
+	}
 	if c.move(k.String()) {
+		c.anchor = nil
 		c.after(false)
 		return c, nil
 	}
@@ -530,10 +729,29 @@ func (c *CodeEditor) highlight() []syntax.Line {
 	syntax.MarkTemplates(lines, Resolver())
 	c.cacheValue, c.cacheLines = v, lines
 	c.problem = nil
-	if c.Lang == LangJSON && strings.TrimSpace(v) != "" {
+	switch {
+	case strings.TrimSpace(v) == "":
+	case c.Lang == LangJSON:
 		c.problem = jsonProblem(v)
+	case c.Lang == LangJS:
+		c.problem = scriptProblem(v)
 	}
 	return lines
+}
+
+// scriptProblem is the first syntax error esbuild reports for a script
+// (JavaScript or TypeScript; imports are not resolved here).
+func scriptProblem(v string) *Problem {
+	res := api.Transform(v, api.TransformOptions{Loader: api.LoaderTS, Format: api.FormatESModule, LogLevel: api.LogLevelSilent})
+	if len(res.Errors) == 0 {
+		return nil
+	}
+	e := res.Errors[0]
+	line := 0
+	if e.Location != nil {
+		line = e.Location.Line - 1
+	}
+	return &Problem{Line: line, Message: e.Text}
 }
 
 // jsonProblem validates JSON, treating {{templates}} as values.
@@ -580,7 +798,17 @@ func (c CodeEditor) View() tea.View {
 			if i == row && c.focused {
 				cur = col
 			}
-			out = append(out, gs.Render(num+mark)+" "+syntax.Render(lines[i], c.left, cols, cur))
+			selStart, selEnd := -1, -1
+			if from, to, ok := c.selection(); ok && i >= from.row && i <= to.row {
+				selStart, selEnd = 0, lines[i].Len()+1
+				if i == from.row {
+					selStart = from.col
+				}
+				if i == to.row {
+					selEnd = to.col
+				}
+			}
+			out = append(out, gs.Render(num+mark)+" "+syntax.RenderSelection(lines[i], c.left, cols, cur, selStart, selEnd))
 		}
 	}
 	for len(out) < rows {
@@ -605,11 +833,19 @@ func (c CodeEditor) statusLine(n, row, col int) string {
 		lang = strings.ToUpper(c.Lang)
 	}
 	parts := []string{langBadge.Render(lang), statusStyle.Render(fmt.Sprintf("Ln %d, Col %d · %d lines", row+1, col+1, n))}
+	if c.Lang == LangJS && c.focused {
+		if sig := complete.Signature([]rune(c.Value()), offset(c.buf, row, col)); sig != "" {
+			// What the cursor is typing arguments for beats the rest.
+			return ansi.Truncate(strings.Join(append(parts, signatureStyle.Render("ƒ "+sig)), " "), max(1, c.width-2), "…")
+		}
+	}
 	switch {
 	case c.problem != nil:
-		parts = append(parts, statusBad.Render("✗ "+c.problem.Message))
+		parts = append(parts, statusBad.Render(fmt.Sprintf("✗ %d: %s", c.problem.Line+1, c.problem.Message)))
 	case c.Lang == LangJSON && strings.TrimSpace(c.Value()) != "":
 		parts = append(parts, statusOK.Render("✓ valid")+statusStyle.Render(" · alt+f format"))
+	case c.Lang == LangJS && strings.TrimSpace(c.Value()) != "":
+		parts = append(parts, statusOK.Render("✓ syntax ok")+statusStyle.Render(" · F5 run"))
 	}
 	return ansi.Truncate(strings.Join(parts, " "), max(1, c.width-2), "…")
 }

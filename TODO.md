@@ -16,7 +16,7 @@ Prioridades: **P0** bloqueia uso real · **P1** alto valor · **P2** polimento.
 
 **O que já funciona hoje:** um agent consegue descobrir, chamar, testar e validar uma API via MCP ou CLI JSON. Um humano consegue fazer o mesmo no TUI, vendo os mesmos checks.
 
-**O que ainda falta:** com as fases 1–7 o fluxo para agents, CI e migração está completo. O que sobra é polimento da UI (fase 8) e qualidade de código.
+**O que ainda falta:** Fase 17 (requests salvos como código e `lazyapi.run`) e o release v1.4.0.
 
 ---
 
@@ -87,8 +87,8 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 ## Próximas ideias
 
 - [x] Runs com data files: `run --data rows.csv|json` (uma iteração por linha, linha no env, `lazyapi.iteration`, `pm.iterationData`, `[#n]` nos relatórios), MCP `data_file`.
-- [ ] `formdata` (arquivos) no `pm.sendRequest`.
-- [ ] Runner no TUI com data file (escolher o arquivo pela paleta).
+- [~] ~~`formdata` (arquivos) no `pm.sendRequest`~~: o global `pm` foi removido (Fase 14).
+- [x] Runner no TUI com data file: a paleta lista CSV e JSON (listas) ao lado do spec e em `data/`.
 
 ## Fase 13 — Editores de verdade
 
@@ -96,8 +96,48 @@ Objetivo: cobrir as APIs que hoje não dá para chamar e facilitar a vinda de qu
 - [x] Campos de uma linha com cores: templates (resolvido/faltando), host, `{params}`, query.
 - [x] Menu de autocomplete: variáveis após `{{` ou `$nome` (valores mascarados), API dos scripts no editor de Tests (`response.`, `expect(…).`, `lazyapi.`, `pm.`…).
 - [x] Visual: bordas arredondadas e apagadas, destaque só no foco, aba ativa com sublinhado grosso.
-- [ ] Hover/assinatura das funções da API no editor de Tests; diagnóstico de TypeScript (esbuild) ao vivo.
-- [ ] Seleção de texto (shift+setas) e copiar/recortar no editor.
+- [x] Assinatura da chamada sob o cursor e erros de sintaxe JS/TS ao vivo (esbuild) no editor de Tests.
+- [x] Seleção (shift+movimentos, alt+a), copiar (ctrl+c só com seleção), recortar (alt+x), colar (alt+v); digitar substitui, abrir aspas/parênteses envolve, tab indenta as linhas.
+
+## Fase 14 — Sem `pm`: scripts do Postman traduzidos ✅
+
+- [x] O global `pm` (camada de compatibilidade) foi removido do runtime, das completions e da doc.
+- [x] `lazyapi import postman` traduz os scripts para a API nativa: `pm.test` → `test`, cadeias Chai (`equal`, `eql`, `deep.equal`, `include`, `property().that.equals`, `an('array')`, `above/below`, `lengthOf`, `empty`, `oneOf`, `not`…) → matchers do `expect`, `pm.response.*` → `response`, `pm.environment`/`iterationData` → `env`, escopos de variáveis → `vars`, headers do pre-request → `req.headers`.
+- [x] O que não traduz vira `// TODO(postman):` (contado no cabeçalho); se comentar quebra a sintaxe (checado com esbuild), o script original fica inteiro comentado.
+
+## Fase 15 — Dados falsos e helpers: `{{$nome}}` ✅
+
+- [x] `internal/fake` (gofakeit) com os nomes do Postman: `{{$guid}}`, `{{$timestamp}}`, `{{$randomEmail}}`, `{{$randomFirstName}}`… (~90). `lazyapi fake [nome] [--json]` lista ou gera.
+- [x] Valor novo a cada ocorrência, materializado uma vez por envio (antes do `before(req)`): o report, o `request` dos testes e o que vai na rede batem. Nome desconhecido = operação falha sem enviar.
+- [x] Helpers: toda função exportada pelo script do request (`export function randomSku()`) vira `{{$randomSku}}` e sobrescreve o builtin de mesmo nome.
+- [x] Global `faker` nos scripts (`faker.email()`, `faker.uuid()`, `int`, `float`, `pick`, `get`), tipado no `lazyapi.d.ts` (teste garante que bate com a tabela).
+- [x] TUI: `{{$` completa builtins e helpers do script com descrição, cores de resolvido/faltando, nomes desconhecidos no rodapé.
+- [ ] `--seed` / `LAZYAPI_SEED` para valores reproduzíveis (`fake.Seed` já existe).
+- [ ] Helpers com argumentos: `{{$randomInt(1, 10)}}`.
+
+## Fase 16 — Git-native: `.lazyapi/` ao lado do spec ✅
+
+- [x] `internal/workspace`: `.lazyapi/config.yml` (ambientes), `envs/<nome>.env` (commitado), `secrets/<nome>.env` (0600, gitignored), `tests/`, `flows/`, `data/`, `lazyapi.lock`, `.local/` (gitignored); `.gitignore` escrito automaticamente, nunca sobrescrito.
+- [x] Ambiente lê `envs/<nome>.env` e depois `secrets/<nome>.env` por convenção (`env:` e `--env` por último); `env.Store` mescla vários arquivos.
+- [x] Import do Postman separa variáveis comuns (envs/) de segredos (secrets/, por tipo `secret` ou nome sensível).
+- [x] Drafts e edições não salvas em `.lazyapi/.local/drafts`, histórico em `.lazyapi/.local/history.jsonl`.
+- [x] Sem compatibilidade com o layout antigo (`lazyapi.config.yml`, `tests/`, `flows/` soltos). `examples/` migrado.
+- [ ] TUI: editar variáveis do ambiente ativo (gravar em `envs/` ou `secrets/` conforme o nome).
+- [ ] Vários specs no mesmo diretório compartilham `.lazyapi/`: avaliar `tests/<spec>/` se virar problema.
+
+## Fase 17 — Tudo scriptável: requests salvos como código (próxima)
+
+Objetivo: chamar um request já definido (com body, headers e query salvos) de qualquer script, sem montar um `send` na mão.
+
+- [ ] Salvar no TUI grava os valores do request (body, headers, query, path params) em `.lazyapi/requests/<operationId>.yml` (commitado). Hoje eles só existem em `.local/drafts` e o spec guarda apenas a definição.
+- [ ] `lazyapi.send("createUser")` usa o request salvo (e depois os examples do spec) e os helpers `{{$…}}` do script dele.
+- [ ] `lazyapi.run("createUser", opts?)`: roda o request como no `run` — `before()`, envio, checks de request/status/contract, testes e `after()` dele — e devolve a resposta; os resultados aparecem como passos.
+- [ ] `lazyapi.requests.createUser(opts)` (proxy por operationId) + `lazyapi types --spec` gerando tipos por operação; completions de operationId em `lazyapi.send("`/`run("`.
+- [ ] CLI `run`/MCP usam os requests salvos como fonte dos valores.
+
+## Release
+
+- [ ] **v1.4.0**: fases 13 (seleção, diagnósticos), dados no runner, 14, 15, 16 (breaking: `pm` removido, layout `.lazyapi/`). Tag depois do merge na `main`; o `cd.yml` publica binários e a doc (`/v1/` e `/latest/`).
 
 ## Fase 11 / Contínuo — qualidade de código
 

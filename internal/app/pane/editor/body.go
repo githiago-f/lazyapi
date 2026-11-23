@@ -306,3 +306,6 @@ func (b body) Completing() bool {
 	}
 	return b.active && b.editor.Completing()
 }
+
+// HasSelection reports whether the body editor has selected text.
+func (b body) HasSelection() bool { return b.active && !b.form && b.editor.HasSelection() }

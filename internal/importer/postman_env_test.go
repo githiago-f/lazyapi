@@ -42,6 +42,7 @@ func TestWriteEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	spec := filepath.Join(dir, "api.yml")
 	cfg := filepath.Join(dir, project.FileName)
+	_ = os.MkdirAll(filepath.Dir(cfg), 0o755)
 	if err := os.WriteFile(cfg, []byte("# keep me\ndefault: local\nenvironments:\n  local:\n    server: http://localhost:8080 # dev\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -51,17 +52,25 @@ func TestWriteEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	envPath := filepath.Join(dir, ".env.staging-eu")
-	if fi, err := os.Stat(envPath); err != nil || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("env file: %v %v", fi, err)
+	// Plain variables are committed, secrets go to the git-ignored file.
+	plainPath := filepath.Join(dir, ".lazyapi", "envs", "staging-eu.env")
+	secretPath := filepath.Join(dir, ".lazyapi", "secrets", "staging-eu.env")
+	if fi, err := os.Stat(secretPath); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("secrets file: %v %v", fi, err)
 	}
-	vals, err := env.NewStore(envPath).Load()
+	if data, _ := os.ReadFile(plainPath); strings.Contains(string(data), "s3cr3t") || !strings.Contains(string(data), "retries=3") {
+		t.Errorf("envs file:\n%s", data)
+	}
+	if ig, _ := os.ReadFile(filepath.Join(dir, ".lazyapi", ".gitignore")); !strings.Contains(string(ig), "secrets/") {
+		t.Errorf(".gitignore = %q", ig)
+	}
+	vals, err := env.NewStore(plainPath, secretPath).Load()
 	if err != nil || vals["token"] != "s3cr3t" || vals["note"] != "line1\nline2" || vals["baseUrl"] != "https://staging.example.com/v1/" {
 		t.Errorf("env values = %v, %v", vals, err)
 	}
 
 	raw, _ := os.ReadFile(cfg)
-	for _, want := range []string{"# keep me", "# dev", "local:", "staging-eu:", "env: .env.staging-eu", "server: https://staging.example.com/v1"} {
+	for _, want := range []string{"# keep me", "# dev", "local:", "staging-eu:", "server: https://staging.example.com/v1"} {
 		if !strings.Contains(string(raw), want) {
 			t.Errorf("config missing %q:\n%s", want, raw)
 		}
@@ -81,7 +90,8 @@ func TestWriteEnvironment(t *testing.T) {
 	if err := WriteEnvironment(spec, "staging-eu", e, &res); err == nil {
 		t.Error("second write must fail (env file exists)")
 	}
-	_ = os.Remove(envPath)
+	_ = os.Remove(plainPath)
+	_ = os.Remove(secretPath)
 	if err := WriteEnvironment(spec, "staging-eu", e, &res); err == nil || !strings.Contains(err.Error(), "already defines") {
 		t.Errorf("existing environment: %v", err)
 	}

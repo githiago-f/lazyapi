@@ -451,7 +451,7 @@ func TestRun_OrdersReadsBeforeDeletes(t *testing.T) {
 func TestRun_Flows(t *testing.T) {
 	srv := tokenServer(t)
 	spec := writeSpec(t, authSpec)
-	dir := filepath.Join(filepath.Dir(spec), "flows")
+	dir := filepath.Join(filepath.Dir(spec), ".lazyapi", "flows")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +485,7 @@ lazyapi.send("login");
 	if len(rep.Operations) != 1 || rep.Operations[0].Kind != runner.KindFlow || len(rep.Operations[0].Steps) != 2 {
 		t.Fatalf("--flow runs only that flow: %+v", rep.Operations)
 	}
-	if rep.Operations[0].Path != "flows/a_good.js" || rep.Operations[0].Steps[1].Status != 204 {
+	if rep.Operations[0].Path != ".lazyapi/flows/a_good.js" || rep.Operations[0].Steps[1].Status != 204 {
 		t.Errorf("flow result = %+v", rep.Operations[0])
 	}
 
@@ -538,7 +538,9 @@ paths:
         "200": {description: OK}
 `)
 	dir := filepath.Dir(spec)
-	if err := os.WriteFile(filepath.Join(dir, ".env.staging"), []byte("API_TOKEN=from-env-file\n"), 0o644); err != nil {
+	// Secrets of an environment live in .lazyapi/secrets/<name>.env.
+	_ = os.MkdirAll(filepath.Join(dir, ".lazyapi", "secrets"), 0o700)
+	if err := os.WriteFile(filepath.Join(dir, ".lazyapi", "secrets", "staging.env"), []byte("API_TOKEN=from-env-file\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg := fmt.Sprintf(`default: broken
@@ -547,12 +549,11 @@ environments:
     server: http://127.0.0.1:1
   staging:
     server: %s
-    env: .env.staging
     vars: {tenant: acme}
     auth:
       bearerAuth: {token: "{{env.API_TOKEN}}"}
 `, srv.URL)
-	if err := os.WriteFile(filepath.Join(dir, "lazyapi.config.yml"), []byte(cfg), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".lazyapi", "config.yml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

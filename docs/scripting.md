@@ -27,10 +27,10 @@ paths:
   /users:
     get:
       operationId: listUsers
-      x-lazyapi-tests: tests/listUsers.js
+      x-lazyapi-tests: .lazyapi/tests/listUsers.js
 ```
 
-- The TUI writes `tests/<operationId>.js` (or `tests/<method>_<path>.js`) when you save a request.
+- The TUI writes `.lazyapi/tests/<operationId>.js` (or `.lazyapi/tests/<method>_<path>.js`) when you save a request.
 - You and agents can also create or edit these files directly. Commit them with the spec.
 - Supported extensions: `.js`, `.mjs`, `.ts`, `.mts`. The path must stay inside the spec's directory.
 - Lua scripts (`.lua`) are no longer supported; LazyAPI reports an error that names the file. Saving the request in the TUI moves the reference to a new `.js` file.
@@ -91,12 +91,45 @@ export function after(res) {
 - When it ran, the result has a `script` check **after() ran without errors**; if it throws, that check fails with the error. Requests sent from `after` in a flow are listed as flow steps and checked against the spec like the others.
 - It does not run when the request could not be sent (nothing was created), when `before()` threw, or after a script timeout.
 
-## Flows
+## Dynamic values and helpers
 
-A flow is a scenario across operations: `flows/<name>.js` next to the spec. There is no implicit request or response: the flow calls `lazyapi.send()` in order and asserts with `test()`.
+<code v-pre>{{$name}}</code> in the URL, path params, query, headers or body is replaced when the request is sent, with a **new value at every occurrence**:
+
+```json
+{ "email": "{{$randomEmail}}", "name": "{{$randomFullName}}", "requestId": "{{$guid}}" }
+```
+
+The built-ins use the Postman names (<code v-pre>{{$guid}}</code>, <code v-pre>{{$timestamp}}</code>, <code v-pre>{{$randomInt}}</code>, <code v-pre>{{$randomFirstName}}</code>, <code v-pre>{{$randomCity}}</code>, …), generated with [gofakeit](https://github.com/brianvoe/gofakeit). [`lazyapi fake`](/cli/fake) lists them with an example each.
+
+**Helpers.** Every function the operation's test script exports (other than `before` and `after`) is a dynamic value too, and it **replaces a built-in of the same name**:
 
 ```js
-// flows/userLifecycle.js
+// .lazyapi/tests/createUser.js
+export function randomSku() {
+  return "SKU-" + faker.int(100, 999);          // {{$randomSku}}
+}
+export function randomEmail() {                  // overrides the built-in
+  return faker.userName().toLowerCase() + "@test.acme.dev";
+}
+
+test("the API keeps the generated SKU", () => {
+  expect(response.json().sku).toBe(request.json().sku);
+});
+```
+
+- Values are generated once per send, before `before(req)` runs: `before`, the report, the `request` global and the wire all see the same text.
+- A helper is called without arguments; strings are used as they are, objects and arrays as JSON, `null`/`undefined` as an empty string. A helper may use `faker`, `env`, `vars` and `lazyapi.send`. Helpers from other files work when re-exported (`export { randomSku } from "./helpers.js"`).
+- An unknown name, or a helper that throws, fails the operation before sending (`request` check *dynamic values resolved*).
+- Requests sent with `lazyapi.send()` and from flows get the built-ins.
+
+**`faker` in scripts.** Every built-in is a method: <code v-pre>{{$randomFirstName}}</code> is `faker.firstName()`, <code v-pre>{{$randomUUID}}</code> is `faker.uuid()`. There are also `faker.int(min, max)`, `faker.float(min, max)`, `faker.pick(list)` and `faker.get("randomEmail")`.
+
+## Flows
+
+A flow is a scenario across operations: `.lazyapi/flows/<name>.js` next to the spec. There is no implicit request or response: the flow calls `lazyapi.send()` in order and asserts with `test()`.
+
+```js
+// .lazyapi/flows/userLifecycle.js
 import { login, bearer } from "../tests/helpers.js";
 
 const auth = bearer(login());
@@ -111,7 +144,7 @@ test("deleted", () => expect(removed).toHaveStatus(204));
 **Every `lazyapi.send()` in a flow is checked automatically**: the request matches the spec, the status is declared, and the response matches the schema. These checks are named after the step, e.g. `#2 POST /users · status 201 is declared`. A flow that makes no requests and no assertions fails.
 
 ```bash
-lazyapi run api.yml --flow flows/userLifecycle.js   # just this flow
+lazyapi run api.yml --flow .lazyapi/flows/userLifecycle.js   # just this flow
 lazyapi run api.yml --methods all --flows           # operations, then every flow
 ```
 
@@ -119,12 +152,12 @@ Flows run sequentially after the operations and share `env` and `vars` with them
 
 ## Postman scripts
 
-Collections imported with [`lazyapi import postman`](/cli/import) keep their scripts. A built-in `pm` object provides `pm.test`, `pm.expect` (Chai-style chains), `pm.response`, `pm.request` and the variable scopes, so they run without changes. New scripts should prefer the native `test`/`expect` API.
+There is no `pm` object. [`lazyapi import postman`](/cli/import) translates collection scripts to this API (`pm.test` → `test`, Chai chains → `expect` matchers, `pm.environment` → `env`, …) and comments out, with `TODO(postman)`, what it cannot translate.
 
 ## Editor support
 
 ```bash
-lazyapi types > tests/lazyapi.d.ts
+lazyapi types > .lazyapi/tests/lazyapi.d.ts
 ```
 
 Add `/// <reference path="./lazyapi.d.ts" />` to the top of a script for autocompletion and type checking. The same file is the complete API reference.
@@ -137,6 +170,7 @@ Add `/// <reference path="./lazyapi.d.ts" />` to the top of a script for autocom
 | `response` | `status`, `statusText`, `headers` (lower-cased), `body`, `time` (ms), `header(name)`, `json()`, `text()`. `null` in the TUI before a request is sent |
 | `env` | `get`, `set`, `has`, `all` over environment variables (<code v-pre>{{env.X}}</code>). Changes last for the current run |
 | `vars` | Same API for run variables (<code v-pre>{{var.X}}</code>). During `run` (without `--parallel`), later operations see them |
+| `faker` | Fake data: `faker.email()`, `faker.uuid()`, `faker.int(min, max)`, `faker.pick(list)`, … (see [Dynamic values](#dynamic-values-and-helpers)) |
 | `lazyapi.send(target, opts?)` | Sends another operation synchronously and returns its response. `opts`: `params`, `query`, `headers`, `body` (objects are JSON-encoded) |
 | `test(name, fn)` | Registers a test. It fails if `fn` throws or returns a rejected promise |
 | `expect(value)` | Assertions (see below) |
@@ -159,10 +193,10 @@ Failure messages are explicit, e.g. `expected 404 to be 200` or `schema validati
 | Import | Behavior |
 |--------|----------|
 | `./x.js`, `../shared/x.ts` | Resolved from the script's directory; must stay inside the spec directory. The extension may be omitted |
-| `https://…` | Downloaded once, cached in the user cache dir (`lazyapi/modules`), and pinned in `lazyapi.lock` next to the spec |
+| `https://…` | Downloaded once, cached in the user cache dir (`lazyapi/modules`), and pinned in `.lazyapi/lazyapi.lock` next to the spec |
 | `zod`, `fs`, … (bare names) | Rejected. Use a CDN URL such as `https://esm.sh/zod@3.23.8`. Node built-ins are not available |
 
-`lazyapi.lock` records a `sha256` integrity for every URL. Commit it. If a module's content changes upstream, the run fails with `integrity mismatch`. To accept the change, pin a version in the URL or rerun with `--reload`.
+`.lazyapi/lazyapi.lock` records a `sha256` integrity for every URL. Commit it. If a module's content changes upstream, the run fails with `integrity mismatch`. To accept the change, pin a version in the URL or rerun with `--reload`.
 
 | Flag | Use |
 |------|-----|

@@ -17,7 +17,7 @@ lazyapi send request <spec.yml> --op <operationId> [flags]
 | `--body <value\|@file\|@->` | Request body: literal, read from a file, or from stdin |
 | `--form k=v` | Form field (repeatable): `application/x-www-form-urlencoded`, or multipart with `--file` (the operation's declared media type wins) |
 | `--file name=path` | Multipart file part (repeatable) |
-| `--env-name <name>` | Named environment from [`lazyapi.config.yml`](/environments) |
+| `--env-name <name>` | Named environment from [`.lazyapi/config.yml`](/environments) |
 | `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first) |
 | `--env <file>` | `.env` file for <code v-pre>{{env.X}}</code> |
 | `--timeout <d>` | Request timeout (default `30s`) |

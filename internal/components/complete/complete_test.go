@@ -1,10 +1,12 @@
 package complete
 
 import (
+	"strings"
 	"testing"
 )
 
-var vars = []Var{{"env.TOKEN", "s3cr3t"}, {"env.BASE_URL", "http://x"}, {"var.userId", "42"}, {"env.USER", "ana"}}
+var vars = []Var{{Ref: "env.TOKEN", Value: "s3cr3t"}, {Ref: "env.BASE_URL", Value: "http://x"}, {Ref: "var.userId", Value: "42"}, {Ref: "env.USER", Value: "ana"},
+	{Ref: "$randomEmail", Detail: "email address"}, {Ref: "$randomPassword", Detail: "15-character password"}}
 
 func labels(r Result) []string {
 	var out []string
@@ -32,7 +34,7 @@ func TestTemplates(t *testing.T) {
 	}
 	text, cur = at("Bearer {{|}}")
 	r, _ = Templates(text, cur, vars)
-	if len(r.Items) != 4 || r.End != cur+2 {
+	if len(r.Items) != 6 || r.Items[3].Label != "var.userId" || r.Items[4].Label != "$randomEmail" || r.End != cur+2 {
 		t.Errorf("auto-closed braces must be replaced: %+v", r)
 	}
 	text, cur = at("$tok|")
@@ -57,7 +59,6 @@ func TestScript(t *testing.T) {
 		"expect(response.json().id).toBe|": "toBe()",
 		"expect(x).not.toC|":               "toContain()",
 		"lazyapi.s|":                       "send()",
-		"pm.response.co|":                  "code",
 		"const a = 1;\nres|":               "response",
 		"  expect(r).toHave|":              "toHaveProperty()",
 	}
@@ -78,5 +79,39 @@ func TestScript(t *testing.T) {
 	r, _ := Script(text, cur)
 	if r.Items[0].Insert != "json()" || r.Items[0].CursorBack != 1 {
 		t.Errorf("methods insert () with the cursor inside: %+v", r.Items[0])
+	}
+}
+
+func TestSignature(t *testing.T) {
+	cases := map[string]string{
+		`lazyapi.send("getUser", |`:                    "lazyapi.send(target",
+		`expect(response.json().id).toBe(|`:            "toBe(expected)",
+		`expect(response.json().id|`:                   "expect(actual",
+		`test("x", () => { expect(a).toHaveProperty(|`: "toHaveProperty(path",
+		`env.get(|`:        "env.get(name",
+		`foo(|`:            "",
+		`response.status|`: "",
+	}
+	for src, want := range cases {
+		text, cur := at(src)
+		got := Signature(text, cur)
+		if want == "" && got != "" || want != "" && !strings.HasPrefix(got, want) {
+			t.Errorf("%q → %q, want prefix %q", src, got, want)
+		}
+	}
+}
+
+func TestTemplates_Dynamic(t *testing.T) {
+	for _, src := range []string{`{"email": "{{$rand|`, `{"email": "$randomE|`} {
+		text, cur := at(src)
+		r, ok := Templates(text, cur, vars)
+		if !ok || r.Items[0].Label != "$randomEmail" || r.Items[0].Insert != "{{$randomEmail}}" || r.Items[0].Detail != "email address" {
+			t.Errorf("%s: %+v", src, r.Items)
+		}
+	}
+	text, cur := at("{{$randomP|")
+	r, _ := Templates(text, cur, vars)
+	if len(r.Items) == 0 || r.Items[0].Detail != "15-character password" {
+		t.Errorf("descriptions are not masked: %+v", r.Items)
 	}
 }

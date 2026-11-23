@@ -30,7 +30,7 @@ Operations run in spec order within four groups: reads (`GET`/`HEAD`/`OPTIONS`),
 
 | Flag | Description |
 |------|-------------|
-| `--flows` | After the operations, run every `flows/*.js` next to the spec |
+| `--flows` | After the operations, run every `.lazyapi/flows/*.js` next to the spec |
 | `--flow <file>` | Run only this flow (repeatable); no operations are run |
 | `--flow-timeout <d>` | Maximum run time of one flow (default `5m`) |
 
@@ -48,20 +48,20 @@ bia@example.com,Bia
 
 ```bash
 lazyapi run api.yml --op createUser --methods POST --data users.csv
-lazyapi run api.yml --flow flows/signup.js --data users.json
+lazyapi run api.yml --flow .lazyapi/flows/signup.js --data users.json
 ```
 
 - CSV needs a header row. JSON is an array of objects; numbers and booleans become text, nested values JSON text.
-- In each iteration the row's values are added to the env: use <code v-pre>{{env.email}}</code> in params, headers and bodies (<code v-pre>--param id={{env.id}}</code>), `env.get("email")` in scripts, and `pm.iterationData.get("email")` in Postman scripts. Imported Postman <code v-pre>{{email}}</code> placeholders already read the env.
+- In each iteration the row's values are added to the env: use <code v-pre>{{env.email}}</code> in params, headers and bodies (<code v-pre>--param id={{env.id}}</code>) and `env.get("email")` in scripts. Imported Postman <code v-pre>{{email}}</code> placeholders already read the env.
 - Every iteration starts from the same env and vars: what a script sets in one row does not leak into the next.
-- Scripts see `lazyapi.iteration` (0-based) and `lazyapi.iterations` (`pm.info.iteration` / `iterationCount`).
+- Scripts see `lazyapi.iteration` (0-based) and `lazyapi.iterations`.
 - Results carry `"iteration"` (1-based) and labels end with `[#n]` in every output format; the report has `"iterations"`. `--bail` stops after the iteration with the first failure. At most 10 000 rows.
 
 ## Execution
 
 | Flag | Description |
 |------|-------------|
-| `--env-name <name>` | Named environment from [`lazyapi.config.yml`](/environments): server, env file, vars and credentials |
+| `--env-name <name>` | Named environment from [`.lazyapi/config.yml`](/environments): server, env file, vars and credentials |
 | `--server <url\|index>` | Server URL, or index into the spec's `servers` (default: first). Wins over the environment |
 | `--env <file>` | `.env` file for <code v-pre>{{env.NAME}}</code>. Wins over the environment |
 | `--param k=v` | Path parameter for operations that declare it (repeatable). Otherwise the spec's example is used; with no value at all, the operation is skipped |
@@ -108,7 +108,7 @@ Sensitive request headers (`Authorization`, `Cookie`, anything containing `token
   "operations": [
     {
       "operationId": "getUser", "method": "GET", "path": "/users/{id}",
-      "outcome": "failed", "attempts": 1, "testsFile": "tests/getUser.js",
+      "outcome": "failed", "attempts": 1, "testsFile": ".lazyapi/tests/getUser.js",
       "request":  { "method": "GET", "url": "https://api.example.com/users/1" },
       "response": { "status": 200, "statusText": "200 OK", "headers": {"Content-Type": "application/json"},
                     "body": "{\"id\":\"1\"}", "durationMs": 41,

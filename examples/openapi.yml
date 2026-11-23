@@ -59,7 +59,13 @@ openapi: 3.0.0
 paths:
     /auth/login:
         post:
+            description: Login example
             operationId: login
+            parameters:
+                - in: query
+                  name: Variavel
+                  schema:
+                    type: string
             requestBody:
                 content:
                     application/json:
@@ -94,6 +100,7 @@ paths:
             summary: Exchange credentials for a token
             tags:
                 - auth
+            x-lazyapi-tests: .lazyapi/tests/login.js
     /health:
         get:
             operationId: healthCheck
@@ -117,7 +124,7 @@ paths:
             summary: Service health
             tags:
                 - system
-            x-lazyapi-tests: tests/healthCheck.js
+            x-lazyapi-tests: .lazyapi/tests/healthCheck.js
     /users:
         get:
             operationId: listUsers
@@ -150,7 +157,7 @@ paths:
             summary: List users
             tags:
                 - users
-            x-lazyapi-tests: tests/listUsers.js
+            x-lazyapi-tests: .lazyapi/tests/listUsers.js
         post:
             operationId: createUser
             requestBody:
@@ -158,7 +165,7 @@ paths:
                     application/json:
                         example:
                             email: carla@example.com
-                            name: Carla Dias
+                            name: '{{$displayName}}'
                         schema:
                             $ref: '#/components/schemas/NewUser'
                 required: true
@@ -183,7 +190,7 @@ paths:
             summary: Create a user
             tags:
                 - users
-            x-lazyapi-tests: tests/createUser.js
+            x-lazyapi-tests: .lazyapi/tests/createUser.js
     /users/{id}:
         delete:
             operationId: deleteUser
@@ -224,7 +231,7 @@ paths:
             summary: Get a user
             tags:
                 - users
-            x-lazyapi-tests: tests/getUser.js
+            x-lazyapi-tests: .lazyapi/tests/getUser.js
         parameters:
             - example: 1
               in: path

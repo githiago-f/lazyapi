@@ -5,20 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/githiago-f/lazyapi/internal/model"
 	"github.com/githiago-f/lazyapi/internal/project"
+	"github.com/githiago-f/lazyapi/internal/workspace"
 )
 
 // Extras are side outputs of an import besides operations.
 type Extras struct {
 	Title string
-	// Variables are Postman collection variables, written to .env.postman.
+	// Variables are Postman collection variables, written to .lazyapi/envs|secrets/postman.env.
 	Variables map[string]string
 }
 
@@ -119,7 +118,7 @@ var pmVar = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}`)
 // Folders become tags, auth becomes headers (Apply turns them into security
 // schemes without copying the secret), pre-request and test scripts become
 // a LazyAPI test script that uses the `pm` compatibility layer, and
-// {{variables}} become {{env.variables}} (values go to .env.postman).
+// {{variables}} become {{env.variables}} (values go to the postman environment).
 func ParsePostman(data []byte) ([]Request, Extras, error) {
 	return ParsePostmanWith(data, nil)
 }
@@ -355,24 +354,35 @@ func scripts(events []pmEvent, listen string) []string {
 	return out
 }
 
-// postmanScript wraps Postman scripts for LazyAPI: pre-request code runs in
-// before(req) and test code at the top level, both with the `pm` object.
+// postmanScript translates Postman scripts to the LazyAPI API: pre-request
+// code runs in before(req), test code at the top level.
 func postmanScript(pre, tests []string) string {
 	if len(pre) == 0 && len(tests) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("// Imported from Postman. `pm` is LazyAPI's Postman compatibility layer;\n")
-	b.WriteString("// see `lazyapi types` for the native API (test, expect, lazyapi.send).\n\n")
+	todos := 0
+	var body strings.Builder
 	if len(pre) > 0 {
-		b.WriteString("export function before(req) {\n  pm.__before(req, () => {\n")
-		for _, line := range strings.Split(strings.Join(pre, "\n\n"), "\n") {
-			b.WriteString("    " + line + "\n")
+		code, n := translatePostman(strings.Join(pre, "\n\n"), true)
+		todos += n
+		body.WriteString("export function before(req) {\n")
+		for _, line := range strings.Split(code, "\n") {
+			body.WriteString("  " + line + "\n")
 		}
-		b.WriteString("  });\n}\n\n")
+		body.WriteString("}\n\n")
 	}
-	b.WriteString(strings.Join(tests, "\n\n"))
+	if len(tests) > 0 {
+		code, n := translatePostman(strings.Join(tests, "\n\n"), false)
+		todos += n
+		body.WriteString(code + "\n")
+	}
+	b.WriteString("// Imported from Postman and translated to the LazyAPI script API (see `lazyapi types`).\n")
+	if todos > 0 {
+		fmt.Fprintf(&b, "// %d line(s) marked TODO(postman) could not be translated: rewrite them.\n", todos)
+	}
 	b.WriteString("\n")
+	b.WriteString(body.String())
 	return b.String()
 }
 
@@ -409,42 +419,35 @@ func strconvQuote(s string) string {
 	return string(data)
 }
 
-// WriteExtras writes collection variables to .env.postman next to the spec
-// and, when there is no lazyapi.config.yml, an environment that uses it.
+// WriteExtras writes collection variables to the workspace (plain ones to
+// .lazyapi/envs/postman.env, sensitive ones to .lazyapi/secrets/postman.env)
+// and, when .lazyapi/config.yml has no "postman" environment, adds one.
 // Existing files are never overwritten.
 func WriteExtras(specPath string, x Extras, res *Result) error {
 	if len(x.Variables) == 0 {
 		return nil
 	}
-	dir := filepath.Dir(specPath)
-	envPath := filepath.Join(dir, ".env.postman")
-	if _, err := os.Stat(envPath); err == nil {
-		res.note("%s exists and was not changed; collection variables: %s", envPath, strings.Join(sortedKeys(x.Variables), ", "))
+	if len(workspace.EnvFiles(specPath, "postman")) > 0 {
+		res.note("the postman environment files exist and were not changed; collection variables: %s", strings.Join(sortedKeys(x.Variables), ", "))
 		return nil
 	}
-	var b strings.Builder
-	b.WriteString("# Postman collection variables (used as {{env.NAME}}). May contain secrets: do not commit.\n")
-	for _, k := range sortedKeys(x.Variables) {
-		fmt.Fprintf(&b, "%s=%s\n", k, x.Variables[k])
-	}
-	if err := os.WriteFile(envPath, []byte(b.String()), 0o600); err != nil {
+	if err := writeEnvFiles(specPath, "postman", "Postman collection variables", x.Variables, sensitiveName.MatchString, res); err != nil {
 		return err
 	}
-	res.Files = append(res.Files, envPath)
-	res.note("collection variables written to %s; add it to .gitignore", envPath)
-
-	cfgPath := filepath.Join(dir, project.FileName)
-	if _, err := os.Stat(cfgPath); err == nil {
-		res.note("use them with: --env %s (lazyapi.config.yml exists and was not changed)", envPath)
+	cfgPath := workspace.Config(specPath)
+	if cfg, err := project.Load(cfgPath); err == nil && cfg.Environments["postman"] != nil {
 		for _, scheme := range sortedAuth(res.Auth) {
-			res.note("add auth.%s to your environment to authenticate: %s", scheme, authHint(res.Auth[scheme]))
+			res.note("add auth.%s to the postman environment to authenticate: %s", scheme, authHint(res.Auth[scheme]))
 		}
 		return nil
 	}
-	if _, err := project.AddEnvironment(cfgPath, "postman", project.Environment{Env: ".env.postman", Auth: res.Auth}); err != nil {
+	created, err := project.AddEnvironment(cfgPath, "postman", project.Environment{Auth: res.Auth})
+	if err != nil {
 		return err
 	}
-	res.Files = append(res.Files, cfgPath)
+	if created {
+		res.Files = append(res.Files, cfgPath)
+	}
 	res.note("use them with: lazyapi run %s --env-name postman", specPath)
 	return nil
 }

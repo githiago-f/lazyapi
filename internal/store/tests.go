@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"github.com/githiago-f/lazyapi/internal/workspace"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,7 +18,7 @@ import (
 const TestsExtension = "x-lazyapi-tests"
 
 // TestsDir is the directory (relative to the spec) where new scripts go.
-const TestsDir = "tests"
+const TestsDir = workspace.TestsDir
 
 // TestScriptExt is the extension used for newly created test scripts.
 const TestScriptExt = ".js"
