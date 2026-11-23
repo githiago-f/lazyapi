@@ -40,3 +40,4 @@ docs/node_modules/
 docs/data/extracted.json
 docs/.vitepress/dist/
 lazyapi
+/main
