@@ -68,6 +68,13 @@ func resolveTestsPath(specPath, rel string) (string, error) {
 	if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("%s escapes the spec directory: %q", TestsExtension, rel)
 	}
+	// Credentials and local state (secrets, OAuth sessions) are never scripts.
+	slash := filepath.ToSlash(inside)
+	for _, private := range []string{workspace.Dir + "/secrets", workspace.Dir + "/.local"} {
+		if slash == private || strings.HasPrefix(slash, private+"/") {
+			return "", fmt.Errorf("%s may not point into %s/: %q", TestsExtension, private, rel)
+		}
+	}
 	return full, nil
 }
 

@@ -7,7 +7,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/githiago-f/lazyapi/internal/app"
 	"github.com/githiago-f/lazyapi/internal/cli"
-	"github.com/githiago-f/lazyapi/internal/components"
 )
 
 func main() {
@@ -30,9 +29,6 @@ func main() {
 			}
 		}
 	}
-
-	components.Z.NewGlobal()
-	defer components.Z.Close()
 
 	p := tea.NewProgram(app.NewTui(defaultFile, envFile))
 	if _, err := p.Run(); err != nil {

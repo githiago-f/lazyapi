@@ -1,10 +1,13 @@
 package tabs
 
 import (
+	"strconv"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/inmath"
 )
@@ -72,6 +75,8 @@ type Model struct {
 	content string
 	start   int
 	end     int
+
+	zone string // mouse zone prefix
 }
 
 func New(tabs ...Tab) Model {
@@ -80,7 +85,56 @@ func New(tabs ...Tab) Model {
 		cursor: 0,
 		Styles: DefaultStyles(),
 		KeyMap: DefaultKeyMap(),
+		zone:   components.Z.NewPrefix(),
 	}
+}
+
+func (m Model) labelZone(i int) string { return m.zone + "tab:" + strconv.Itoa(i) }
+func (m Model) contentZone() string    { return m.zone + "content" }
+
+// Selected reports whether the current tab's content has the focus.
+func (m Model) Selected() bool { return m.selected }
+
+// Deselect blurs the current tab's content.
+func (m Model) Deselect() (Model, tea.Cmd) {
+	if !m.selected {
+		return m, nil
+	}
+	m.selected = false
+	var cmd tea.Cmd
+	m.Tabs[m.cursor].Content, cmd = m.Tabs[m.cursor].Content.Update(SetActiveTabMsg{Active: false})
+	return m, cmd
+}
+
+// click switches tabs on a label and focuses the content when clicked
+// inside it (the click is then forwarded so the content can focus a field).
+func (m Model) click(msg tea.MouseClickMsg) (Model, tea.Cmd, bool) {
+	for i := range m.Tabs {
+		if !components.Z.Get(m.labelZone(i)).InBounds(msg) {
+			continue
+		}
+		var cmd tea.Cmd
+		if i != m.cursor {
+			m, cmd = m.Deselect()
+			m.cursor = i
+			m.updateSize()
+		}
+		return m, cmd, true
+	}
+	if !components.Z.Get(m.contentZone()).InBounds(msg) {
+		return m, nil, false
+	}
+	var cmds []tea.Cmd
+	if !m.selected {
+		m.selected = true
+		var cmd tea.Cmd
+		m.Tabs[m.cursor].Content, cmd = m.Tabs[m.cursor].Content.Update(SetActiveTabMsg{Active: true})
+		cmds = append(cmds, cmd)
+	}
+	var cmd tea.Cmd
+	m.Tabs[m.cursor].Content, cmd = m.Tabs[m.cursor].Content.Update(msg)
+	cmds = append(cmds, cmd)
+	return m, tea.Batch(cmds...), true
 }
 
 func (m Model) Cursor() int { return m.cursor }
@@ -181,7 +235,7 @@ func (m Model) renderLabel(idx int, maxWidth int) string {
 		style = m.Styles.ActiveTab
 	}
 
-	item := style.Render(m.Tabs[idx].Label)
+	item := components.Z.Mark(m.labelZone(idx), style.Render(m.Tabs[idx].Label))
 
 	if idx > m.cursor {
 		w := lipgloss.Width(item)
@@ -222,7 +276,7 @@ func (m Model) View() tea.View {
 			lipgloss.JoinVertical(
 				lipgloss.Left,
 				tabLabels,
-				tabContent.View().Content,
+				components.Z.Mark(m.contentZone(), tabContent.View().Content),
 			),
 		))
 }
@@ -245,6 +299,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
+
+	case tea.MouseClickMsg:
+		m, cmd, _ = m.click(msg)
+		return m, cmd
 
 	case tea.KeyPressMsg:
 		switch {

@@ -2,12 +2,15 @@ package requests
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/inmath"
 	"github.com/githiago-f/lazyapi/internal/model"
@@ -63,6 +66,8 @@ type RequestList struct {
 	filtered       []RequestItem
 	filteredGroups []TagGroup
 	cursor         int
+	lastClick      int // row of the last click (double click opens)
+	lastClickAt    time.Time
 	scroll         int
 
 	filter    textinput.Model
@@ -220,7 +225,11 @@ func (rl RequestList) View() tea.View {
 		if selected {
 			prefix = cursorMark.String()
 		}
-		rendered = append(rendered, prefix+RenderCompact(line.item, rl.width, selected))
+		row := prefix + RenderCompact(line.item, rl.width, selected)
+		if i := rl.indexOf(line.item); i >= 0 {
+			row = components.Z.Mark(rowZone(i), row)
+		}
+		rendered = append(rendered, row)
 	}
 
 	if len(rl.filtered) == 0 {
@@ -242,8 +251,10 @@ func (rl RequestList) View() tea.View {
 			)
 		}
 	}
-	return tea.NewView(content)
+	return tea.NewView(components.Z.Mark(paneZone, content))
 }
+
+const paneZone = "list:pane"
 
 func (rl RequestList) filterView() string {
 	fv := rl.filter.View()
@@ -282,8 +293,67 @@ type itemLine struct {
 	item     RequestItem
 }
 
+func rowZone(i int) string { return "list:" + strconv.Itoa(i) }
+
+// indexOf is the position of an item in the filtered list (-1: none).
+func (rl RequestList) indexOf(item RequestItem) int {
+	for i, it := range rl.filtered {
+		if it.URI == item.URI && it.Method == item.Method && it.FileName == item.FileName && it.DraftPath == item.DraftPath {
+			return i
+		}
+	}
+	return -1
+}
+
+// doubleClick is the longest gap between the clicks of a double click.
+const doubleClick = 400 * time.Millisecond
+
+// open opens the selected request in the editor.
+func (rl RequestList) open() tea.Cmd {
+	item, ok := rl.SelectedItem()
+	if !ok {
+		return nil
+	}
+	if item.DraftPath != "" {
+		return OpenDraftView(item.FileName, item.DraftPath)
+	}
+	return OpenRequestView(item.FileName, item.OpenAPIRef)
+}
+
 func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.MouseClickMsg:
+		if msg.Button != tea.MouseLeft {
+			return rl, nil
+		}
+		for i := range rl.filtered {
+			if components.Z.Get(rowZone(i)).InBounds(msg) {
+				// a click selects, a second click on it soon after opens it
+				double := i == rl.lastClick && time.Since(rl.lastClickAt) < doubleClick
+				rl.cursor, rl.lastClick, rl.lastClickAt = i, i, time.Now()
+				if double {
+					rl.lastClick = -1
+					return rl, rl.open()
+				}
+				return rl, nil
+			}
+		}
+		return rl, nil
+	case tea.MouseWheelMsg:
+		if !components.Z.Get(paneZone).InBounds(msg) {
+			return rl, nil
+		}
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			rl.cursor = max(0, rl.cursor-1)
+		case tea.MouseWheelDown:
+			rl.cursor = min(max(0, len(rl.filtered)-1), rl.cursor+1)
+		}
+		rl.clampScroll()
+		return rl, nil
+	}
 
 	if rl.filtering {
 		rl.filter, cmd = rl.filter.Update(msg)
@@ -339,14 +409,7 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				rl.clampScroll()
 
 			case key.Matches(msg, config.DefaultKeyMap.Select):
-				item, ok := rl.SelectedItem()
-				if !ok {
-					return rl, nil
-				}
-				if item.DraftPath != "" {
-					return rl, OpenDraftView(item.FileName, item.DraftPath)
-				}
-				return rl, OpenRequestView(item.FileName, item.OpenAPIRef)
+				return rl, rl.open()
 
 			case key.Matches(msg, config.DefaultKeyMap.CreateNew):
 				return rl, func() tea.Msg { return CreateNewRequestMsg{} }

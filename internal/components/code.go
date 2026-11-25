@@ -54,6 +54,9 @@ type CodeEditor struct {
 	cacheValue string
 	cacheLines []syntax.Line
 	problem    *Problem
+
+	zone     string // mouse zone id
+	dragging bool
 }
 
 type textPos struct{ row, col int }
@@ -101,7 +104,7 @@ var (
 
 // NewCodeEditor returns an editor for lang.
 func NewCodeEditor(lang, placeholder, value string) CodeEditor {
-	c := CodeEditor{Lang: lang, Placeholder: placeholder, focused: true}
+	c := CodeEditor{Lang: lang, Placeholder: placeholder, focused: true, zone: Z.NewPrefix() + "code"}
 	c.SetValue(value)
 	return c
 }
@@ -614,6 +617,10 @@ func (c CodeEditor) Update(msg tea.Msg) (CodeEditor, tea.Cmd) {
 		c.after(true)
 		return c, nil
 	}
+	if m, ok := msg.(tea.MouseMsg); ok {
+		c.mouse(m)
+		return c, nil
+	}
 	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return c, nil
@@ -667,6 +674,74 @@ func splitRunes(s string) [][]rune {
 		out[i] = []rune(p)
 	}
 	return out
+}
+
+// Zone is where the editor was drawn.
+func (c CodeEditor) Zone() Zone { return Z.Get(c.zone) }
+
+// mouse: a click moves the cursor, dragging selects, the wheel scrolls.
+func (c *CodeEditor) mouse(msg tea.MouseMsg) {
+	z := Z.Get(c.zone)
+	switch msg := msg.(type) {
+	case tea.MouseWheelMsg:
+		if !z.InBounds(msg) {
+			return
+		}
+		maxTop := max(0, len(c.buf)-c.textRows())
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			c.top = max(0, c.top-3)
+		case tea.MouseWheelDown:
+			c.top = min(maxTop, c.top+3)
+		}
+		return
+	case tea.MouseClickMsg:
+		if msg.Button != tea.MouseLeft || !z.InBounds(msg) {
+			return
+		}
+		c.menu = nil
+		row, col, ok := c.cellAt(z, msg)
+		if !ok {
+			return
+		}
+		if msg.Mod.Contains(tea.ModShift) {
+			if c.anchor == nil {
+				c.anchor = &textPos{c.row, c.col}
+			}
+		} else {
+			c.anchor = nil
+		}
+		c.row, c.col, c.wantCol = row, col, col
+		c.dragging = true
+	case tea.MouseMotionMsg:
+		if !c.dragging || msg.Button != tea.MouseLeft {
+			return
+		}
+		row, col, _ := c.cellAt(z, msg)
+		if row == c.row && col == c.col {
+			return
+		}
+		if c.anchor == nil {
+			c.anchor = &textPos{c.row, c.col}
+		}
+		c.row, c.col, c.wantCol = row, col, col
+		c.after(false)
+	case tea.MouseReleaseMsg:
+		c.dragging = false
+		if c.anchor != nil && *c.anchor == (textPos{c.row, c.col}) {
+			c.anchor = nil
+		}
+	}
+}
+
+// cellAt maps a mouse position inside the box to a text position (ok is
+// false on the border, the gutter rows past the text or the status line).
+func (c CodeEditor) cellAt(z Zone, msg tea.MouseMsg) (row, col int, ok bool) {
+	x, y := z.Pos(msg)
+	ok = y >= 1 && y <= c.textRows()
+	row = max(0, min(len(c.buf)-1, c.top+y-1))
+	col = max(0, min(len(c.buf[row]), c.left+x-1-c.gutterWidth()))
+	return row, col, ok
 }
 
 // after keeps the cursor on screen and refreshes the menu.
@@ -824,7 +899,7 @@ func (c CodeEditor) View() tea.View {
 		box = box.BorderForeground(lipgloss.Color(config.Mauve))
 	}
 	box = box.Width(max(4, c.width)).Height(max(3, c.height))
-	return tea.NewView(box.Render(strings.Join(out, "\n")))
+	return tea.NewView(Z.Mark(c.zone, box.Render(strings.Join(out, "\n"))))
 }
 
 func (c CodeEditor) statusLine(n, row, col int) string {

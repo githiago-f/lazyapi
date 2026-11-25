@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -59,7 +60,7 @@ type testsPane struct {
 
 func TestsTab() *testsPane {
 	return &testsPane{
-		script:  components.NewCodeEditor(components.LangJS, "Test script (JavaScript/TypeScript)", defaultTestScript),
+		script:  components.NewCodeEditor(components.LangJS, config.T("editor.tests.placeholder"), defaultTestScript),
 		results: "",
 	}
 }
@@ -146,7 +147,7 @@ func (tp testsPane) View() tea.View {
 
 	var results string
 	if tp.results == "" {
-		results = testInfoStyle.Render("F5 runs this script (it sends the request first if there is no response yet)")
+		results = testInfoStyle.Render(config.T("editor.tests.idle", "run", config.DefaultKeyMap.RunTests.Help().Key))
 	} else {
 		results = tp.results
 	}
@@ -182,7 +183,7 @@ func (tp *testsPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tp.script, cmd = tp.script.Update(msg)
 		return tp, cmd
 
-	case tea.PasteMsg:
+	case tea.PasteMsg, tea.MouseMsg:
 		if tp.active {
 			var cmd tea.Cmd
 			tp.script, cmd = tp.script.Update(msg)
@@ -273,20 +274,20 @@ func formatTestResults(result script.Result) string {
 	var b strings.Builder
 
 	if result.ScriptError != "" {
-		fmt.Fprintf(&b, "Script error:\n%s\n\n", result.ScriptError)
+		fmt.Fprintf(&b, "%s\n%s\n\n", config.T("editor.tests.script_error"), result.ScriptError)
 	}
 
 	if len(result.Results) == 0 && result.ScriptError == "" {
-		b.WriteString("No tests defined.\n")
-		b.WriteString("Use:  test(\"name\", () => expect(response.status).toBe(200))\n")
+		b.WriteString(config.T("editor.tests.no_tests") + "\n")
+		b.WriteString("  " + config.T("editor.tests.example") + "\n")
 	}
 
 	for _, tr := range result.Results {
 		var mark string
 		if tr.Passed {
-			mark = testPassStyle.Render("PASS")
+			mark = testPassStyle.Render(config.T("editor.tests.pass"))
 		} else {
-			mark = testFailStyle.Render("FAIL")
+			mark = testFailStyle.Render(config.T("editor.tests.fail"))
 		}
 		fmt.Fprintf(&b, "  %s %s\n", mark, tr.Name)
 		if tr.Message != "" {
@@ -296,11 +297,11 @@ func formatTestResults(result script.Result) string {
 
 	if len(result.Results) > 0 {
 		b.WriteString("\n")
-		fmt.Fprintf(&b, "%d passed, %d failed\n", result.PassCount, result.FailCount)
+		b.WriteString(config.T("editor.tests.summary", "passed", strconv.Itoa(result.PassCount), "failed", strconv.Itoa(result.FailCount)) + "\n")
 	}
 
 	if len(result.Logs) > 0 {
-		b.WriteString("\nConsole:\n")
+		b.WriteString("\n" + config.T("editor.tests.console") + "\n")
 		for _, l := range result.Logs {
 			fmt.Fprintf(&b, "  %s %s\n", testInfoStyle.Render("["+l.Level+"]"), l.Message)
 		}

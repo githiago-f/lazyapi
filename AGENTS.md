@@ -18,10 +18,10 @@ internal/
         editor.go          #     RequestPane — top-level Update/View, cursor field cycle
         documentation.go   #     Summary + Description fields
         body.go            #     Body textarea
-        grid.go            #     kvGrid — name/value rows shared by headers, params and form fields; view renders focus on copies
+        grid.go            #     kvGrid — name/value rows shared by headers, params and form fields, each with an on/off checkbox (ctrl+t / click); toMap = enabled rows, disabledMap = the others; view renders focus on copies
         header.go          #     Header key/value pairs (ctrl+g to add)
         params.go          #     Query + Path params (n+q / n+p to add)
-        auth.go            #     Auth schemes (n+a / x+a to add/remove)
+        auth.go            #     Auth schemes: rows() per type/grant (Scheme select reuses spec schemes, OIDC issuer, Login button → LoginMsg), ctrl+r add, ⌫ on Scheme removes, ctrl+l login
         tests.go           #     Tests tab — JS/TS script editor, F5 runs it via internal/script; default template is not persisted
         field.go           #     paramField helper (name+value pair)
       requests/            #   Request browser (compact list + preview + tags)
@@ -42,6 +42,7 @@ internal/
     send.go                #   SendRequest: <path> <method> | --op, --body @file, --output json, --save-example
     inspect.go             #   ListOps, Describe, ValidateSpec
     mcp.go                 #   ServeMCP (`lazyapi mcp --root`), Version (set by goreleaser ldflags)
+    login.go               #   Login / Logout (`lazyapi login <spec> [scheme] --device --no-browser --status`)
     mock.go                #   ServeMock (`lazyapi mock <spec> --port 4010`)
     add.go / create.go / remove.go / server.go  # spec editing commands
   runner/                  # Executes operations → structured results (no printing)
@@ -50,6 +51,7 @@ internal/
     flow.go                #   RunFlow (.lazyapi/flows/*.js; every lazyapi.send step gets request/status/contract checks), FindFlows
   report/                  # Renders runner results: pretty (FormatOp/WriteSummary), json, junit, tap; body policy
   inspect/                 # ListOperations, Describe (with referenced schemas), Validate (OpenAPI + scripts compile)
+  oauth/                   # OAuth2/OIDC: Discover (.well-known/openid-configuration, RFC 8414), AccessToken (stored → refresh → client_credentials/password; interactive grants → *LoginRequiredError), Login (authorizationCode+PKCE with a loopback server, deviceCode), Store (.lazyapi/.local/tokens.json, 0600; StoreFor(spec)), OpenBrowser (WSL aware)
   mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled) + Tools confined to a root dir
   workspace/               # .lazyapi/ layout next to the spec: Config, EnvFile (committed), SecretsFile (git-ignored), Local, EnvFiles, Ensure (.gitignore), WriteSecrets
   project/                 # .lazyapi/config.yml: named environments (server, env file, vars, auth secrets), Find/Select/Resolve
@@ -71,9 +73,10 @@ internal/
     button.go              #   Button with click debounce
     field.go               #   Field wraps textinput.Model
     modal.go               #   Empty file (package decl only)
+    zone.go                #   Mouse zones: Z.Mark(id, s) wraps output in zero-width CSI markers, Tui.View calls Z.Scan (strips them, records rects), Update asks Z.Get(id).InBounds(msg)
     passfield.go           #   PassField — Field with ctrl+p toggle
     prompt.go              #   PromptModel — overlay input for answers
-    selector.go            #   Selector — up/down cycle through Labels
+    selector.go            #   Selector — select box (▾): closed up/down cycle; open list with arrows/home/end/wheel/type-ahead, click picks, click outside/esc cancels; ID names its zones
     text.go                #   Text wraps textarea.Model
     title_bar.go           #   TitleBar — top bar with config.Name()
     view.go                #   View — generic bordered content (unused)
@@ -91,6 +94,7 @@ internal/
     config.go              #   Config struct, DefaultConfig, color constants
     keymap.go              #   DefaultKeyMap, KeyMap, ShortHelp/FullHelp
     pages.go               #   PageIndex enum (RequestList, RequestEditor)
+    messages.yml/.go       #   TUI texts (go:embed): T("editor.auth.empty", "add", key) fills {name}; Plural(key, n) → key.one/.other; LAZYAPI_MESSAGES overrides (unknown keys → MessagesErr, shown on start)
   env/                     # Environment variable loading/resolution
     loader.go              #   Load() — reads .env, merges with system env; Store with hash-based caching
     resolver.go            #   Resolve() — replaces {{env.X}} / {{var.X}} in strings
@@ -98,7 +102,7 @@ internal/
     counters.go            #   Circle() — wraps int within [min, max] (typo: Circle → Circle)
   model/                   # Core types
     request.go             #   Request, OpenAPIRef, Send()/SendContext(), HTTPRequest (the exact *http.Request sent; empty credentials are skipped), ResolvedURL, MissingPathParams
-    oauth.go               #   AuthSecrets, ApplySecrets (by scheme name), OAuth2 client_credentials/password token fetch + cache
+    oauth.go               #   AuthSecrets (issuer, grantType, redirectUri, params…), ApplySecrets (by scheme name), OAuthConfig (templates resolved → oauth.Config), OAuthSchemes (login candidates)
     client.go              #   HTTPOptions (insecure, CA, mTLS, proxy, redirects) → *http.Client; Timing
     body.go                #   Body encoding: JSON object → form-urlencoded / multipart; file parts only from Body.Files (never from Raw)
     curl.go                #   Request.Curl — exact request as a curl command
@@ -126,7 +130,7 @@ internal/
 
 ## Key Types
 
-- **`model.Request`** — Central data type: URI, Method, Body, Headers, Params, Query, About, ServerURL, Servers, OpenAPIRef, DraftPath, FileName, Env, Vars, Auth, Tests, Timeout. `Send()`/`SendContext()` are synchronous; the TUI sends through `responses.Exchange` (runner checks) — never call Send from Update.
+- **`model.Request`** — Central data type: URI, Method, Body, Headers, Params, Query, Disabled (switched-off headers/query/path params/form fields, kept with values in drafts, never sent; schemes use `AuthScheme.Disabled`, skipped by `HTTPRequest`), About, ServerURL, Servers, OpenAPIRef, DraftPath, FileName, Env, Vars, Auth, Tests, Timeout. `Send()`/`SendContext()` are synchronous; the TUI sends through `responses.Exchange` (runner checks) — never call Send from Update.
 - **`model.Method`** — iota enum (POST=0, GET, PATCH, PUT, DELETE, OPTIONS, HEAD). `MarshalYAML`/`UnmarshalYAML` for lowercase strings. `Label()` returns uppercase.
 - **`model.OpenAPIRef`** — `{FilePath, Path, Method}` referencing an OpenAPI operation.
 - **`model.About`** — `{Summary, Description}` for operation documentation.
@@ -143,6 +147,7 @@ internal/
 - **Test scripts** — JavaScript/TypeScript files next to the spec (default `.lazyapi/tests/<operationId|method_path>.js`) and referenced per operation by the `x-lazyapi-tests` extension. Paths must stay inside the spec directory. `OperationToRequest` loads them into `Request.Tests`; `SaveFile` writes them via `SaveOperationTests`. The CLI never reads test scripts from temp files.
 - **Errors** — `tea.Cmd` wrappers return `store.ErrorMsg{Message}` on failure; the TUI shows it as a notification. Never return `tea.Quit`/`tea.Println` as a `tea.Msg` and never `panic` in store code.
 - **Temp/draft files** — stored in `.lazyapi/.local/drafts/` next to the spec (git-ignored; `workspace.Ensure` writes the .gitignore before anything goes there). Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
+- **Disabled rows** — `syncParameters` keeps the definitions of `Request.Disabled` params; disabled auth schemes are still written to the spec. Only the editor and drafts know the on/off state.
 - **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]model.RequestItem` with Tags), `OperationToRequest` (pre-fills path params and required query/header params from spec examples), `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
 - **`Glob`** — custom double-star (`**`) glob in `filepath.go` using `strings.Split` + `filepath.Walk`.
 
@@ -164,6 +169,7 @@ internal/
 - **Import** — never copy credentials into specs (Authorization/API-key headers become security schemes plus a note). Credentials that are only `{{env.X}}` references go to `Result.Auth` → the environment's `auth:` in .lazyapi/config.yml (edited with yaml.Node via `project.AddEnvironment`, never overwriting). Multipart files must never be read from request bodies (scripts/MCP could exfiltrate files).
 - **Environments** — `project.Resolve(spec, --env-name, --server, --env)`: explicit flags win; secrets go to `runner.Options.Auth` → `model.ApplySecrets` (operations, `lazyapi.send`, flows, TUI). TUI `ctrl+v` cycles named envs when a config exists.
 - **Scripts** — run per operation by `runner`: automatic contract check, then the operation's script via `script.Run`. URL imports are pinned in `.lazyapi/lazyapi.lock` next to the spec (`--offline`, `--reload`, `--frozen-lockfile`, `--allow-import`). `lazyapi types` prints the script API. Lua is gone; `.lua` references produce an explicit error.
+- **OAuth** — `AuthOAuth2` and `AuthOpenIDConnect` (spec `openIdConnect`, `Issuer` = openIdConnectUrl; grants OpenAPI cannot express go in `x-lazyapi-grant`) get tokens via `oauth.AccessToken` with `oauth.StoreFor(Request.FileName)`. Never open a browser from runner/model: interactive grants return `*oauth.LoginRequiredError`; the TUI (`responses.Exchange` pre-checks → `ResultMsg.Login` → `Tui.startLogin` → resend once) and `lazyapi login` call `oauth.Login`. Interactive sessions are keyed per client (not per scope or grant), so one login serves every operation. Tests replace `app.openBrowser`; never hit a real IdP.
 - **HTTP** — `Request.SendContext` applies `Request.Timeout` (default `model.DefaultTimeout`, 30s). All auth fields (incl. Basic) are template-resolved.
 
 ## TUI Pages and Overlays
@@ -173,6 +179,7 @@ internal/
 - Runs with writes (every method) and flows go through `Tui.confirmRun` (y/N), like destructive sends through `Tui.confirm`.
 - History is recorded on every `responses.ResultMsg` (`ResultMsg.Request` is the unresolved request). Never store `Request.Env`, auth secrets or resolved bodies.
 - `components.TemplateSource` (the TUI's `templateSource`: env file keys + environment vars to offer, the whole env to resolve) feeds completions and template colors in every Field and CodeEditor. While a menu is open (`Completing()`), tab/esc/arrows belong to it: containers (grid, auth, docs, editor URI, tabs) must check `Completing()` before using those keys (`menuKey`). `Tui.missingRefs()` lists references without a value for the editor help bar.
+- Mouse: components mark what they draw with `components.Z.Mark` (unique ids: `Z.NewPrefix()` per instance, `Selector.ID`, `Button.ID`) and handle `tea.MouseClickMsg` with `Z.Get(id).InBounds`. `RequestPane.click` routes clicks to the area under the pointer (selects, URI, Send, tabs via `tabs.Model.click`, response); an open select gets the click first. Open lists make `Completing()` true so esc/tab reach them.
 - Do not use `textarea` for code: it re-renders the whole content on every key (slow past a few hundred lines) and its legacy `MaxHeight` (99) truncates content. Use `components.CodeEditor`.
 - `store.SampleBody`/`FillSampleBody` (schema → body) are for the editor only; `run` must never invent bodies.
 
@@ -235,4 +242,5 @@ golangci-lint run                    # Lint (config: .golangci.yml)
 - No external CLI framework — ad-hoc `os.Args`.
 - No database — everything file-based.
 - Tab/Shift+Tab within tab content wraps cyclically (last → first, first → last). No exit via Tab; Esc blurs then exits.
+- User-visible texts of tabs/panes go in `internal/config/messages.yml` and are read with `config.T` (key bindings passed as placeholders, never hardcoded). `TestMessagesUsedKeysExist` checks every key used exists.
 - `lipgloss` for all styling; Catppuccin Mocha palette in `config/config.go`. Use the semantic colors in `config/theme.go`: `Accent` (Mauve) is the only focus/selection color (borders, active tab, menus, focused button), `Brand` (Peach) the logo and titles, `Border` idle borders, `MethodColor` for HTTP methods. Highlight only what has the focus (e.g. `Button.Focused`, set by the parent each frame).

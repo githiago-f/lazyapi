@@ -8,13 +8,13 @@ require (
 	charm.land/lipgloss/v2 v2.1.1
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/atotto/clipboard v0.1.4
+	github.com/brianvoe/gofakeit/v7 v7.18.11
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261122002409-8aab43ea2d8f
 	github.com/dop251/goja v0.0.0-20261031103838-cf2ff0ec0b31
 	github.com/evanw/esbuild v0.28.2
 	github.com/getkin/kin-openapi v0.140.0
 	github.com/itchyny/gojq v0.12.20
-	github.com/lrstanley/bubblezone v1.0.0
 	github.com/rmhubbert/bubbletea-overlay v0.6.7
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -22,7 +22,6 @@ require (
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
-	github.com/brianvoe/gofakeit/v7 v7.18.11 // indirect
 	github.com/charmbracelet/bubbletea v1.3.10 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/lipgloss v1.1.0 // indirect

@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/githiago-f/lazyapi/internal/components"
+	"github.com/githiago-f/lazyapi/internal/config"
 )
 
 type paramField struct {
@@ -15,22 +16,26 @@ type paramField struct {
 func createParam() paramField {
 	return paramField{
 		enabled: true,
-		name:    components.InitField("Name", ""),
-		value:   components.InitField("Value", ""),
+		name:    components.InitField(config.T("editor.grid.name"), ""),
+		value:   components.InitField(config.T("editor.grid.value"), ""),
 	}
 }
 
 func createParamWith(name, value string) paramField {
 	return paramField{
 		enabled: true,
-		name:    components.InitField("Name", name),
-		value:   components.InitField("Value", value),
+		name:    components.InitField(config.T("editor.grid.name"), name),
+		value:   components.InitField(config.T("editor.grid.value"), value),
 	}
 }
 
-func paramFieldsToMap(fields []paramField) map[string]string {
+// paramFieldsToMap returns the named rows that are (or are not) enabled.
+func paramFieldsToMap(fields []paramField, enabled bool) map[string]string {
 	result := make(map[string]string, len(fields))
 	for _, pf := range fields {
+		if pf.enabled != enabled {
+			continue
+		}
 		name := pf.name.Value()
 		value := pf.value.Value()
 		if name != "" {

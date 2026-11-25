@@ -2,6 +2,7 @@ package editor
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -16,9 +17,65 @@ import (
 type kvGrid struct {
 	rows  []paramField
 	width int
+	zone  string // mouse zone prefix
 }
 
-func newGrid() kvGrid { return kvGrid{rows: []paramField{createParam()}} }
+func newGrid() kvGrid {
+	return kvGrid{rows: []paramField{createParam()}, zone: components.Z.NewPrefix()}
+}
+
+func (g kvGrid) cellZone(cell int) string { return g.zone + strconv.Itoa(cell) }
+func (g kvGrid) boxZone(row int) string   { return g.zone + "chk" + strconv.Itoa(row) }
+
+// checkWidth is the checkbox column left of each row.
+const checkWidth = 4
+
+var (
+	checkOn  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Green)).Bold(true)
+	checkOff = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0))
+)
+
+// checkbox draws a row's on/off box, vertically centered on the field.
+func checkbox(on bool) string {
+	box, st := "☐", checkOff
+	if on {
+		box, st = "☑", checkOn
+	}
+	return lipgloss.NewStyle().Width(checkWidth).PaddingTop(1).PaddingLeft(1).Render(st.Render(box))
+}
+
+// toggle switches the row of a cell on or off.
+func (g *kvGrid) toggle(cell int) {
+	if cell >= 0 && cell < g.cells() {
+		g.rows[cell/2].enabled = !g.rows[cell/2].enabled
+	}
+}
+
+// click returns the cell under a mouse click (placing its cursor at the
+// clicked column), or -1. A click on a checkbox switches its row and
+// returns the row's name cell.
+func (g *kvGrid) click(msg tea.MouseClickMsg) int {
+	for row := range g.rows {
+		if components.Z.Get(g.boxZone(row)).InBounds(msg) {
+			g.rows[row].enabled = !g.rows[row].enabled
+			return row * 2
+		}
+	}
+	for cell := range g.cells() {
+		z := components.Z.Get(g.cellZone(cell))
+		if !z.InBounds(msg) {
+			continue
+		}
+		f := &g.rows[cell/2].name
+		if cell%2 == 1 {
+			f = &g.rows[cell/2].value
+		}
+		x, _ := z.Pos(msg)
+		f.ClickAt(x)
+		return cell
+	}
+	return -1
+}
 
 // setMap replaces the rows with m, sorted by name (one blank row if empty).
 func (g *kvGrid) setMap(m map[string]string) {
@@ -43,8 +100,37 @@ func (g *kvGrid) setRows(rows []paramField) {
 	g.setWidth(g.width)
 }
 
-// toMap returns the named rows (later rows win for repeated names).
-func (g kvGrid) toMap() map[string]string { return paramFieldsToMap(g.rows) }
+// setMaps replaces the rows with the enabled and the disabled ones, sorted
+// by name.
+func (g *kvGrid) setMaps(enabled, disabled map[string]string) {
+	g.setMap(enabled)
+	if len(disabled) == 0 {
+		return
+	}
+	rows := g.rows
+	if len(enabled) == 0 {
+		rows = nil // drop the blank row
+	}
+	for k, v := range disabled {
+		r := createParamWith(k, v)
+		r.enabled = false
+		rows = append(rows, r)
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].name.Value() < rows[j].name.Value() })
+	g.setRows(rows)
+}
+
+// toMap returns the enabled named rows (later rows win for repeated names).
+func (g kvGrid) toMap() map[string]string { return paramFieldsToMap(g.rows, true) }
+
+// disabledMap returns the switched-off named rows (nil when none).
+func (g kvGrid) disabledMap() map[string]string {
+	m := paramFieldsToMap(g.rows, false)
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
 
 func (g kvGrid) cells() int { return len(g.rows) * 2 }
 
@@ -57,7 +143,7 @@ func (g *kvGrid) add() int {
 
 func (g *kvGrid) setWidth(w int) {
 	g.width = w
-	total := max(0, w-2)
+	total := max(0, w-2-checkWidth)
 	nameW := total / 2
 	valueW := total - nameW
 	for i := range g.rows {
@@ -106,11 +192,14 @@ func (g kvGrid) view(focus int) string {
 		if focus == i*2+1 {
 			r.value.Style = r.value.Style.BorderForeground(active)
 		}
-		lines = append(lines, r.View().Content)
+		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Top,
+			components.Z.Mark(g.boxZone(i), checkbox(r.enabled)),
+			components.Z.Mark(g.cellZone(i*2), r.name.View().Content),
+			components.Z.Mark(g.cellZone(i*2+1), r.value.View().Content)))
 		if focus == i*2 || focus == i*2+1 {
-			f, indent := r.name, 0
+			f, indent := r.name, checkWidth
 			if focus == i*2+1 {
-				f, indent = r.value, lipgloss.Width(r.name.View().Content)
+				f, indent = r.value, checkWidth+lipgloss.Width(r.name.View().Content)
 			}
 			if menu := f.MenuView(max(24, g.width-indent)); menu != "" {
 				lines = append(lines, lipgloss.NewStyle().PaddingLeft(indent).Render(menu))

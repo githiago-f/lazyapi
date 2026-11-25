@@ -45,3 +45,27 @@ All keybindings are defined in `internal/config/keymap.go` and can be remapped i
 | Filter | `/` |
 | Quit | `q` |
 | Kill | `Ctrl+C` |
+
+## Interface texts
+
+The texts of the TUI's tabs (tab names, list titles and hints, field labels and placeholders, empty states, the response view's messages) live in [`internal/config/messages.yml`](https://github.com/githiago-f/lazyapi/blob/main/internal/config/messages.yml), embedded in the binary at build time.
+
+- **Change the defaults**: edit `messages.yml` and rebuild (`go build ./cmd/lazyapi`). `go test ./internal/config` fails when the code uses a key the file lacks.
+- **Override at run time**: point `LAZYAPI_MESSAGES` at a YAML file with the same layout and only the keys you change, e.g. a translation:
+
+```yaml
+# pt-BR.yml
+editor:
+  tabs:
+    auth: Autenticação
+    headers: Cabeçalhos
+  auth:
+    empty: "Nenhuma autenticação. {add} adiciona um scheme."
+```
+
+```bash
+LAZYAPI_MESSAGES=pt-BR.yml lazyapi api.yml
+```
+
+`{name}` placeholders (such as `{add}`, the key that adds a row) are filled in by LazyAPI: keep them in your texts. An unknown key or invalid YAML is reported when the TUI starts, and the built-in texts are used.
+

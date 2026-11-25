@@ -42,6 +42,10 @@ environments:
         clientId: "{{env.CLIENT_ID}}"
         clientSecret: "{{env.CLIENT_SECRET}}"
         scopes: "read write"   # optional: overrides the spec's scopes
+      keycloak:                # OpenID Connect: endpoints discovered from the issuer
+        issuer: https://sso.example.com/realms/acme
+        clientId: lazyapi-cli
+        grantType: authorizationCode   # or deviceCode, clientCredentials, password
   production:
     server: "1"                # an index into the spec's servers also works
     env: ../shared/prod.env    # optional extra env file, relative to this file
@@ -88,9 +92,9 @@ Credentials are applied to every request whose operation (or the spec, globally)
 | `http` bearer | `token` |
 | `http` basic | `username`, `password` |
 | `apiKey` (header, query or cookie) | `value` |
-| `oauth2` | `accessToken` (fixed), or `clientId` + `clientSecret` (client credentials) / + `username` + `password` (password grant); optional `scopes`, `tokenUrl` |
+| `oauth2`, `openIdConnect` | `clientId`, `clientSecret`; `username` + `password` (password grant); optional `issuer` (discovery), `grantType`, `scopes`, `tokenUrl`, `authUrl`, `redirectUri`, `params`; or a fixed `accessToken` |
 
-For OAuth2 client-credentials and password flows, LazyAPI requests a token from the flow's `tokenUrl` (client authenticated with HTTP Basic). It caches the token until shortly before `expires_in`. A failed token request fails the operation with the token server's answer. Authorization-code and implicit flows need a browser: put a token in `accessToken`.
+For the client-credentials and password grants, LazyAPI requests a token (client authenticated with HTTP Basic when it has a secret) and keeps it until shortly before `expires_in`. The authorization-code and device-code grants need you to log in once: the TUI does it when you send, the CLI with [`lazyapi login`](/cli/login). Sessions are stored in `.lazyapi/.local/tokens.json` (git-ignored) and refreshed automatically. A failed token request fails the operation with the token server's answer. See [Authentication](/authentication#oauth2-and-openid-connect).
 
 ## Upgrading from 1.3
 

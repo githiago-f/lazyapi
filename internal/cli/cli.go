@@ -8,7 +8,7 @@ import (
 )
 
 // Commands lists the first words that select CLI mode instead of the TUI.
-var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "fake", "mcp", "mock", "import", "help"}
+var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "fake", "mcp", "mock", "import", "login", "logout", "help"}
 
 // Run executes a CLI command and exits with its status code
 // (0 ok, 1 a check failed, 2 usage error, 3 something could not run).
@@ -106,6 +106,12 @@ func run(args []string) error {
 	case "import":
 		return Import(args[1:])
 
+	case "login":
+		return Login(args[1:])
+
+	case "logout":
+		return Logout(args[1:])
+
 	default:
 		printUsage()
 		return usageErr("unknown command: %s", args[0])
@@ -122,6 +128,10 @@ Usage:
   lazyapi run <spec.yml> [flags]                    Run operations, contract checks and test scripts
   lazyapi send request <spec.yml> <path> <method>   Send one operation (or: --op <operationId>)
   lazyapi smoke tests <spec.yml> [flags]            Alias of run
+
+  Authentication
+  lazyapi login <spec.yml> [scheme] [--device]      Log in to an OAuth2/OpenID Connect scheme (browser or device code)
+  lazyapi logout <spec.yml> [scheme]                Forget stored sessions (login --status lists them)
 
   Inspecting
   lazyapi list ops <spec.yml> [--json]              List operations

@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/githiago-f/lazyapi/internal/env"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/oauth"
 	"github.com/githiago-f/lazyapi/internal/runner"
 	"github.com/githiago-f/lazyapi/internal/script"
 	"github.com/githiago-f/lazyapi/internal/store"
@@ -30,6 +32,8 @@ type SendMsg struct {
 	Auth map[string]model.AuthSecrets
 	Vars map[string]string
 	HTTP model.HTTPOptions
+	// AfterLogin marks a resend after an automatic login (never logs in twice).
+	AfterLogin bool
 }
 
 // ResultMsg carries a finished exchange back to the view that sent it.
@@ -38,14 +42,56 @@ type ResultMsg struct {
 	Result runner.OpResult
 	// Request is what was sent (templates unresolved), for the history.
 	Request model.Request
+	// Login is set when the request was not sent because an OAuth scheme
+	// needs the user to log in; Send is the message to resend afterwards.
+	Login *LoginNeeded
+}
+
+// LoginNeeded is an OAuth scheme waiting for a login.
+type LoginNeeded struct {
+	Scheme model.AuthScheme // secrets applied, templates unresolved
+	Err    *oauth.LoginRequiredError
+	Send   SendMsg
 }
 
 // Exchange returns a command that sends req through the runner, so the TUI
 // shows the same status, contract and script checks as `lazyapi run`.
 func Exchange(ctx context.Context, msg SendMsg) tea.Cmd {
 	return func() tea.Msg {
+		if need := loginNeeded(ctx, msg); need != nil {
+			res := runner.OpResult{Method: msg.Request.Method.Label(), Path: msg.Request.URI, Outcome: runner.Errored, Reason: need.Err.Error()}
+			return ResultMsg{Source: msg.Source, Result: res, Request: msg.Request, Login: need}
+		}
 		return ResultMsg{Source: msg.Source, Result: exchange(ctx, msg), Request: msg.Request}
 	}
+}
+
+// loginNeeded checks the request's OAuth schemes before sending: one that
+// needs an interactive login is reported instead of a failed send.
+func loginNeeded(ctx context.Context, msg SendMsg) *LoginNeeded {
+	schemes := model.ApplySecrets(msg.Request.Auth, msg.Auth)
+	vars := map[string]string{}
+	for k, v := range msg.Vars {
+		vars[k] = v
+	}
+	for k, v := range msg.Request.Vars {
+		vars[k] = v
+	}
+	tctx := env.Context{Env: msg.Request.Env, Vars: vars}
+	for _, s := range schemes {
+		if s.Disabled || !s.Type.IsOAuth() || env.Resolve(s.AccessToken, tctx) != "" {
+			continue
+		}
+		client, err := msg.HTTP.Client()
+		if err != nil {
+			return nil
+		}
+		_, err = oauth.AccessToken(ctx, client, model.OAuthConfig(s, tctx), oauth.StoreFor(msg.Request.FileName))
+		if lr, ok := oauth.IsLoginRequired(err); ok {
+			return &LoginNeeded{Scheme: s, Err: lr, Send: msg}
+		}
+	}
+	return nil
 }
 
 func exchange(ctx context.Context, msg SendMsg) runner.OpResult {

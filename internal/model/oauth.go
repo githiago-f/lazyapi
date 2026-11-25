@@ -2,16 +2,11 @@ package model
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"strings"
-	"sync"
-	"time"
+	"sort"
 
 	"github.com/githiago-f/lazyapi/internal/env"
+	"github.com/githiago-f/lazyapi/internal/oauth"
 )
 
 // AuthSecrets are the credentials for one security scheme, usually coming
@@ -26,6 +21,19 @@ type AuthSecrets struct {
 	Scopes       string `yaml:"scopes,omitempty"`       // oauth2, space separated (overrides the spec)
 	AccessToken  string `yaml:"accessToken,omitempty"`  // oauth2: a fixed token, no token request
 	TokenURL     string `yaml:"tokenUrl,omitempty"`     // oauth2: overrides the spec
+	AuthURL      string `yaml:"authUrl,omitempty"`      // oauth2: overrides the spec
+	// Issuer is an OpenID Connect issuer (e.g. a Keycloak realm,
+	// https://sso.example.com/realms/acme) or a .well-known URL: the
+	// authorization, token and device endpoints are discovered from it.
+	Issuer string `yaml:"issuer,omitempty"`
+	// GrantType overrides the spec's flow: authorizationCode, deviceCode,
+	// clientCredentials or password.
+	GrantType string `yaml:"grantType,omitempty"`
+	// RedirectURI is the loopback redirect of the authorization code grant
+	// (default http://localhost:8765/callback).
+	RedirectURI string `yaml:"redirectUri,omitempty"`
+	// Params are extra authorization/token parameters (audience, kc_idp_hint…).
+	Params map[string]string `yaml:"params,omitempty"`
 }
 
 // ApplySecrets fills credentials into schemes by security scheme name.
@@ -55,100 +63,88 @@ func ApplySecrets(schemes []AuthScheme, secrets map[string]AuthSecrets) []AuthSc
 		set(&s.Scopes, sec.Scopes)
 		set(&s.AccessToken, sec.AccessToken)
 		set(&s.TokenURL, sec.TokenURL)
+		set(&s.AuthURL, sec.AuthURL)
+		set(&s.Issuer, sec.Issuer)
+		set(&s.GrantType, sec.GrantType)
+		set(&s.RedirectURI, sec.RedirectURI)
+		if len(sec.Params) > 0 {
+			params := make(map[string]string, len(s.Params)+len(sec.Params))
+			for k, v := range s.Params {
+				params[k] = v
+			}
+			for k, v := range sec.Params {
+				params[k] = v
+			}
+			s.Params = params
+		}
 		out[i] = s
 	}
 	return out
 }
 
-type cachedToken struct {
-	token   string
-	expires time.Time
-}
-
-var (
-	tokenMu    sync.Mutex
-	tokenCache = map[string]cachedToken{}
-)
-
-// ResetTokenCache forgets every cached OAuth2 token (tests).
+// ResetTokenCache forgets every cached OAuth2 token and discovery document
+// (tests). Token files on disk are untouched.
 func ResetTokenCache() {
-	tokenMu.Lock()
-	defer tokenMu.Unlock()
-	tokenCache = map[string]cachedToken{}
+	oauth.ResetStores()
+	oauth.ResetDiscovery()
 }
 
-// oauthToken returns an access token for client_credentials and password
-// grants, requesting one from the token URL when none is cached. Tokens are
-// reused until shortly before they expire.
-func oauthToken(ctx context.Context, client *http.Client, s AuthScheme, tctx env.Context) (string, error) {
-	grant := ""
-	switch s.GrantType {
-	case "clientCredentials", "client_credentials":
-		grant = "client_credentials"
-	case "password":
-		grant = "password"
-	default:
-		return "", nil // other flows need a browser; use accessToken
+// OAuthConfig resolves a scheme's templates into an OAuth client.
+func OAuthConfig(s AuthScheme, tctx env.Context) oauth.Config {
+	params := make(map[string]string, len(s.Params))
+	for k, v := range s.Params {
+		params[k] = env.Resolve(v, tctx)
 	}
-	tokenURL := env.Resolve(s.TokenURL, tctx)
-	clientID := env.Resolve(s.ClientID, tctx)
-	if tokenURL == "" || clientID == "" {
-		return "", nil
+	grant := s.GrantType
+	if grant == "" && s.Type == AuthOpenIDConnect {
+		grant = oauth.GrantAuthorizationCode
 	}
-	secret := env.Resolve(s.ClientSecret, tctx)
-	user, pass := env.Resolve(s.Username, tctx), env.Resolve(s.Password, tctx)
-	scopes := env.Resolve(s.Scopes, tctx)
+	return oauth.Config{
+		Name:         s.SchemeName,
+		Grant:        grant,
+		Issuer:       env.Resolve(s.Issuer, tctx),
+		AuthURL:      env.Resolve(s.AuthURL, tctx),
+		TokenURL:     env.Resolve(s.TokenURL, tctx),
+		ClientID:     env.Resolve(s.ClientID, tctx),
+		ClientSecret: env.Resolve(s.ClientSecret, tctx),
+		Username:     env.Resolve(s.Username, tctx),
+		Password:     env.Resolve(s.Password, tctx),
+		Scopes:       env.Resolve(s.Scopes, tctx),
+		RedirectURI:  env.Resolve(s.RedirectURI, tctx),
+		Params:       params,
+	}
+}
 
-	key := strings.Join([]string{grant, tokenURL, clientID, user, scopes}, "\x00")
-	tokenMu.Lock()
-	if c, ok := tokenCache[key]; ok && time.Now().Before(c.expires) {
-		tokenMu.Unlock()
-		return c.token, nil
-	}
-	tokenMu.Unlock()
+// oauthToken returns an access token for an OAuth2/OIDC scheme from the
+// spec's token store, refreshing or requesting one when that needs no user.
+// Grants that need the user fail with an *oauth.LoginRequiredError.
+func oauthToken(ctx context.Context, client *http.Client, s AuthScheme, tctx env.Context, specPath string) (string, error) {
+	return oauth.AccessToken(ctx, client, OAuthConfig(s, tctx), oauth.StoreFor(specPath))
+}
 
-	form := url.Values{"grant_type": {grant}, "client_id": {clientID}}
-	if scopes != "" {
-		form.Set("scope", scopes)
+// OAuthSchemes are the schemes a user can log in to: the OAuth2/OIDC
+// schemes with their secrets applied, plus environment auth entries that
+// name an issuer or token URL but no scheme of the spec (as OpenID Connect
+// or OAuth2 schemes), sorted by name.
+func OAuthSchemes(schemes []AuthScheme, secrets map[string]AuthSecrets) []AuthScheme {
+	var out []AuthScheme
+	seen := map[string]bool{}
+	for _, s := range ApplySecrets(schemes, secrets) {
+		if s.Type.IsOAuth() && !seen[s.SchemeName] {
+			seen[s.SchemeName] = true
+			out = append(out, s)
+		}
 	}
-	if grant == "password" {
-		form.Set("username", user)
-		form.Set("password", pass)
+	for name, sec := range secrets {
+		if seen[name] || (sec.Issuer == "" && sec.TokenURL == "") {
+			continue
+		}
+		t := AuthOAuth2
+		if sec.Issuer != "" {
+			t = AuthOpenIDConnect
+		}
+		out = append(out, ApplySecrets([]AuthScheme{{Type: t, SchemeName: name}}, secrets)...)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
-	if err != nil {
-		return "", fmt.Errorf("oauth2 token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	if secret != "" {
-		req.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(secret))
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("oauth2 token request to %s: %w", tokenURL, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("oauth2 token request to %s: %s: %s", tokenURL, resp.Status, strings.TrimSpace(string(body)))
-	}
-	var tok struct {
-		AccessToken string  `json:"access_token"`
-		ExpiresIn   float64 `json:"expires_in"`
-	}
-	if err := json.Unmarshal(body, &tok); err != nil || tok.AccessToken == "" {
-		return "", fmt.Errorf("oauth2 token response from %s has no access_token", tokenURL)
-	}
-	ttl := time.Duration(tok.ExpiresIn) * time.Second
-	if ttl <= 0 {
-		ttl = 5 * time.Minute
-	}
-	if ttl > time.Minute {
-		ttl -= 30 * time.Second // refresh a little early
-	}
-	tokenMu.Lock()
-	tokenCache[key] = cachedToken{token: tok.AccessToken, expires: time.Now().Add(ttl)}
-	tokenMu.Unlock()
-	return tok.AccessToken, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].SchemeName < out[j].SchemeName })
+	return out
 }

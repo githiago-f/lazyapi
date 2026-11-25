@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	zone "github.com/lrstanley/bubblezone"
+	"github.com/githiago-f/lazyapi/internal/components"
 )
 
 func visible(s string) string {
@@ -14,8 +14,7 @@ func visible(s string) string {
 }
 
 func TestDebugLayout(t *testing.T) {
-	zone.NewGlobal()
-	defer zone.Close()
+	components.Z.Clear()
 	rendered := DebugRenderPane(194, 46)
 	lines := strings.Split(rendered, "\n")
 

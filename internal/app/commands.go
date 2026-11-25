@@ -21,6 +21,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/fake"
 	"github.com/githiago-f/lazyapi/internal/history"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/oauth"
 	"github.com/githiago-f/lazyapi/internal/runner"
 	"github.com/githiago-f/lazyapi/internal/script"
 	"github.com/githiago-f/lazyapi/internal/store"
@@ -108,6 +109,17 @@ func (t Tui) paletteCommands() []palette.Command {
 		for _, f := range flows {
 			rel, _ := filepath.Rel(filepath.Dir(spec), f)
 			add("Flow", rel+suffix, "", runTestsMsg{spec: spec, flows: []string{f}, onlyFlows: true, title: rel})
+		}
+
+		for _, sc := range t.oauthSchemes(spec) {
+			grant := sc.GrantType
+			if grant == "" {
+				grant = "authorizationCode"
+			}
+			add("Auth", "Log in · "+sc.SchemeName+suffix, grant, loginMsg{spec: spec, scheme: sc})
+		}
+		if n := len(oauth.StoreFor(spec).List()); n > 0 {
+			add("Auth", "Log out (forget sessions)"+suffix, plural(n, "session"), logoutMsg{spec: spec})
 		}
 
 		for _, d := range dataFiles(spec) {
