@@ -67,6 +67,7 @@ type RequestList struct {
 	filteredGroups []TagGroup
 	cursor         int
 	lastClick      int // row of the last click (double click opens)
+	hover          int // row under the mouse pointer (-1: none)
 	lastClickAt    time.Time
 	scroll         int
 
@@ -85,6 +86,7 @@ func NewRequestList() RequestList {
 
 	return RequestList{
 		filter: f,
+		hover:  -1,
 	}
 }
 
@@ -176,6 +178,7 @@ func dedupItems(items []RequestItem) []RequestItem {
 }
 
 func (rl *RequestList) applyFilter() {
+	rl.hover = -1 // rows move: the pointer is over another one now
 	q := strings.TrimSpace(rl.filter.Value())
 	if q == "" {
 		rl.filteredGroups = rl.groups
@@ -225,8 +228,9 @@ func (rl RequestList) View() tea.View {
 		if selected {
 			prefix = cursorMark.String()
 		}
-		row := prefix + RenderCompact(line.item, rl.width, selected)
-		if i := rl.indexOf(line.item); i >= 0 {
+		i := rl.indexOf(line.item)
+		row := prefix + RenderCompact(line.item, rl.width, selected, i >= 0 && i == rl.hover)
+		if i >= 0 {
 			row = components.Z.Mark(rowZone(i), row)
 		}
 		rendered = append(rendered, row)
@@ -338,6 +342,15 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return rl, rl.open()
 				}
 				return rl, nil
+			}
+		}
+		return rl, nil
+	case tea.MouseMotionMsg:
+		rl.hover = -1
+		for i := range rl.filtered {
+			if components.Z.Get(rowZone(i)).InBounds(msg) {
+				rl.hover = i
+				break
 			}
 		}
 		return rl, nil

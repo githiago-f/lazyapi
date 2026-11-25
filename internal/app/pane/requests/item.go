@@ -24,13 +24,15 @@ func methodStyle(m model.Method) lipgloss.Style {
 }
 
 var (
-	selItemBg = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface1))
-	draftPre  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0)).SetString("✎ ")
-	sumStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0))
+	selItemBg   = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface1))
+	hoverItemBg = lipgloss.NewStyle().Background(lipgloss.Color(config.Surface0))
+	draftPre    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0)).SetString("✎ ")
+	sumStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay0))
 )
 
-// RenderCompact renders an item as one list line.
-func RenderCompact(ri RequestItem, width int, selected bool) string {
+// RenderCompact renders an item as one list line: selected rows get the
+// selection background, hovered ones (mouse pointer over them) a lighter one.
+func RenderCompact(ri RequestItem, width int, selected, hovered bool) string {
 	methodLabel := ri.Method.Label()
 	if methodLabel == "" {
 		methodLabel = "ANY"
@@ -55,8 +57,11 @@ func RenderCompact(ri RequestItem, width int, selected bool) string {
 		line = ansi.Truncate(line, width-2, "…") // leave room for the cursor prefix
 	}
 
-	if selected {
+	switch {
+	case selected:
 		line = selItemBg.Render(line)
+	case hovered:
+		line = hoverItemBg.Render(line)
 	}
 	return line
 }

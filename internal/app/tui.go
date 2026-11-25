@@ -320,7 +320,7 @@ func (t Tui) View() tea.View {
 	return tea.View{
 		Content:   scanned,
 		AltScreen: true,
-		MouseMode: tea.MouseModeCellMotion,
+		MouseMode: tea.MouseModeAllMotion, // motion without a button: hover
 	}
 }
 

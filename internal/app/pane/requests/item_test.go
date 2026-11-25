@@ -58,7 +58,7 @@ func TestRequestItem_RenderCompact(t *testing.T) {
 		URI:    "/items",
 		Method: model.GET,
 	}
-	rendered := RenderCompact(item, 80, false)
+	rendered := RenderCompact(item, 80, false, false)
 	if !strings.Contains(rendered, "GET") || !strings.Contains(rendered, "/items") {
 		t.Errorf("RenderCompact = %q, should contain both 'GET' and '/items'", rendered)
 	}
