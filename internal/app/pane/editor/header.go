@@ -36,18 +36,22 @@ func (h header) View() tea.View {
 	if h.active {
 		focus = h.focusPos
 	}
-	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, titleStyle.Width(h.width).Render("Headers"), h.grid.view(focus)))
+	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, section(config.T("editor.headers.title"), config.T("editor.headers.hint", "add", config.DefaultKeyMap.AddHeader.Help().Key)+" · "+gridHint(), h.width), h.grid.view(focus)))
 }
 
-func (h *header) SetValue(headers map[string]string) { h.grid.setMap(headers) }
+func (h *header) SetValue(headers, disabled map[string]string) { h.grid.setMaps(headers, disabled) }
 
 func (h *header) Value() map[string]string { return h.grid.toMap() }
+
+// Disabled are the switched-off headers.
+func (h *header) Disabled() map[string]string { return h.grid.disabledMap() }
 
 func (h header) HelpBindings() []key.Binding {
 	return []key.Binding{
 		config.DefaultKeyMap.Next,
 		config.DefaultKeyMap.Prev,
 		config.DefaultKeyMap.AddHeader,
+		config.DefaultKeyMap.Toggle,
 		config.DefaultKeyMap.Back,
 	}
 }
@@ -61,6 +65,11 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tabs.SetActiveTabMsg:
 		h.SetActive(msg.Active)
 
+	case tea.MouseClickMsg:
+		if cell := h.grid.click(msg); cell >= 0 && h.active {
+			h.focusPos = cell
+		}
+
 	case tea.KeyPressMsg:
 		if !h.active {
 			return &h, nil
@@ -72,6 +81,8 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, config.DefaultKeyMap.AddHeader):
 			h.focusPos = h.grid.add()
+		case key.Matches(msg, config.DefaultKeyMap.Toggle):
+			h.grid.toggle(h.focusPos)
 		case key.Matches(msg, config.DefaultKeyMap.Next):
 			h.focusPos = (h.focusPos + 1) % total
 		case key.Matches(msg, config.DefaultKeyMap.Prev):

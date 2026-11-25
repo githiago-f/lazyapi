@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -30,7 +31,10 @@ const (
 	ConsoleTab
 )
 
-var tabNames = []string{"Body", "Headers", "Cookies", "Timeline", "Checks", "Console"}
+var tabNames = []string{
+	config.T("response.tabs.body"), config.T("response.tabs.headers"), config.T("response.tabs.cookies"),
+	config.T("response.tabs.timeline"), config.T("response.tabs.checks"), config.T("response.tabs.console"),
+}
 
 var (
 	labelStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Subtext0))
@@ -92,7 +96,7 @@ func New(placeholder string) Model {
 
 	ti := textinput.New()
 	ti.Prompt = "/"
-	ti.Placeholder = "search the response"
+	ti.Placeholder = config.T("response.search_placeholder")
 
 	fi := textinput.New()
 	fi.Prompt = "jq "
@@ -419,7 +423,7 @@ func (m Model) content() string {
 			return errorText(r)
 		}
 		if r.Response.Body == "" {
-			return dimStyle.Render("(empty body)")
+			return dimStyle.Render(config.T("response.empty_body"))
 		}
 		ct := r.Response.Headers["Content-Type"]
 		if m.jq != "" {
@@ -427,7 +431,7 @@ func (m Model) content() string {
 				return failStyle.Render(m.jqErr)
 			}
 			if m.jqOut == "" {
-				return dimStyle.Render("(the filter returned nothing)")
+				return dimStyle.Render(config.T("response.jq_empty"))
 			}
 			return Highlight("application/json", m.jqOut)
 		}
@@ -439,13 +443,13 @@ func (m Model) content() string {
 	case HeadersTab:
 		var b strings.Builder
 		if r.Request != nil {
-			b.WriteString(labelStyle.Render("Request") + "\n")
+			b.WriteString(labelStyle.Render(config.T("response.request")) + "\n")
 			fmt.Fprintf(&b, "  %s %s\n", r.Request.Method, r.Request.URL)
 			writeHeaders(&b, r.Request.Headers)
 			b.WriteString("\n")
 		}
 		if r.Response != nil {
-			b.WriteString(labelStyle.Render("Response") + "\n")
+			b.WriteString(labelStyle.Render(config.T("response.response")) + "\n")
 			writeHeaders(&b, r.Response.Headers)
 		}
 		return strings.TrimRight(b.String(), "\n")
@@ -455,7 +459,7 @@ func (m Model) content() string {
 			return errorText(r)
 		}
 		if len(r.Response.Cookies) == 0 {
-			return dimStyle.Render("The response set no cookies.")
+			return dimStyle.Render(config.T("response.no_cookies"))
 		}
 		var b strings.Builder
 		for _, c := range r.Response.Cookies {
@@ -492,7 +496,7 @@ func (m Model) content() string {
 			return errorText(r)
 		}
 		if len(r.Checks) == 0 {
-			return dimStyle.Render("No checks: this request is not linked to an operation with declared responses,\nand it has no test script. Add one in the Tests tab.")
+			return dimStyle.Render(config.T("response.no_checks"))
 		}
 		var b strings.Builder
 		for _, c := range r.Checks {
@@ -506,13 +510,13 @@ func (m Model) content() string {
 			}
 		}
 		if r.TestsFile == "" {
-			b.WriteString("\n" + dimStyle.Render("No saved test script. Write one in the Tests tab (F5 runs it)."))
+			b.WriteString("\n" + dimStyle.Render(config.T("response.no_script", "run", config.DefaultKeyMap.RunTests.Help().Key)))
 		}
 		return strings.TrimRight(b.String(), "\n")
 
 	case ConsoleTab:
 		if len(r.Logs) == 0 {
-			return dimStyle.Render("No console output. console.log() in a test script shows up here.")
+			return dimStyle.Render(config.T("response.no_console"))
 		}
 		var b strings.Builder
 		for _, l := range r.Logs {
@@ -532,10 +536,10 @@ func (m Model) content() string {
 
 func errorText(r *runner.OpResult) string {
 	if r.Outcome == runner.Skipped || r.Outcome == runner.Planned {
-		return dimStyle.Render("Not sent: " + r.Reason)
+		return dimStyle.Render(config.T("response.not_sent", "reason", r.Reason))
 	}
 	return errorBoxStyle.Render("✗ "+r.Reason) + "\n\n" +
-		dimStyle.Render("Nothing came back. Check the server URL, path parameters and network.")
+		dimStyle.Render(config.T("response.nothing"))
 }
 
 func writeHeaders(b *strings.Builder, h map[string]string) {
@@ -566,7 +570,7 @@ func StatusBadge(status int, text string) string {
 
 func (m Model) statusLine() string {
 	if m.sending {
-		return m.spin.View() + " " + labelStyle.Render("Sending…  esc cancels")
+		return m.spin.View() + " " + labelStyle.Render(config.T("response.sending", "cancel", "esc"))
 	}
 	r := m.result
 	if r == nil {
@@ -594,13 +598,13 @@ func (m Model) statusLine() string {
 			}
 		}
 		if failed == 0 {
-			parts = append(parts, passStyle.Render(fmt.Sprintf("✓ %d %s", n, plural(n, "check", "checks"))))
+			parts = append(parts, passStyle.Render(config.Plural("response.checks_passed", n)))
 		} else {
-			parts = append(parts, failStyle.Render(fmt.Sprintf("✗ %d/%d checks failed", failed, n)))
+			parts = append(parts, failStyle.Render(config.T("response.checks_failed", "failed", strconv.Itoa(failed), "n", strconv.Itoa(n))))
 		}
 	}
 	if r.Attempts > 1 {
-		parts = append(parts, warnStyle.Render(fmt.Sprintf("%d attempts", r.Attempts)))
+		parts = append(parts, warnStyle.Render(config.T("response.attempts", "n", strconv.Itoa(r.Attempts))))
 	}
 	return strings.Join(parts, dimStyle.Render(" · "))
 }
@@ -616,7 +620,7 @@ func (m Model) flowStatusLine() string {
 	}
 	parts := []string{
 		badgeBase.Background(lipgloss.Color(color)).Render("FLOW " + strings.ToUpper(string(r.Outcome))),
-		labelStyle.Render(fmt.Sprintf("%d %s", len(r.Steps), plural(len(r.Steps), "step", "steps"))),
+		labelStyle.Render(config.Plural("response.steps", len(r.Steps))),
 	}
 	failed := 0
 	for _, c := range r.Checks {
@@ -626,9 +630,9 @@ func (m Model) flowStatusLine() string {
 	}
 	if n := len(r.Checks); n > 0 {
 		if failed == 0 {
-			parts = append(parts, passStyle.Render(fmt.Sprintf("✓ %d %s", n, plural(n, "check", "checks"))))
+			parts = append(parts, passStyle.Render(config.Plural("response.checks_passed", n)))
 		} else {
-			parts = append(parts, failStyle.Render(fmt.Sprintf("✗ %d/%d checks failed", failed, n)))
+			parts = append(parts, failStyle.Render(config.T("response.checks_failed", "failed", strconv.Itoa(failed), "n", strconv.Itoa(n))))
 		}
 	}
 	if r.Reason != "" {
@@ -643,7 +647,7 @@ func flowSteps(r *runner.OpResult) string {
 		if r.Reason != "" {
 			return failStyle.Render("✗ " + r.Reason)
 		}
-		return dimStyle.Render("The flow sent no requests.")
+		return dimStyle.Render(config.T("response.flow_empty"))
 	}
 	var b strings.Builder
 	for i, st := range r.Steps {
@@ -679,7 +683,7 @@ func (m Model) tabBar() string {
 				}
 			case BodyTab:
 				if m.raw {
-					label += " (raw)"
+					label += config.T("response.raw")
 				}
 			}
 		}
@@ -691,7 +695,7 @@ func (m Model) tabBar() string {
 	}
 	bar := strings.Join(tabs, "")
 	if m.focused {
-		bar += dimStyle.Render("  [ ] switch")
+		bar += dimStyle.Render("  " + config.T("response.switch_hint"))
 	}
 	return ansi.Truncate(bar, m.width, "…")
 }
@@ -706,32 +710,25 @@ func (m Model) View() string {
 	if m.filtering {
 		lines = append(lines, m.filter.View())
 	} else if m.jq != "" {
-		state := "f edit · f then empty enter clears"
+		state := config.T("response.jq_status", "filter", m.jq)
 		if m.jqErr != "" {
-			state = "error · " + state
+			state = config.T("response.jq_error") + state
 		}
-		lines = append(lines, dimStyle.Render(ansi.Truncate("jq "+m.jq+" — "+state, m.width, "…")))
+		lines = append(lines, dimStyle.Render(ansi.Truncate(state, m.width, "…")))
 	}
 	if m.searching {
 		lines = append(lines, m.search.View())
 	} else if m.query != "" {
-		lines = append(lines, dimStyle.Render(fmt.Sprintf("/%s — %d %s · n/N next/prev · / then empty enter clears", m.query, m.hits, plural(m.hits, "match", "matches"))))
+		lines = append(lines, dimStyle.Render(config.T("response.search_status", "query", m.query, "matches", config.Plural("response.matches", m.hits))))
 	}
 	lines = append(lines, m.vp.View())
 	return lipgloss.NewStyle().Width(m.width).Height(m.height).MaxHeight(m.height).Render(strings.Join(lines, "\n"))
 }
 
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
-}
-
 // timeline draws the request phases as proportional bars.
 func timeline(t *runner.TimingInfo, durationMs int64, width int) string {
 	if t == nil {
-		return dimStyle.Render(fmt.Sprintf("Total %d ms (no phase breakdown available)", durationMs))
+		return dimStyle.Render(config.T("response.timing.no_phases", "ms", strconv.FormatInt(durationMs, 10)))
 	}
 	type phase struct {
 		name  string
@@ -740,11 +737,11 @@ func timeline(t *runner.TimingInfo, durationMs int64, width int) string {
 	}
 	transfer := t.TotalMs - t.DNSMs - t.ConnectMs - t.TLSMs - t.TTFBMs
 	phases := []phase{
-		{"DNS lookup", t.DNSMs, config.Teal},
-		{"TCP connect", t.ConnectMs, config.Blue},
-		{"TLS handshake", t.TLSMs, config.Mauve},
-		{"Waiting (TTFB)", t.TTFBMs, config.Peach},
-		{"Download", max(0, transfer), config.Green},
+		{config.T("response.timing.dns"), t.DNSMs, config.Teal},
+		{config.T("response.timing.connect"), t.ConnectMs, config.Blue},
+		{config.T("response.timing.tls"), t.TLSMs, config.Mauve},
+		{config.T("response.timing.ttfb"), t.TTFBMs, config.Peach},
+		{config.T("response.timing.download"), max(0, transfer), config.Green},
 	}
 	barWidth := max(10, width-34)
 	var b strings.Builder
@@ -760,9 +757,9 @@ func timeline(t *runner.TimingInfo, durationMs int64, width int) string {
 		fmt.Fprintf(&b, "%-15s %9.2f ms  %s\n", p.name, p.ms, bar)
 		offset += p.ms
 	}
-	fmt.Fprintf(&b, "%-15s %9.2f ms\n", "Total", t.TotalMs)
+	fmt.Fprintf(&b, "%-15s %9.2f ms\n", config.T("response.timing.total"), t.TotalMs)
 	if t.Reused {
-		b.WriteString("\n" + dimStyle.Render("Reused a keep-alive connection: no DNS, connect or TLS phase."))
+		b.WriteString("\n" + dimStyle.Render(config.T("response.timing.reused")))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

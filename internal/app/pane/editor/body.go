@@ -76,11 +76,54 @@ func (b *body) SetType(t model.MimeType) {
 	}
 }
 
+// SetValue sets the content; form rows switched off are kept.
 func (b *body) SetValue(s string) {
 	b.editor.SetValue(s)
 	if b.form {
-		b.grid.setRows(formRows(s))
+		b.grid.setRows(append(formRows(s), b.disabledRows()...))
 	}
+}
+
+func (b *body) disabledRows() []paramField {
+	var out []paramField
+	for _, r := range b.grid.rows {
+		if !r.enabled && r.name.Value() != "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// SetDisabled replaces the switched-off form fields.
+func (b *body) SetDisabled(fields map[string]string) {
+	if !b.form {
+		return
+	}
+	var rows []paramField
+	for _, r := range b.grid.rows {
+		if r.enabled && (r.name.Value() != "" || len(fields) == 0) {
+			rows = append(rows, r)
+		}
+	}
+	names := make([]string, 0, len(fields))
+	for k := range fields {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		r := createParamWith(k, fields[k])
+		r.enabled = false
+		rows = append(rows, r)
+	}
+	b.grid.setRows(rows)
+}
+
+// Disabled are the switched-off form fields (nil when none or not a form).
+func (b *body) Disabled() map[string]string {
+	if !b.form {
+		return nil
+	}
+	return b.grid.disabledMap()
 }
 
 func (b *body) Value() string {
@@ -188,7 +231,7 @@ func formJSON(rows []paramField) string {
 	values := map[string][]string{}
 	for _, r := range rows {
 		k := strings.TrimSpace(r.name.Value())
-		if k == "" {
+		if k == "" || !r.enabled {
 			continue
 		}
 		if _, seen := values[k]; !seen {
@@ -251,7 +294,7 @@ func (b body) formView() string {
 	if b.active {
 		focus = b.focusPos
 	}
-	return lipgloss.JoinVertical(lipgloss.Top, titleStyle.Width(b.width).Render("Form fields"), b.grid.view(focus))
+	return lipgloss.JoinVertical(lipgloss.Top, section(config.T("editor.body.form_title"), config.T("editor.body.form_hint", "add", config.DefaultKeyMap.AddHeader.Help().Key)+" · "+gridHint(), b.width), b.grid.view(focus))
 }
 
 func (b body) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -278,6 +321,12 @@ func (b body) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (b body) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if c, ok := msg.(tea.MouseClickMsg); ok {
+		if cell := b.grid.click(c); cell >= 0 {
+			b.focusPos = cell
+		}
+		return &b, nil
+	}
 	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return &b, nil
@@ -289,6 +338,8 @@ func (b body) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(k, config.DefaultKeyMap.AddHeader):
 		b.focusPos = b.grid.add()
+	case key.Matches(k, config.DefaultKeyMap.Toggle):
+		b.grid.toggle(b.focusPos)
 	case key.Matches(k, config.DefaultKeyMap.Next):
 		b.focusPos = (b.focusPos + 1) % total
 	case key.Matches(k, config.DefaultKeyMap.Prev):

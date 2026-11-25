@@ -1,0 +1,152 @@
+# Texts of the TUI's tabs (request editor and response view).
+#
+# This file is embedded in the binary at build time (go:embed): edit it and
+# rebuild to change the defaults. At run time, LAZYAPI_MESSAGES=<file.yml>
+# overrides any subset of these keys (same layout).
+#
+# {name} placeholders are filled in by the code — usually key bindings, so a
+# text stays right when a key changes. Keep the placeholders a text uses.
+
+editor:
+  tabs:
+    docs: Docs
+    params: Params
+    auth: Auth
+    headers: Headers
+    body: Body
+    tests: Tests
+  no_response: "No response yet · {send} sends from any field"
+
+  docs:
+    summary: One-line summary
+    description: Longer description (Markdown)
+
+  grid:
+    name: Name
+    value: Value
+    # Shown under each list title.
+    hint: "{toggle} on/off (☐ kept, not sent)"
+
+  params:
+    query: Query parameters
+    query_hint: "{add} adds a query parameter"
+    path: Path parameters
+    path_hint: "{add} adds a path parameter · {id} in the URI needs one"
+
+  headers:
+    title: Headers
+    hint: "{add} adds a header"
+
+  body:
+    form_title: Form fields
+    form_hint: "{add} adds a field · file parts are sent from the CLI (--file)"
+
+  auth:
+    empty: |-
+      No authentication for this request.
+      {add} adds a scheme: reuse one the spec defines, or create Basic, Bearer,
+      API key, OAuth2 or OpenID Connect.
+    new_scheme: "+ new scheme"
+    unnamed: new scheme
+    switch_on: "☑ on"
+    switch_off: "☐ off"
+    off: "not sent · {toggle} turns it on"
+    login: "🔑 Login"
+    labels:
+      scheme: Scheme
+      name: Name
+      type: Type
+      username: Username
+      password: Password
+      token: Token
+      key_name: Key name
+      key_in: In
+      key_value: Value
+      issuer: Issuer URL
+      grant: Grant
+      client_id: Client ID
+      client_secret: Client secret
+      auth_url: Authorization URL
+      token_url: Token URL
+      scopes: Scopes
+      redirect: Redirect URI
+    placeholders:
+      name: "e.g. keycloak (generated when empty)"
+      username: Username
+      password: Password
+      token: "Token, e.g. {{env.API_TOKEN}}"
+      key_name: X-API-Key
+      key_value: "Value, e.g. {{env.API_KEY}}"
+      issuer: https://sso.example.com/realms/acme
+      client_id: Client ID
+      client_secret: Empty for public clients
+      auth_url: Discovered from the issuer when empty
+      token_url: Discovered from the issuer when empty
+      scopes: openid profile
+    session:
+      no_client: "No client ID: set it here or in the environment's auth"
+      not_logged_in: "Not logged in · {login} or Login"
+      on_send: A token is requested when sending
+      logged_in: "✓ Logged in · {expires}"
+      refreshes: "✓ Session expired: it is refreshed on the next send"
+      expired: "Session expired · {login} or Login"
+
+  tests:
+    placeholder: Test script (JavaScript or TypeScript)
+    idle: "{run} runs the script (sending the request first when there is no response yet)"
+    script_error: "Script error:"
+    no_tests: "No tests ran. Add one:"
+    example: 'test("status is 200", () => expect(response.status).toBe(200))'
+    pass: PASS
+    fail: FAIL
+    summary: "{passed} passed, {failed} failed"
+    console: "Console:"
+
+response:
+  tabs:
+    body: Body
+    headers: Headers
+    cookies: Cookies
+    timeline: Timeline
+    checks: Checks
+    console: Console
+  sending: "Sending…  {cancel} cancels"
+  search_placeholder: search the response
+  switch_hint: "[ ] switch tabs"
+  raw: " (raw)"
+  empty_body: (empty body)
+  jq_empty: (the filter returned nothing)
+  jq_status: "jq {filter} — f edits · f then an empty enter clears"
+  jq_error: "error · "
+  search_status: "/{query} — {matches} · n/N next/previous · / then an empty enter clears"
+  matches:
+    one: "{n} match"
+    other: "{n} matches"
+  checks_passed:
+    one: "✓ {n} check"
+    other: "✓ {n} checks"
+  checks_failed: "✗ {failed}/{n} checks failed"
+  attempts: "{n} attempts"
+  steps:
+    one: "{n} step"
+    other: "{n} steps"
+  request: Request
+  response: Response
+  no_cookies: The response set no cookies.
+  no_checks: |-
+    No checks: the request is not linked to an operation that declares its
+    responses, and it has no test script. Add one in the Tests tab.
+  no_script: "No saved test script: write one in the Tests tab ({run} runs it)."
+  no_console: "No console output: console.log() in a test script shows up here."
+  not_sent: "Not sent: {reason}"
+  nothing: "Nothing came back. Check the server URL, the path parameters and the network."
+  flow_empty: The flow sent no requests.
+  timing:
+    no_phases: "Total {ms} ms (no phase breakdown available)"
+    dns: DNS lookup
+    connect: TCP connect
+    tls: TLS handshake
+    ttfb: Waiting (TTFB)
+    download: Download
+    total: Total
+    reused: "Reused a keep-alive connection: no DNS, connect or TLS phase."

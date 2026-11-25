@@ -29,8 +29,8 @@ type documentation struct {
 
 func DocumentationTab() *documentation {
 	return &documentation{
-		Summary:     components.InitField("Summary", ""),
-		Description: components.NewCodeEditor(components.LangMarkdown, "Longer description (Markdown)", ""),
+		Summary:     components.InitField(config.T("editor.docs.summary"), ""),
+		Description: components.NewCodeEditor(components.LangMarkdown, config.T("editor.docs.description"), ""),
 	}
 }
 
@@ -70,7 +70,7 @@ func (d documentation) View() tea.View {
 	}
 
 	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top,
-		d.Summary.View().Content,
+		components.Z.Mark(summaryZone, d.Summary.View().Content),
 		d.Description.View().Content,
 	))
 }
@@ -82,6 +82,8 @@ func (d documentation) HelpBindings() []key.Binding {
 		config.DefaultKeyMap.Back,
 	}
 }
+
+const summaryZone = "editor:docs-summary"
 
 func (d documentation) Init() tea.Cmd {
 	return nil
@@ -110,6 +112,17 @@ func (d documentation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tabs.SetActiveTabMsg:
 		d.active = msg.Active
 		return &d, nil
+
+	case tea.MouseClickMsg:
+		if z := components.Z.Get(summaryZone); z.InBounds(msg) {
+			d.fieldCursor = int(summary)
+			x, _ := z.Pos(msg)
+			d.Summary.ClickAt(x)
+			return &d, nil
+		}
+		if d.Description.Zone().InBounds(msg) {
+			d.fieldCursor = int(description)
+		}
 	}
 
 	var (

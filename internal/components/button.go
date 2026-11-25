@@ -26,8 +26,20 @@ type Button struct {
 	Clicked bool
 
 	// Style adds to the base style (e.g. a width).
-	Style  lipgloss.Style
+	Style lipgloss.Style
+	// ID names the mouse zone (default: the label).
+	ID     string
 	zoneID string
+}
+
+func (b Button) zone() string {
+	if b.zoneID != "" {
+		return b.zoneID
+	}
+	if b.ID != "" {
+		return "btn-" + b.ID
+	}
+	return "btn-" + b.Label
 }
 
 var buttonBase = lipgloss.NewStyle().
@@ -65,15 +77,15 @@ func (b Button) style() lipgloss.Style {
 	return st
 }
 
+// Zone is where the button was drawn.
+func (b Button) Zone() Zone { return Z.Get(b.zone()) }
+
 func (b Button) View() tea.View {
 	label := b.Label
 	if b.Busy && b.BusyLabel != "" {
 		label = b.BusyLabel
 	}
-	if b.zoneID == "" {
-		b.zoneID = "btn-" + b.Label
-	}
-	return tea.NewView(Z.Mark(b.zoneID, b.style().Render(label)))
+	return tea.NewView(Z.Mark(b.zone(), b.style().Render(label)))
 }
 
 func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -92,10 +104,7 @@ func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseLeft || !b.Active || b.Busy {
 			break
 		}
-		if b.zoneID == "" {
-			b.zoneID = "btn-" + b.Label
-		}
-		if Z.Get(b.zoneID).InBounds(msg) {
+		if b.Zone().InBounds(msg) {
 			b.Clicked = true
 			return b, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
 				return ButtonClickedMsg{}

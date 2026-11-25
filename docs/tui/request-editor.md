@@ -17,6 +17,18 @@ Opening an operation pre-fills path parameters, required query/header parameters
 
 When the spec declares a request body schema but no example, the editor builds one from the schema (examples, defaults, enums, formats and minimums of each property) so you start from a valid shape. `lazyapi run` never invents bodies: this only fills the editor.
 
+## Mouse and selects
+
+Everything can be clicked: the method and server selects, the URI (places the cursor), **Send**, the tab labels, fields inside a tab (focuses them), the code editors (click places the cursor, drag selects, shift+click extends) and the response. The mouse wheel scrolls the tab under the pointer, an open list, or the response. In the request list, a click selects and a double click opens.
+
+Selects show `▾`. `enter`/`space` or a click opens the list; `↑`/`↓`, `home`/`end`, `pgup`/`pgdown`, the wheel or typing the first letters (`p` → POST, `p` again → PATCH) move; `enter`, `tab` or a click picks; `esc` or a click outside cancels. Closed, `↑`/`↓` change the value directly.
+
+## Switching rows on and off
+
+Every header, query parameter, path parameter and form field has a checkbox (☑ on, ☐ off), and every auth scheme an **on/off** switch on its first line. `ctrl+t` on the focused row (or a click on the box) toggles it. A row that is off keeps its name and value but is not sent; auth schemes that are off are not applied.
+
+The state is saved with the request's draft in `.lazyapi/.local/drafts/` (under `disabled:`, and `disabled: true` on auth schemes), so it survives restarts and is used by `s` in the list. Saving to the spec (`ctrl+o`) keeps the parameter and scheme definitions of rows that are off; `lazyapi run` reads the spec and is not affected.
+
 ## Templates
 
 `{{env.NAME}}` and `{{var.NAME}}` work in every field and editor, and are colored as you type: teal when the active environment has a value, **red underlined** when it does not.
@@ -39,14 +51,17 @@ Two sub-sections:
 - **Query parameters** — key/value pairs sent as URL query string. Add with `n` + `q`.
 - **Path parameters** — key/value pairs that replace `{param}` placeholders in the URI. Add with `n` + `p`.
 
-### Authorize
+### Auth
 
-Configure authentication schemes extracted from the spec. Add a scheme with `n` + `a`, remove with `x` + `a`. Supports:
+Authentication schemes of the request. `ctrl+r` adds one, `⌫`/`del` on its **Scheme** select removes it. **Scheme** reuses a scheme the spec already defines (so several requests share one definition) or creates a new one. Supports:
 
 - **Basic** — Username + Password
 - **Bearer** — Token
-- **API Key** — Key Name + Key Value + In (header/query)
-- **OAuth2** — Client ID + Client Secret + Token URL
+- **API Key** — Key name + In (header/query/cookie) + Value
+- **OAuth2** — Grant, Client ID/secret, Authorization/Token URL, Scopes
+- **OpenID Connect** — Issuer URL (endpoints discovered from `.well-known/openid-configuration`), Grant, Client ID/secret, Scopes
+
+OAuth schemes have a **Login** button (`ctrl+l`) and show the stored session. Sending without a session logs in first. See [Authentication](/authentication).
 
 ### Header
 

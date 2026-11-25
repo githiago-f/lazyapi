@@ -69,7 +69,7 @@ func start(t *testing.T, spec string) *teatest.TestModel {
 	// Drafts and unsaved edits live under os.TempDir(): keep them in the test dir.
 	t.Setenv("TMPDIR", t.TempDir())
 	config.DefaultConfig.Active = config.RequestList
-	components.Z.NewGlobal()
+	components.Z.Clear()
 	tm := teatest.NewTestModel(t, NewTui(spec, ""), teatest.WithInitialTermSize(140, 40))
 	t.Cleanup(func() {
 		_ = tm.Quit()

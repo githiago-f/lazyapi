@@ -333,3 +333,22 @@ func TestCodeEditorScriptDiagnostics(t *testing.T) {
 		t.Errorf("signature:\n%s", out)
 	}
 }
+
+func TestCodeEditorMouse(t *testing.T) {
+	Z.Clear()
+	c := NewCodeEditor(LangText, "", "first line\nsecond line\nthird")
+	c.SetSize(40, 8)
+	Z.Scan(c.View().Content)
+	z := Z.Get(c.zone)
+	gw := c.gutterWidth()
+	// Click on "second" (row 1, col 3), then drag to row 2 col 2.
+	c, _ = c.Update(tea.MouseClickMsg{X: z.StartX + 1 + gw + 3, Y: z.StartY + 2, Button: tea.MouseLeft})
+	if c.row != 1 || c.col != 3 {
+		t.Fatalf("click: %d,%d", c.row, c.col)
+	}
+	c, _ = c.Update(tea.MouseMotionMsg{X: z.StartX + 1 + gw + 2, Y: z.StartY + 3, Button: tea.MouseLeft})
+	c, _ = c.Update(tea.MouseReleaseMsg{X: z.StartX + 1 + gw + 2, Y: z.StartY + 3, Button: tea.MouseLeft})
+	if !c.HasSelection() || c.row != 2 || c.col != 2 {
+		t.Errorf("drag selects: %d,%d sel=%v", c.row, c.col, c.HasSelection())
+	}
+}

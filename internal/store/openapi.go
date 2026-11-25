@@ -12,6 +12,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/oauth"
 	"gopkg.in/yaml.v3"
 )
 
@@ -304,15 +305,22 @@ func syncParameters(op *openapi3.Operation, data model.Request) {
 		}
 		sort.Strings(keys)
 		for _, name := range keys {
+			if want[in+":"+name] {
+				continue
+			}
 			want[in+":"+name] = true
 			if op.Parameters.GetByInAndName(in, name) == nil {
 				added = append(added, makeParamRef(name, in, required))
 			}
 		}
 	}
+	// Switched-off rows keep their definitions.
 	add("path", data.Params, true)
+	add("path", data.Disabled.Params, true)
 	add("query", data.Query, false)
+	add("query", data.Disabled.Query, false)
 	add("header", data.Headers, false)
+	add("header", data.Disabled.Headers, false)
 
 	kept := make(openapi3.Parameters, 0, len(op.Parameters)+len(added))
 	for _, p := range op.Parameters {
@@ -498,7 +506,8 @@ func applyAuthSchemes(spec *openapi3.T, ref model.OpenAPIRef, schemes []model.Au
 				scopeMap[sc] = ""
 			}
 
-			switch s.GrantType {
+			grant := oauth.NormalizeGrant(s.GrantType)
+			switch grant {
 			case "clientCredentials":
 				flows.ClientCredentials = &openapi3.OAuthFlow{
 					TokenURL: s.TokenURL,
@@ -522,17 +531,22 @@ func applyAuthSchemes(spec *openapi3.T, ref model.OpenAPIRef, schemes []model.Au
 				}
 			}
 
-			spec.Components.SecuritySchemes[name] = &openapi3.SecuritySchemeRef{
-				Value: &openapi3.SecurityScheme{
-					Type:  "oauth2",
-					Flows: flows,
-				},
+			ss := &openapi3.SecurityScheme{Type: "oauth2", Flows: flows}
+			if grant == oauth.GrantDeviceCode { // OpenAPI 3.0 has no device flow
+				ss.Extensions = map[string]any{grantExtension: grant}
 			}
+			spec.Components.SecuritySchemes[name] = &openapi3.SecuritySchemeRef{Value: ss}
+		case model.AuthOpenIDConnect:
+			ss := &openapi3.SecurityScheme{Type: "openIdConnect", OpenIdConnectUrl: s.Issuer}
+			if g := oauth.NormalizeGrant(s.GrantType); g != "" && g != oauth.GrantAuthorizationCode {
+				ss.Extensions = map[string]any{grantExtension: g}
+			}
+			spec.Components.SecuritySchemes[name] = &openapi3.SecuritySchemeRef{Value: ss}
 		}
 
 		req := openapi3.NewSecurityRequirement()
 		var reqScopes []string
-		if s.Type == model.AuthOAuth2 {
+		if s.Type.IsOAuth() {
 			reqScopes = strings.Fields(s.Scopes)
 		}
 		req.Authenticate(name, reqScopes...)
@@ -566,6 +580,17 @@ func applyAuthSchemes(spec *openapi3.T, ref model.OpenAPIRef, schemes []model.Au
 	return nil
 }
 
+// grantExtension records a grant OpenAPI cannot express (deviceCode, or the
+// grant of an openIdConnect scheme).
+const grantExtension = "x-lazyapi-grant"
+
+func extensionGrant(ss *openapi3.SecurityScheme) string {
+	if g, ok := ss.Extensions[grantExtension].(string); ok {
+		return oauth.NormalizeGrant(g)
+	}
+	return ""
+}
+
 func generateSchemeName(spec *openapi3.T) string {
 	for i := 0; ; i++ {
 		name := fmt.Sprintf("lazyapi_auth_%d", i)
@@ -573,6 +598,44 @@ func generateSchemeName(spec *openapi3.T) string {
 			return name
 		}
 	}
+}
+
+// SecuritySchemes lists every scheme in components.securitySchemes, sorted
+// by name (what requests can reuse). OAuth scopes are those of the flow plus
+// every scope the spec's security requirements ask for.
+func SecuritySchemes(spec *openapi3.T) []model.AuthScheme {
+	if spec == nil || spec.Components == nil {
+		return nil
+	}
+	scopes := map[string][]string{}
+	add := func(reqs openapi3.SecurityRequirements) {
+		for _, r := range reqs {
+			for name, sc := range r {
+				for _, s := range sc {
+					if !slices.Contains(scopes[name], s) {
+						scopes[name] = append(scopes[name], s)
+					}
+				}
+			}
+		}
+	}
+	add(spec.Security)
+	if spec.Paths != nil {
+		for _, item := range spec.Paths.Map() {
+			for _, op := range item.Operations() {
+				if op.Security != nil {
+					add(*op.Security)
+				}
+			}
+		}
+	}
+	req := openapi3.NewSecurityRequirement()
+	for name := range spec.Components.SecuritySchemes {
+		req[name] = scopes[name]
+	}
+	out := extractSecurityFromSpec(spec.Components.SecuritySchemes, req)
+	sort.Slice(out, func(i, j int) bool { return out[i].SchemeName < out[j].SchemeName })
+	return out
 }
 
 func ExtractGlobalSecurity(spec *openapi3.T) []model.AuthScheme {
@@ -643,6 +706,16 @@ func extractSecurityFromSpec(schemeMap openapi3.SecuritySchemes, secReq openapi3
 					as.TokenURL = ss.Flows.Password.TokenURL
 					as.Scopes = scopeKeysJoin(ss.Flows.Password.Scopes, " ")
 				}
+			}
+			if g := extensionGrant(ss); g != "" {
+				as.GrantType = g
+			}
+		case "openIdConnect":
+			as.Type = model.AuthOpenIDConnect
+			as.Issuer = ss.OpenIdConnectUrl
+			as.GrantType = oauth.GrantAuthorizationCode
+			if g := extensionGrant(ss); g != "" {
+				as.GrantType = g
 			}
 		}
 

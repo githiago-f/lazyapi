@@ -58,6 +58,8 @@ type Tui struct {
 
 	// cancelSend aborts the request in flight (nil when idle).
 	cancelSend context.CancelFunc
+	// cancelLogin aborts the OAuth login in progress (nil when idle).
+	cancelLogin context.CancelFunc
 	// confirm holds a destructive request waiting for y/n.
 	confirm *responses.SendMsg
 	// confirmRun is a run with writes waiting for y/N.
@@ -249,6 +251,7 @@ func (t Tui) View() tea.View {
 		}
 
 	case config.RequestEditor:
+		t.editor.SetSessions(func(spec string, s model.AuthScheme) string { return t.sessionStatus(spec, s) })
 		currentView = t.editor.View().Content
 
 	case config.Runner:
@@ -317,7 +320,7 @@ func (t Tui) View() tea.View {
 	return tea.View{
 		Content:   scanned,
 		AltScreen: true,
-		MouseMode: tea.MouseModeCellMotion,
+		MouseMode: tea.MouseModeAllMotion, // motion without a button: hover
 	}
 }
 
@@ -352,6 +355,14 @@ func (t Tui) contentSize() (int, int) {
 }
 
 func (t Tui) Init() tea.Cmd {
+	cmd := t.init()
+	if err := config.MessagesErr; err != nil {
+		return tea.Batch(cmd, notify("Texts: "+err.Error()+" (using the built-in ones)", components.Error))
+	}
+	return cmd
+}
+
+func (t Tui) init() tea.Cmd {
 	if t.defaultFile != "" {
 		if !store.IsOpenAPIFile(t.defaultFile) {
 			return tea.Batch(
@@ -514,6 +525,10 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		subModel tea.Model
 		cmd      tea.Cmd
 	)
+
+	if lt, lcmd, ok := t.updateLogin(msg); ok {
+		return lt, lcmd
+	}
 
 	// A destructive request waits for confirmation: y sends, anything else cancels.
 	if t.confirm != nil {
@@ -734,6 +749,18 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case responses.ResultMsg:
 		t.cancelSend = nil
+		if need := msg.Login; need != nil && !need.Send.AfterLogin {
+			// No session yet: log in (browser / device code), then resend.
+			retry := need.Send
+			switch msg.Source {
+			case responses.FromEditor:
+				rp := t.editor.SetResult(msg)
+				t.editor = &rp
+			case responses.FromPreview:
+				t.previewResp.SetResult(msg.Result)
+			}
+			return t.startLogin(loginMsg{spec: msg.Request.FileName, scheme: need.Scheme, retry: &retry})
+		}
 		cmd = t.recordHistory(msg)
 		switch msg.Source {
 		case responses.FromEditor:

@@ -131,9 +131,11 @@ func New(request *model.Request) *RequestPane {
 			Cursor: 0,
 			Labels: methodLabels(),
 			Width:  13,
+			ID:     "editor-method",
 		},
 		Server: components.Selector{
 			Width: 45,
+			ID:    "editor-server",
 		},
 		Send: components.Button{
 			Label:     "▶ Send",
@@ -142,15 +144,15 @@ func New(request *model.Request) *RequestPane {
 		},
 
 		RequestTabs: tabs.New(
-			tabs.NewTab("Docs", docs),
-			tabs.NewTab("Params", scrollable.New(params)),
-			tabs.NewTab("Auth", scrollable.New(authorize)),
-			tabs.NewTab("Headers", scrollable.New(header)),
-			tabs.NewTab("Body", body),
-			tabs.NewTab("Tests", scrollable.New(tests)),
+			tabs.NewTab(config.T("editor.tabs.docs"), docs),
+			tabs.NewTab(config.T("editor.tabs.params"), scrollable.New(params)),
+			tabs.NewTab(config.T("editor.tabs.auth"), scrollable.New(authorize)),
+			tabs.NewTab(config.T("editor.tabs.headers"), scrollable.New(header)),
+			tabs.NewTab(config.T("editor.tabs.body"), body),
+			tabs.NewTab(config.T("editor.tabs.tests"), scrollable.New(tests)),
 		),
 
-		Response:  responses.New("No response yet · alt+enter sends from any field"),
+		Response:  responses.New(config.T("editor.no_response", "send", "alt+enter")),
 		respStyle: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(config.Surface2)),
 	}
 }
@@ -188,7 +190,7 @@ func (rp RequestPane) View() tea.View {
 		lipgloss.Left,
 		rp.Method.View().Content,
 		rp.Server.View().Content,
-		rp.URI.View().Content,
+		components.Z.Mark(uriZone, rp.URI.View().Content),
 		rp.Send.View().Content,
 	)
 
@@ -197,8 +199,8 @@ func (rp RequestPane) View() tea.View {
 		requestURL,
 		lipgloss.JoinHorizontal(
 			lipgloss.Left,
-			rp.RequestTabs.View().Content,
-			respStyle.Render(rp.Response.View()),
+			components.Z.Mark(tabsZone, rp.RequestTabs.View().Content),
+			components.Z.Mark(responseZone, respStyle.Render(rp.Response.View())),
 		),
 	)
 
@@ -211,13 +213,13 @@ func (rp RequestPane) View() tea.View {
 	if field(rp.fieldsCursor) == method && rp.Method.Open {
 		dd := rp.Method.DropDownView()
 		if dd != "" {
-			return tea.NewView(overlay.Composite(dd, fullView, overlay.Left, overlay.Top, 0, 1))
+			return tea.NewView(overlay.Composite(dd, fullView, overlay.Left, overlay.Top, 0, 3))
 		}
 	} else if field(rp.fieldsCursor) == serverField && rp.Server.Open {
 		dd := rp.Server.DropDownView()
 		if dd != "" {
 			methodWidth, _ := lipgloss.Size(rp.Method.View().Content)
-			return tea.NewView(overlay.Composite(dd, fullView, overlay.Left, overlay.Top, methodWidth, 1))
+			return tea.NewView(overlay.Composite(dd, fullView, overlay.Left, overlay.Top, methodWidth, 3))
 		}
 	}
 
@@ -229,6 +231,15 @@ func (rp *RequestPane) SetEnvStore(s *env.Store) {
 
 	tp := rp.testsPane()
 	tp.SetEnvStore(s)
+}
+
+func (rp RequestPane) authTab() *auth {
+	return rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
+}
+
+// SetSessions sets how the Auth tab describes a scheme's OAuth session.
+func (rp RequestPane) SetSessions(f func(spec string, s model.AuthScheme) string) {
+	rp.authTab().Sessions = f
 }
 
 func (rp RequestPane) testsPane() *testsPane {
@@ -258,14 +269,22 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	bd := rp.RequestTabs.Tabs[Body].Content.(*body)
 	bd.SetType(formData.Body.Type)
 	bd.SetValue(formData.Body.Raw)
+	bd.SetDisabled(formData.Disabled.Form)
 
 	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
-	hd.SetValue(formData.Headers)
+	hd.SetValue(formData.Headers, formData.Disabled.Headers)
 
 	pr := rp.RequestTabs.Tabs[Params].Content.(scrollable.Model).Content.(*params)
-	pr.SetValue(formData.Query, formData.Params)
+	pr.SetValue(formData.Query, formData.Params, formData.Disabled)
 
-	au := rp.RequestTabs.Tabs[Authorize].Content.(scrollable.Model).Content.(*auth)
+	au := rp.authTab()
+	var known []model.AuthScheme
+	if formData.FileName != "" {
+		if spec, err := store.ParseSpec(formData.FileName); err == nil {
+			known = store.SecuritySchemes(spec)
+		}
+	}
+	au.SetSpec(formData.FileName, known)
 	au.SetValue(formData.Auth)
 
 	tp := rp.testsPane()
@@ -280,7 +299,7 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 
 func (rp *RequestPane) Reset() {
 	rp.Method.Cursor = 0
-	rp.Server = components.Selector{Width: 45}
+	rp.Server = components.Selector{Width: 45, ID: "editor-server"}
 	rp.fieldsCursor = 0
 	rp.URI.TextInput.SetValue("")
 	rp.openAPIRef = nil
@@ -324,8 +343,14 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 		Headers: hd.Value(),
 		Params:  pr.ParamsValue(),
 		Query:   pr.QueryValue(),
-		Tests:   tp.Value(),
-		Env:     envMap,
+		Disabled: model.Disabled{
+			Headers: hd.Disabled(),
+			Query:   pr.DisabledQuery(),
+			Params:  pr.DisabledParams(),
+			Form:    bd.Disabled(),
+		},
+		Tests: tp.Value(),
+		Env:   envMap,
 	}
 }
 
@@ -409,7 +434,8 @@ func (rp RequestPane) CurrentRef() *model.OpenAPIRef {
 // CapturesKeys reports whether a text input in the editor must receive
 // every key (so global shortcuts like "q" or "?" are not triggered).
 func (rp RequestPane) CapturesKeys() bool {
-	return rp.Response.Searching() || field(rp.fieldsCursor) == uri || rp.shouldBlockTabCommands()
+	return rp.Response.Searching() || field(rp.fieldsCursor) == uri || rp.shouldBlockTabCommands() ||
+		rp.Method.Open || rp.Server.Open
 }
 
 func (rp RequestPane) shouldBlockTabCommands() bool {
@@ -526,6 +552,17 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		rp.dirty = true
 		return rp.autosave(nil)
+	case tea.MouseClickMsg:
+		return rp.click(msg)
+	case tea.MouseWheelMsg:
+		return rp.wheel(msg)
+	case tea.MouseMotionMsg, tea.MouseReleaseMsg:
+		// drags belong to the focused tab content (code editors select)
+		if field(rp.fieldsCursor) == reqTabs && rp.BlockTab {
+			model, cmd = rp.RequestTabs.Update(msg)
+			rp.RequestTabs, _ = model.(tabs.Model)
+		}
+		return rp, cmd
 	case tea.KeyPressMsg:
 		if key.Matches(msg, config.DefaultKeyMap.OpenEditor) && rp.editableTab() {
 			return rp, rp.openExternalEditor()
@@ -662,6 +699,104 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return rp.autosave(cmd)
+}
+
+// Mouse zones of the editor's areas.
+const (
+	uriZone      = "editor:uri"
+	tabsZone     = "editor:tabs"
+	responseZone = "editor:response"
+)
+
+// focusField moves the focus to f, blurring the tab content when leaving it.
+func (rp *RequestPane) focusField(f field) tea.Cmd {
+	var cmd tea.Cmd
+	if f != reqTabs && rp.BlockTab {
+		rp.RequestTabs, cmd = rp.RequestTabs.Deselect()
+		rp.BlockTab = false
+	}
+	rp.Method.Open = rp.Method.Open && f == method
+	rp.Server.Open = rp.Server.Open && f == serverField
+	rp.fieldsCursor = int(f)
+	if f == response {
+		rp.Response.Focus()
+	} else {
+		rp.Response.Blur()
+	}
+	return cmd
+}
+
+// click focuses what is under the mouse: a select opens (or picks from its
+// open list), the URI places its cursor, Send sends, a tab label switches
+// tabs and a click inside a tab focuses the field under it.
+func (rp RequestPane) click(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
+	if msg.Button != tea.MouseLeft {
+		return rp, nil
+	}
+	for _, s := range []*components.Selector{&rp.Method, &rp.Server} {
+		if s.Open {
+			m, _ := s.Update(msg)
+			*s = m.(components.Selector)
+			rp.dirty = true
+			return rp.autosave(nil)
+		}
+	}
+	var cmd tea.Cmd
+	switch {
+	case rp.Method.Zone().InBounds(msg):
+		cmd = rp.focusField(method)
+		m, _ := rp.Method.Update(msg)
+		rp.Method = m.(components.Selector)
+	case rp.Server.Zone().InBounds(msg):
+		cmd = rp.focusField(serverField)
+		m, _ := rp.Server.Update(msg)
+		rp.Server = m.(components.Selector)
+	case components.Z.Get(uriZone).InBounds(msg):
+		cmd = rp.focusField(uri)
+		x, _ := components.Z.Get(uriZone).Pos(msg)
+		rp.URI.ClickAt(x)
+	case rp.Send.Zone().InBounds(msg):
+		cmd = rp.focusField(send)
+		if !rp.Response.Sending() {
+			cmd = tea.Batch(cmd, rp.sendCmd())
+		}
+	case components.Z.Get(tabsZone).InBounds(msg):
+		cmd = rp.focusField(reqTabs)
+		m, tcmd := rp.RequestTabs.Update(msg)
+		rp.RequestTabs = m.(tabs.Model)
+		rp.BlockTab = rp.RequestTabs.Selected()
+		cmd = tea.Batch(cmd, tcmd)
+	case components.Z.Get(responseZone).InBounds(msg):
+		cmd = rp.focusField(response)
+		var rcmd tea.Cmd
+		rp.Response, rcmd = rp.Response.Update(msg)
+		cmd = tea.Batch(cmd, rcmd)
+	default:
+		return rp, nil
+	}
+	rp.dirty = true
+	return rp.autosave(cmd)
+}
+
+// wheel scrolls what is under the mouse (an open list first).
+func (rp RequestPane) wheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case rp.Method.Open:
+		m, _ := rp.Method.Update(msg)
+		rp.Method = m.(components.Selector)
+	case rp.Server.Open:
+		m, _ := rp.Server.Update(msg)
+		rp.Server = m.(components.Selector)
+	case components.Z.Get(tabsZone).InBounds(msg):
+		m, cmd := rp.RequestTabs.Update(msg)
+		rp.RequestTabs = m.(tabs.Model)
+		return rp, cmd
+	default:
+		var cmd tea.Cmd
+		rp.Response, cmd = rp.Response.Update(msg)
+		return rp, cmd
+	}
+	return rp, nil
 }
 
 // autosave writes the temp file only when the request content changed.

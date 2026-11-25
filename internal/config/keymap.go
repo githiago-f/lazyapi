@@ -41,6 +41,8 @@ type KeyMap struct {
 	AddHeader     key.Binding
 	AddAuth       key.Binding
 	DelAuth       key.Binding
+	Login         key.Binding
+	Toggle        key.Binding
 
 	RunTests key.Binding
 
@@ -179,8 +181,16 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("ctrl+r", "add auth"),
 	),
 	DelAuth: key.NewBinding(
-		key.WithKeys("bksp", "del"),
-		key.WithHelp("⌫/del", "delete"),
+		key.WithKeys("backspace", "delete"),
+		key.WithHelp("⌫/del", "delete scheme"),
+	),
+	Toggle: key.NewBinding(
+		key.WithKeys("ctrl+t"),
+		key.WithHelp("ctrl+t", "on/off"),
+	),
+	Login: key.NewBinding(
+		key.WithKeys("ctrl+l"),
+		key.WithHelp("ctrl+l", "log in (oauth)"),
 	),
 	RunTests: key.NewBinding(
 		key.WithKeys("f5"),

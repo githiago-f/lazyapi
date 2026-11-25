@@ -9,7 +9,7 @@ import (
 )
 
 func TestButtonStates(t *testing.T) {
-	Z.NewGlobal()
+	Z.Clear()
 	b := Button{Label: "▶ Send", BusyLabel: "◌ Sending", Active: true}
 	idle := b.View().Content
 	if !strings.Contains(ansi.Strip(idle), "  ▶ Send  ") {

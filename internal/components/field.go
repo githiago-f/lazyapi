@@ -159,6 +159,16 @@ func clampOffset(offset, cursor, width, n int) int {
 	return max(0, min(offset, max(0, n+1-width)))
 }
 
+// ClickAt moves the cursor to the column clicked inside the box (0 is the
+// left border) and closes the menu.
+func (f *Field) ClickAt(col int) {
+	value := []rune(f.TextInput.Value())
+	off := clampOffset(f.offset, f.TextInput.Position(), f.width(), len(value))
+	f.TextInput.SetCursor(max(0, min(len(value), off+col-1)))
+	f.offset = off
+	f.menu = nil
+}
+
 // MenuView is the open completion menu ("" when closed); containers place it
 // under the field.
 func (f Field) MenuView(width int) string {

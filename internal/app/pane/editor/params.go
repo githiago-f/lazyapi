@@ -4,8 +4,10 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/githiago-f/lazyapi/internal/components/tabs"
 	"github.com/githiago-f/lazyapi/internal/config"
+	"github.com/githiago-f/lazyapi/internal/model"
 )
 
 // params is the Params tab: query parameters, then path parameters. The
@@ -35,16 +37,40 @@ func ParamsTab() *params {
 	return &params{focusPos: -1, query: newGrid(), params: newGrid()}
 }
 
+// section draws a list title with a hint line under it.
+func section(title, hint string, width int) string {
+	t := titleStyle
+	if width > 0 {
+		t = t.Width(width)
+	}
+	if width > 0 {
+		hint = ansi.Truncate(hint, width, "…")
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, t.Render(title), hintStyle.Render(hint))
+}
+
+// gridHint is the hint shared by the name/value lists.
+func gridHint() string {
+	k := config.DefaultKeyMap
+	return config.T("editor.grid.hint", "toggle", k.Toggle.Help().Key)
+}
+
+var hintStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
+
 var titleStyle = lipgloss.NewStyle().
 	Bold(true).
 	Align(lipgloss.Center).
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderBottom(true)
 
-func (p *params) SetValue(query map[string]string, pathParams map[string]string) {
-	p.query.setMap(query)
-	p.params.setMap(pathParams)
+func (p *params) SetValue(query, pathParams map[string]string, disabled model.Disabled) {
+	p.query.setMaps(query, disabled.Query)
+	p.params.setMaps(pathParams, disabled.Params)
 }
+
+// DisabledQuery and DisabledParams are the switched-off rows.
+func (p *params) DisabledQuery() map[string]string  { return p.query.disabledMap() }
+func (p *params) DisabledParams() map[string]string { return p.params.disabledMap() }
 
 func (p *params) QueryValue() map[string]string { return p.query.toMap() }
 
@@ -65,9 +91,9 @@ func (p params) View() tea.View {
 		}
 	}
 	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top,
-		titleStyle.Width(p.width).Render("Query"),
+		section(config.T("editor.params.query"), config.T("editor.params.query_hint", "add", config.DefaultKeyMap.AddQueryParam.Help().Key)+" · "+gridHint(), p.width),
 		p.query.view(qFocus),
-		titleStyle.Render("Path params"),
+		section(config.T("editor.params.path"), config.T("editor.params.path_hint", "add", config.DefaultKeyMap.AddPathParam.Help().Key), p.width),
 		p.params.view(pFocus),
 	))
 }
@@ -80,6 +106,7 @@ func (p params) HelpBindings() []key.Binding {
 		config.DefaultKeyMap.Prev,
 		config.DefaultKeyMap.AddQueryParam,
 		config.DefaultKeyMap.AddPathParam,
+		config.DefaultKeyMap.Toggle,
 		config.DefaultKeyMap.Back,
 	}
 }
@@ -93,6 +120,16 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tabs.SetActiveTabMsg:
 		p.SetActive(msg.Active)
+
+	case tea.MouseClickMsg:
+		if !p.active {
+			break
+		}
+		if cell := p.query.click(msg); cell >= 0 {
+			p.focusPos = cell
+		} else if cell := p.params.click(msg); cell >= 0 {
+			p.focusPos = p.query.cells() + cell
+		}
 
 	case tea.KeyPressMsg:
 		if !p.active {
@@ -109,6 +146,12 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			p.focusPos = p.query.add()
 		case key.Matches(msg, config.DefaultKeyMap.AddPathParam):
 			p.focusPos = p.query.cells() + p.params.add()
+		case key.Matches(msg, config.DefaultKeyMap.Toggle):
+			if q := p.query.cells(); p.focusPos < q {
+				p.query.toggle(p.focusPos)
+			} else {
+				p.params.toggle(p.focusPos - q)
+			}
 		case key.Matches(msg, config.DefaultKeyMap.Next):
 			p.focusPos = (p.focusPos + 1) % total
 		case key.Matches(msg, config.DefaultKeyMap.Prev):

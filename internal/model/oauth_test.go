@@ -99,3 +99,17 @@ func TestEmptyCredentialsAreNotSent(t *testing.T) {
 		t.Errorf("empty schemes must not override or send empty credentials: %q", body)
 	}
 }
+
+func TestDisabledSchemeIsNotApplied(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(r.Header.Get("Authorization") + "|" + r.Header.Get("X-Key")))
+	}))
+	defer srv.Close()
+	req := &Request{URI: "/", Method: GET, ServerURL: srv.URL, Auth: []AuthScheme{
+		{Type: AuthBearer, Token: "t", Disabled: true},
+		{Type: AuthAPIKey, KeyName: "X-Key", KeyIn: "header", KeyValue: "k"},
+	}}
+	if _, body, _ := req.Send(); body != "|k" {
+		t.Errorf("disabled bearer must not be sent: %q", body)
+	}
+}

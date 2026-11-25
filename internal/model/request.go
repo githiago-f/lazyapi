@@ -35,6 +35,10 @@ type Request struct {
 	Params  map[string]string `yaml:"pathParams"`
 	Query   map[string]string `yaml:"query"`
 
+	// Disabled are rows switched off in the editor: kept with their values
+	// (in the draft files) but never sent.
+	Disabled Disabled `yaml:"disabled,omitempty"`
+
 	Tags  []string     `yaml:"tags,omitempty"`
 	Auth  []AuthScheme `yaml:"auth,omitempty"`
 	Tests string       `yaml:"tests,omitempty"`
@@ -60,6 +64,20 @@ type Request struct {
 
 // DefaultTimeout is applied to requests that do not set Request.Timeout.
 const DefaultTimeout = 30 * time.Second
+
+// Disabled holds switched-off rows by name. Auth schemes are switched off
+// with AuthScheme.Disabled.
+type Disabled struct {
+	Headers map[string]string `yaml:"headers,omitempty"`
+	Query   map[string]string `yaml:"query,omitempty"`
+	Params  map[string]string `yaml:"pathParams,omitempty"`
+	Form    map[string]string `yaml:"form,omitempty"` // form body fields
+}
+
+// IsZero reports whether nothing is switched off (yaml omitempty).
+func (d Disabled) IsZero() bool {
+	return len(d.Headers) == 0 && len(d.Query) == 0 && len(d.Params) == 0 && len(d.Form) == 0
+}
 
 func (r *Request) templateContext() env.Context {
 	return env.Context{Env: r.Env, Vars: r.Vars}
@@ -205,6 +223,9 @@ func (r *Request) HTTPRequest(ctx context.Context) (*http.Request, error) {
 	// Credentials are only applied when they have a value, so an empty scheme
 	// does not clobber an Authorization header set explicitly (or by before()).
 	for _, scheme := range r.Auth {
+		if scheme.Disabled {
+			continue
+		}
 		switch scheme.Type {
 		case AuthBasic:
 			user, pass := env.Resolve(scheme.Username, tctx), env.Resolve(scheme.Password, tctx)
@@ -229,11 +250,11 @@ func (r *Request) HTTPRequest(ctx context.Context) (*http.Request, error) {
 			case "cookie":
 				req.AddCookie(&http.Cookie{Name: scheme.KeyName, Value: keyValue})
 			}
-		case AuthOAuth2:
+		case AuthOAuth2, AuthOpenIDConnect:
 			token := env.Resolve(scheme.AccessToken, tctx)
 			if token == "" {
 				var err error
-				if token, err = oauthToken(ctx, r.client(), scheme, tctx); err != nil {
+				if token, err = oauthToken(ctx, r.client(), scheme, tctx, r.FileName); err != nil {
 					return nil, err
 				}
 			}
