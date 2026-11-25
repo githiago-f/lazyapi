@@ -150,7 +150,7 @@
 <line x1="1173.2" y1="75" x2="1177.4" y2="75" stroke="#45475a" stroke-width="1.2"/><line x1="1177.4" y1="75" x2="1181.6" y2="75" stroke="#45475a" stroke-width="1.2"/>
 <line x1="1181.6" y1="75" x2="1185.8" y2="75" stroke="#45475a" stroke-width="1.2"/><line x1="1185.8" y1="75" x2="1190.0" y2="75" stroke="#45475a" stroke-width="1.2"/>
 <text x="14.0" y="97.5" fill="#fab387" textLength="226.8" lengthAdjust="spacingAndGlyphs" font-weight="700">▶ openapi.yml · all methods</text>
-<text x="257.6" y="97.5" fill="#7f849c" textLength="352.8" lengthAdjust="spacingAndGlyphs">finished in 22ms · R runs again · esc back</text>
+<text x="257.6" y="97.5" fill="#7f849c" textLength="352.8" lengthAdjust="spacingAndGlyphs">finished in 40ms · R runs again · esc back</text>
 <line x1="14.0" y1="111" x2="18.2" y2="111" stroke="#a6e3a1" stroke-width="2.6"/><line x1="18.2" y1="111" x2="22.4" y2="111" stroke="#a6e3a1" stroke-width="2.6"/>
 <line x1="22.4" y1="111" x2="26.6" y2="111" stroke="#a6e3a1" stroke-width="2.6"/><line x1="26.6" y1="111" x2="30.8" y2="111" stroke="#a6e3a1" stroke-width="2.6"/>
 <line x1="30.8" y1="111" x2="35.0" y2="111" stroke="#a6e3a1" stroke-width="2.6"/><line x1="35.0" y1="111" x2="39.2" y2="111" stroke="#a6e3a1" stroke-width="2.6"/>

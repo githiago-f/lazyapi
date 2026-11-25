@@ -295,8 +295,10 @@
 <line x1="1059.8" y1="102" x2="1059.8" y2="111" stroke="#585b70" stroke-width="1.2"/><line x1="1059.8" y1="111" x2="1059.8" y2="120" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1068.2" y1="102" x2="1068.2" y2="111" stroke="#585b70" stroke-width="1.2"/><line x1="1068.2" y1="111" x2="1068.2" y2="120" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1160.6" y1="102" x2="1160.6" y2="111" stroke="#585b70" stroke-width="1.2"/><line x1="1160.6" y1="111" x2="1160.6" y2="120" stroke="#585b70" stroke-width="1.2"/>
-<text x="56.0" y="115.5" fill="#74c7ec" textLength="25.2" lengthAdjust="spacingAndGlyphs" font-weight="700">GET</text>
-<text x="224.0" y="115.5" fill="#a6adc8" textLength="176.4" lengthAdjust="spacingAndGlyphs">http://127.0.0.1:4010</text>
+<text x="47.6" y="115.5" fill="#74c7ec" textLength="25.2" lengthAdjust="spacingAndGlyphs" font-weight="700">GET</text>
+<text x="81.2" y="115.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="700">▾</text>
+<text x="215.6" y="115.5" fill="#a6adc8" textLength="176.4" lengthAdjust="spacingAndGlyphs">http://127.0.0.1:4010</text>
+<text x="400.4" y="115.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">▾</text>
 <text x="509.6" y="115.5" fill="#cdd6f4" textLength="58.8" lengthAdjust="spacingAndGlyphs">/users/</text>
 <text x="568.4" y="115.5" fill="#fab387" textLength="33.6" lengthAdjust="spacingAndGlyphs">{id}</text>
 <text x="1089.2" y="115.5" fill="#a6e3a1" textLength="50.4" lengthAdjust="spacingAndGlyphs" font-weight="700">▶ Send</text>
@@ -659,7 +661,7 @@
 <text x="820.4" y="187.5" fill="#7f849c" textLength="67.2" lengthAdjust="spacingAndGlyphs">Timeline</text>
 <text x="904.4" y="187.5" fill="#7f849c" textLength="67.2" lengthAdjust="spacingAndGlyphs">Checks 6</text>
 <text x="988.4" y="187.5" fill="#7f849c" textLength="58.8" lengthAdjust="spacingAndGlyphs">Console</text>
-<text x="1072.4" y="187.5" fill="#7f849c" textLength="84.0" lengthAdjust="spacingAndGlyphs">[ ] switch</text>
+<text x="1072.4" y="187.5" fill="#7f849c" textLength="109.2" lengthAdjust="spacingAndGlyphs">[ ] switch t…</text>
 <line x1="18.2" y1="192" x2="18.2" y2="201" stroke="#585b70" stroke-width="1.2"/><line x1="18.2" y1="201" x2="18.2" y2="210" stroke="#585b70" stroke-width="1.2"/>
 <path d="M26.599999999999998 210V205.2Q26.599999999999998 201 30.799999999999997 201H30.799999999999997" fill="none" stroke="#585b70" stroke-width="1.2"/>
 <line x1="30.8" y1="201" x2="35.0" y2="201" stroke="#585b70" stroke-width="1.2"/><line x1="35.0" y1="201" x2="39.2" y2="201" stroke="#585b70" stroke-width="1.2"/>

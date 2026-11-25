@@ -325,7 +325,7 @@
 <text x="182.0" y="187.5" fill="#6c7086" textLength="117.6" lengthAdjust="spacingAndGlyphs">Service health</text>
 <text x="442.4" y="187.5" fill="#11111b" textLength="50.4" lengthAdjust="spacingAndGlyphs" font-weight="700">200 OK</text>
 <text x="509.6" y="187.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
-<text x="526.4" y="187.5" fill="#a6adc8" textLength="33.6" lengthAdjust="spacingAndGlyphs">0 ms</text>
+<text x="526.4" y="187.5" fill="#a6adc8" textLength="33.6" lengthAdjust="spacingAndGlyphs">1 ms</text>
 <text x="568.4" y="187.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
 <text x="585.2" y="187.5" fill="#a6adc8" textLength="33.6" lengthAdjust="spacingAndGlyphs">85 B</text>
 <text x="627.2" y="187.5" fill="#7f849c" textLength="8.4" lengthAdjust="spacingAndGlyphs">·</text>
