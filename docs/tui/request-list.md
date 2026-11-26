@@ -76,7 +76,9 @@ Press **`s`** to send the request. The response appears inline:
 
 | Key | Action |
 |-----|--------|
-| `↑`/`k`, `↓`/`j` | Navigate items |
+| `↑`/`k`, `↓`/`j` | Navigate items (the list scrolls with the selection) |
+| `Ctrl+D` / `Ctrl+U` | Next / previous page |
+| `Home`/`g`, `End`/`G` | First / last request |
 | `Enter` | Open selected in editor |
 | `s` | Send selected request (response in preview) |
 | `Ctrl+T` | Edit tags (overlay at cursor position) |
@@ -87,6 +89,8 @@ Press **`s`** to send the request. The response appears inline:
 | `x` | Delete selected request |
 | `q` | Quit |
 | `?` | Show full help |
+
+A list longer than the pane ends with a position line: `19/40 · ↑ 10 more · ↓ 21 more · ctrl+u/ctrl+d page` (selected request, requests above and below the view).
 
 ## Filtering
 
