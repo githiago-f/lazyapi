@@ -19,6 +19,8 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | Key | Action |
 |-----|--------|
 | `↑`/`k`, `↓`/`j` | Move |
+| `ctrl+d` / `ctrl+u` | Next / previous page of requests |
+| `home`/`g`, `end`/`G` | First / last request |
 | `enter` | Open in the editor |
 | `s` | Send the selected request. POST/PUT/PATCH/DELETE ask for confirmation |
 | `[` / `]` | Previous / next response tab (Body, Headers, Cookies, Timeline, Checks, Console) |

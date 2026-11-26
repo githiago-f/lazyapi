@@ -115,6 +115,14 @@ editor:
     summary: "{passed} passed, {failed} failed"
     console: "Console:"
 
+list:
+  # Last line of the request list when it does not fit: {pos}/{total} is the
+  # selected request, {above}/{below} the requests out of view.
+  position: "{pos}/{total}"
+  above: "↑ {n} more"
+  below: "↓ {n} more"
+  paging: "{up}/{down} page"
+
 response:
   tabs:
     body: Body

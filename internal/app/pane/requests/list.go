@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/config"
 	"github.com/githiago-f/lazyapi/internal/inmath"
@@ -69,7 +70,7 @@ type RequestList struct {
 	lastClick      int // row of the last click (double click opens)
 	hover          int // row under the mouse pointer (-1: none)
 	lastClickAt    time.Time
-	scroll         int
+	scroll         int // first line (tag header or request) on screen
 
 	filter    textinput.Model
 	filtering bool
@@ -94,6 +95,8 @@ func (rl RequestList) HelpBindings() []key.Binding {
 	return []key.Binding{
 		config.DefaultKeyMap.Up,
 		config.DefaultKeyMap.Down,
+		config.DefaultKeyMap.ListPageDown,
+		config.DefaultKeyMap.ListPageUp,
 		config.DefaultKeyMap.Select,
 		config.DefaultKeyMap.Filter,
 		config.DefaultKeyMap.CreateNew,
@@ -105,25 +108,10 @@ func (rl RequestList) HelpBindings() []key.Binding {
 	}
 }
 
+// CursorPosY is the row of the selected request below the filter, on
+// screen (the list may be scrolled).
 func (rl RequestList) CursorPosY() int {
-	sum := 1
-	groups := rl.filteredGroups
-	if groups == nil {
-		groups = rl.groups
-	}
-	for _, g := range groups {
-		if len(g.Items) == 0 {
-			continue
-		}
-		sum++
-		for _, item := range g.Items {
-			if rl.isCursorItem(item) {
-				return sum
-			}
-			sum++
-		}
-	}
-	return sum
+	return 1 + rl.cursorLine() - rl.scroll
 }
 
 func (rl RequestList) isCursorItem(item RequestItem) bool {
@@ -144,6 +132,7 @@ func (rl *RequestList) SetSize(w, h int) {
 	rl.width = w
 	rl.height = h
 	rl.filter.SetWidth(max(1, w-4))
+	rl.clampScroll()
 }
 
 // Filtering reports whether the filter input is capturing keys.
@@ -160,6 +149,7 @@ func (rl RequestList) SetItems(items []RequestItem) RequestList {
 	if rl.cursor >= len(rl.filtered) {
 		rl.cursor = max(0, len(rl.filtered)-1)
 	}
+	rl.clampScroll()
 	return rl
 }
 
@@ -213,12 +203,15 @@ var (
 )
 
 func (rl RequestList) View() tea.View {
-	visible := rl.visibleItems()
-	rendered := make([]string, 0, len(visible)+2)
+	lines := rl.visibleItems()
+	rows, overflow := rl.rows(len(lines))
+	from := min(rl.scroll, len(lines))
+	to := min(from+rows, len(lines))
+	rendered := make([]string, 0, rows+2)
 
 	rendered = append(rendered, rl.filterView())
 
-	for _, line := range visible {
+	for _, line := range lines[from:to] {
 		selected := rl.cursor >= 0 && rl.cursor < len(rl.filtered) && rl.filtered[rl.cursor].URI == line.item.URI && rl.filtered[rl.cursor].Method == line.item.Method
 		if line.isHeader {
 			rendered = append(rendered, "  "+lipgloss.NewStyle().Foreground(lipgloss.Color(config.Lavender)).Bold(true).Render(fmt.Sprintf("── %s (%d) ──", line.header, line.count)))
@@ -247,15 +240,70 @@ func (rl RequestList) View() tea.View {
 	content := lipgloss.JoinVertical(lipgloss.Left, rendered...)
 	if rl.height > 0 {
 		used := lipgloss.Height(content)
+		if overflow {
+			used++ // the position line
+		}
 		if used < rl.height {
-			fill := strings.Repeat("\n", rl.height-used)
+			fill := strings.Repeat("\n", rl.height-used-1)
 			content = lipgloss.JoinVertical(lipgloss.Left,
 				content,
 				paneBg.Render(fill),
 			)
 		}
+		if overflow {
+			content = lipgloss.JoinVertical(lipgloss.Left, content, rl.positionLine(lines[from:to], lines))
+		}
 	}
 	return tea.NewView(components.Z.Mark(paneZone, content))
+}
+
+// filterHeight is the filter input plus its bottom border.
+const filterHeight = 2
+
+// rows is how many list lines fit under the filter, and whether the list
+// overflows (then the last row is the position line).
+func (rl RequestList) rows(lines int) (int, bool) {
+	if rl.height <= 0 {
+		return lines, false // not sized yet: everything
+	}
+	rows := max(1, rl.height-filterHeight)
+	if lines <= rows {
+		return rows, false
+	}
+	return max(1, rows-1), true
+}
+
+var positionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Overlay1))
+
+// positionLine says where the selection is and how much is out of view.
+func (rl RequestList) positionLine(shown, all []itemLine) string {
+	onScreen := 0
+	for _, l := range shown {
+		if !l.isHeader {
+			onScreen++
+		}
+	}
+	above := 0
+	for _, l := range all[:min(rl.scroll, len(all))] {
+		if !l.isHeader {
+			above++
+		}
+	}
+	below := len(rl.filtered) - above - onScreen
+	parts := []string{config.T("list.position", "pos", strconv.Itoa(rl.cursor+1), "total", strconv.Itoa(len(rl.filtered)))}
+	if above > 0 {
+		parts = append(parts, config.T("list.above", "n", strconv.Itoa(above)))
+	}
+	if below > 0 {
+		parts = append(parts, config.T("list.below", "n", strconv.Itoa(below)))
+	}
+	parts = append(parts, config.T("list.paging",
+		"up", config.DefaultKeyMap.ListPageUp.Help().Key, "down", config.DefaultKeyMap.ListPageDown.Help().Key))
+	line := "  " + strings.Join(parts, " · ")
+	if rl.width > 0 {
+		line = ansi.Truncate(line, rl.width, "…")
+	}
+	return positionStyle.Render(line)
 }
 
 const paneZone = "list:pane"
@@ -325,6 +373,13 @@ func (rl RequestList) open() tea.Cmd {
 }
 
 func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m, cmd := rl.update(msg)
+	out := m.(RequestList)
+	out.clampScroll() // the cursor moved, the filter changed: keep it in view
+	return out, cmd
+}
+
+func (rl RequestList) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -421,6 +476,18 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				rl.cursor = inmath.Circle(rl.cursor+1, 0, max(0, len(rl.filtered)-1))
 				rl.clampScroll()
 
+			case key.Matches(msg, config.DefaultKeyMap.ListPageUp):
+				rl.cursor = max(0, rl.cursor-rl.page())
+
+			case key.Matches(msg, config.DefaultKeyMap.ListPageDown):
+				rl.cursor = min(max(0, len(rl.filtered)-1), rl.cursor+rl.page())
+
+			case key.Matches(msg, config.DefaultKeyMap.ListTop):
+				rl.cursor = 0
+
+			case key.Matches(msg, config.DefaultKeyMap.ListBottom):
+				rl.cursor = max(0, len(rl.filtered)-1)
+
 			case key.Matches(msg, config.DefaultKeyMap.Select):
 				return rl, rl.open()
 
@@ -456,12 +523,38 @@ func (rl RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return rl, cmd
 }
 
+// page is how many requests a page key moves: the rows on screen.
+func (rl RequestList) page() int {
+	rows, _ := rl.rows(len(rl.visibleItems()))
+	return max(1, rows-1)
+}
+
+// cursorLine is the selected request's line among the tag headers and
+// requests (0 when there is none).
+func (rl RequestList) cursorLine() int {
+	for n, l := range rl.visibleItems() {
+		if !l.isHeader && rl.isCursorItem(l.item) {
+			return n
+		}
+	}
+	return 0
+}
+
+// clampScroll scrolls just enough to show the selected request (and its
+// tag header when it is the first of its group), and never past the end.
 func (rl *RequestList) clampScroll() {
-	if rl.cursor < rl.scroll {
-		rl.scroll = rl.cursor
+	lines := rl.visibleItems()
+	rows, _ := rl.rows(len(lines))
+	cur := rl.cursorLine()
+	top := cur
+	if cur > 0 && lines[cur-1].isHeader {
+		top = cur - 1
 	}
-	maxScroll := max(0, len(rl.filtered)-rl.height+3)
-	if rl.scroll > maxScroll {
-		rl.scroll = maxScroll
+	if top < rl.scroll {
+		rl.scroll = top
 	}
+	if cur >= rl.scroll+rows {
+		rl.scroll = cur - rows + 1
+	}
+	rl.scroll = max(0, min(rl.scroll, len(lines)-rows))
 }

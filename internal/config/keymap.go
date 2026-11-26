@@ -8,6 +8,12 @@ type KeyMap struct {
 	Left  key.Binding
 	Right key.Binding
 
+	// Request list paging (pgup/pgdown scroll the response preview there).
+	ListPageUp   key.Binding
+	ListPageDown key.Binding
+	ListTop      key.Binding
+	ListBottom   key.Binding
+
 	Select    key.Binding
 	Filter    key.Binding
 	Delete    key.Binding
@@ -89,6 +95,22 @@ var DefaultKeyMap = KeyMap{
 	Right: key.NewBinding(
 		key.WithKeys("l", "right"),
 		key.WithHelp("l", "move right"),
+	),
+	ListPageUp: key.NewBinding(
+		key.WithKeys("ctrl+u"),
+		key.WithHelp("ctrl+u", "page up"),
+	),
+	ListPageDown: key.NewBinding(
+		key.WithKeys("ctrl+d"),
+		key.WithHelp("ctrl+d", "page down"),
+	),
+	ListTop: key.NewBinding(
+		key.WithKeys("home", "g"),
+		key.WithHelp("home/g", "first"),
+	),
+	ListBottom: key.NewBinding(
+		key.WithKeys("end", "G"),
+		key.WithHelp("end/G", "last"),
 	),
 	Filter: key.NewBinding(
 		key.WithKeys("/"),
