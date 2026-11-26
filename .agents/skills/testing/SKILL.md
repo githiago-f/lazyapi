@@ -7,6 +7,8 @@ description: >
   Triggered by requests like "test the system", "add tests",
   "write a test for", "check if tests pass", "verify the build",
   "run tests", "fix tests", "add test coverage", "smoke test".
+metadata:
+  internal: true # for contributors to lazyapi; hidden from `npx skills add`
 ---
 
 # LazyAPI Testing Skill

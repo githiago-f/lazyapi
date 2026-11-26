@@ -64,6 +64,7 @@ const guide: DefaultTheme.SidebarItem[] = [
       { text: "mock", link: "/cli/mock" },
       { text: "import", link: "/cli/import" },
       { text: "login", link: "/cli/login" },
+      { text: "allow", link: "/cli/allow" },
       { text: "fake", link: "/cli/fake" },
       { text: "create", link: "/cli/create" },
       { text: "add", link: "/cli/add" },

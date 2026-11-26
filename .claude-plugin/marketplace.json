@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "lazyapi",
+  "description": "LazyAPI for agents: explore, test and integrate with HTTP APIs from their OpenAPI spec, through an MCP server that asks before calling new servers.",
+  "owner": { "name": "githiago-f", "url": "https://github.com/githiago-f" },
+  "plugins": [
+    {
+      "name": "lazyapi",
+      "source": "./",
+      "description": "Skills (setup, explore, test, integrate) and the lazyapi MCP server: send requests, contract checks, test scripts, flows, mock server.",
+      "category": "development",
+      "tags": ["api", "openapi", "testing", "mcp", "http"]
+    }
+  ]
+}

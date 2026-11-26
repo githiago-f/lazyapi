@@ -126,11 +126,18 @@ Exit status is the same for every command: **0** all passed · **1** a check fai
 
 Full reference: [docs/cli/](docs/cli/index.md).
 
-## AI agents (MCP)
+## AI agents (MCP + skills)
+
+Install lazyapi as a package: skills that teach the agent to explore, test and integrate with APIs, plus the MCP server.
 
 ```bash
-claude mcp add lazyapi -- lazyapi mcp --root /path/to/project
+/plugin install lazyapi --marketplace githiago-f/lazyapi        # Claude Code (skills + MCP server)
+gemini extensions install https://github.com/githiago-f/lazyapi  # Gemini CLI (skills + MCP server)
+npx skills add githiago-f/lazyapi                               # Codex, DeepSeek Harness, OpenCode, Cursor… (skills)
+claude mcp add lazyapi -- lazyapi mcp --root /path/to/project   # or just the MCP server, in any client
 ```
+
+**The agent only calls servers you allow.** The MCP server asks you before the first request to a server (local servers once; others for one request, the session or always, reads and writes separately). Clients that cannot ask are refused. `lazyapi allow --list` shows what you allowed. See [skills/](skills/README.md) and [docs/agents.md](docs/agents.md).
 
 The MCP server exposes these tools: `list_specs`, `list_operations`, `describe_operation`, `send_request` (with an optional `jq` filter), `run_tests`, `run_flow`, `write_flow`, `read_test`, `write_test`, `validate_spec`, `script_api`, `import_curl` and `export_curl`. Paths are confined to `--root`, and failures come back as readable tool results. See [docs/agents.md](docs/agents.md).
 

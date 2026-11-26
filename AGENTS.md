@@ -41,7 +41,8 @@ internal/
     run.go                 #   RunTests (`run`; `smoke tests` is an alias): selection, --parallel, --retries, --bail
     send.go                #   SendRequest: <path> <method> | --op, --body @file, --output json, --save-example
     inspect.go             #   ListOps, Describe, ValidateSpec
-    mcp.go                 #   ServeMCP (`lazyapi mcp --root`), Version (set by goreleaser ldflags)
+    mcp.go                 #   ServeMCP (`lazyapi mcp --root --allow --allow-writes --permissions`), Version (set by goreleaser ldflags)
+    allow.go               #   Allow (`lazyapi allow <origin> [--writes] | --list | --revoke`) — for people, agents must ask
     login.go               #   Login / Logout (`lazyapi login <spec> [scheme] --device --no-browser --status`)
     mock.go                #   ServeMock (`lazyapi mock <spec> --port 4010`)
     add.go / create.go / remove.go / server.go  # spec editing commands
@@ -52,7 +53,8 @@ internal/
   report/                  # Renders runner results: pretty (FormatOp/WriteSummary), json, junit, tap; body policy
   inspect/                 # ListOperations, Describe (with referenced schemas), Validate (OpenAPI + scripts compile)
   oauth/                   # OAuth2/OIDC: Discover (.well-known/openid-configuration, RFC 8414), AccessToken (stored → refresh → client_credentials/password; interactive grants → *LoginRequiredError), Login (authorizationCode+PKCE with a loopback server, deviceCode), Store (.lazyapi/.local/tokens.json, 0600; StoreFor(spec)), OpenBrowser (WSL aware)
-  mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled) + Tools confined to a root dir
+  mcp/                     # MCP server (JSON-RPC 2.0 over stdio, hand-rolled; tool calls on a worker so server→client requests — elicitation — get answered) + Tools confined to a root dir; skills_test.go validates skills/
+  permit/                  # Which servers the MCP server may call: Policy (grants per origin, loopback once, reads/writes apart, call/session/always), Checker.Client wraps http.Client (redirects too), Store (user config dir permissions.json, 0600)
   workspace/               # .lazyapi/ layout next to the spec: Config, EnvFile (committed), SecretsFile (git-ignored), Local, EnvFiles, Ensure (.gitignore), WriteSecrets
   project/                 # .lazyapi/config.yml: named environments (server, env file, vars, auth secrets), Find/Select/Resolve
   history/                 # TUI request history per spec (.lazyapi/.local/history.jsonl, 0600; LAZYAPI_HISTORY_DIR overrides): no env/auth secrets, sensitive headers/query redacted, body templates kept; Replay
@@ -129,6 +131,17 @@ internal/
     openapi_test.go        #   Auth roundtrip tests using testdata fixtures
     testdata/              #   Static .yml fixtures (minimal.yml, global_security.yml, params.yml)
 ```
+
+## Agent packaging
+
+- `skills/lazyapi-{setup,explore,test,integrate}/` — published Agent Skills (`npx skills add githiago-f/lazyapi`); short SKILL.md, details in `references/`. `.agents/skills/` are contributor skills, `metadata.internal: true` (hidden from `npx skills`). `internal/mcp/skills_test.go` checks frontmatter, links and that tools written as `` `name {`` exist.
+- `.claude-plugin/{marketplace,plugin}.json` (+ `icon.png`) — Claude Code plugin = repo root (skills + MCP server with `--root ${CLAUDE_PROJECT_DIR}`); validate with `claude plugin validate .`. `gemini-extension.json` — Gemini CLI extension (`--root ${workspacePath}`).
+- **Bump `version` in `.claude-plugin/plugin.json` and `gemini-extension.json` with each release tag** (Claude pins users to it).
+
+## Network permissions (MCP)
+
+- Every request of an MCP tool call goes through `permit.Checker.Client` (set in `Tools.options` and `Tools.moduleLoader`): operations, `lazyapi.send`, flows, OAuth, redirects, `https://` script imports. Never build an `http.Client` in `internal/mcp` without it.
+- Not allowed → `elicitation/create` when the client declared the capability (`Server.Asker`), else a `*permit.DeniedError` telling the agent to ask the user. Grants are never stored in the project.
 
 ## Key Types
 

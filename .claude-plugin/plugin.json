@@ -1,0 +1,30 @@
+{
+  "name": "lazyapi",
+  "version": "2.2.0",
+  "description": "Explore, test and integrate with HTTP APIs from their OpenAPI spec: skills plus the lazyapi MCP server (requests only reach servers you allow).",
+  "author": {
+    "name": "githiago-f",
+    "url": "https://github.com/githiago-f"
+  },
+  "homepage": "https://lazyapi.ia.br/agents",
+  "repository": "https://github.com/githiago-f/lazyapi",
+  "license": "GPL-3.0-only",
+  "keywords": [
+    "api",
+    "openapi",
+    "testing",
+    "mcp",
+    "http",
+    "contract-testing"
+  ],
+  "mcpServers": {
+    "lazyapi": {
+      "command": "lazyapi",
+      "args": [
+        "mcp",
+        "--root",
+        "${CLAUDE_PROJECT_DIR}"
+      ]
+    }
+  }
+}

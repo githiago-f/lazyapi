@@ -2,10 +2,50 @@
 
 LazyAPI gives agents the same loop a developer uses in Postman: read the API, send requests, write tests, and run them. Results come back as structured data.
 
+## Install for your agent
+
+The fastest setup is a package: skills that teach the agent the workflow, plus the MCP server. Install the binary first (`go install github.com/githiago-f/lazyapi/cmd/lazyapi@latest`, or a [release](https://github.com/githiago-f/lazyapi/releases)).
+
+| Agent | Install |
+|-------|---------|
+| Claude Code | `/plugin marketplace add githiago-f/lazyapi` then `/plugin install lazyapi@lazyapi` (skills + MCP server) |
+| Gemini CLI | `gemini extensions install https://github.com/githiago-f/lazyapi` (skills + MCP server) |
+| Codex | `npx skills add githiago-f/lazyapi -a codex -y` and `codex mcp add lazyapi -- lazyapi mcp --root .` |
+| DeepSeek Harness, OpenCode, Cursor, … | `npx skills add githiago-f/lazyapi` (or copy `skills/lazyapi-*` into `~/.agents/skills`) and add the MCP server below |
+
+### Skills
+
+Four [Agent Skills](https://agentskills.io) live in [`skills/`](https://github.com/githiago-f/lazyapi/tree/main/skills). Each is a short `SKILL.md`; details sit in `references/` and are read only when needed, so the agent learns the API from the spec instead of reading documentation.
+
+| Skill | For |
+|-------|-----|
+| `lazyapi-setup` | install the binary and connect the MCP server |
+| `lazyapi-explore` | find operations, read one operation's contract, call it; build a spec from curl / Postman / HAR |
+| `lazyapi-test` | contract checks, test scripts, flows, data-driven runs, mock, CI |
+| `lazyapi-integrate` | write client code from verified requests and real schemas |
+
+## Permissions: the agent only calls servers you allow
+
+The MCP server never sends a request to a server you have not allowed. The first request to a new server is held while **you** are asked, in the agent's own UI (MCP elicitation):
+
+| Server | Question | Answers |
+|--------|----------|---------|
+| local (`localhost`, `127.0.0.1`, `::1`, `*.localhost`, any port) | once | allow (remembered) · deny |
+| any other origin (`scheme://host:port`) | per kind of access: reads (GET, HEAD, OPTIONS), then writes (POST, PUT, PATCH, DELETE…) | only this request · this session · always · deny |
+
+- "Only this request" lasts for the tool call, so `run_tests` over 50 operations asks once; a refusal also holds for the rest of the call.
+- Everything the server sends is covered: operations, `lazyapi.send` in test scripts and flows, OAuth token calls, every redirect hop, and `https://` imports of test scripts (a script cannot leak data through an import URL).
+- Clients that cannot show the question get a `lazyapi blocked …` result telling the agent to ask you. The skills and the server's instructions tell agents never to grant themselves access.
+- "Always" answers are stored in your config directory (`~/.config/lazyapi/permissions.json` on Linux, `$LAZYAPI_PERMISSIONS` overrides), never in the project: a repository cannot pre-approve servers for whoever opens it. Manage them with [`lazyapi allow`](/cli/allow).
+
+Per server setup instead of answers: `--allow <origin>` (reads) and `--allow-writes <origin>` on the `lazyapi mcp` command; `--allow localhost` for local servers. `--permissions off` disables the check (trusted automation only).
+
+This guards the network. File-writing tools (`write_test`, `write_flow`, `import_curl`) only write inside `--root`; approving MCP tool calls themselves is your agent's own permission setting. The CLI (`lazyapi run`, `send`) is not gated: it is what you run yourself, and an agent running shell commands is governed by its harness.
+
 ## MCP server
 
 ```bash
-lazyapi mcp [--root dir]
+lazyapi mcp [--root dir] [--allow origin]... [--allow-writes origin]... [--permissions ask|off]
 ```
 
 This starts a [Model Context Protocol](https://modelcontextprotocol.io) server on stdio. Paths in tool arguments are relative to `--root` (default: the current directory). Paths that leave the root are rejected.
@@ -39,7 +79,7 @@ Or with any client that reads an `mcpServers` config:
 
 `send_request` accepts `jq` (e.g. `".items[0] | {id, status}"`) to return only part of a large body; checks still see the whole response.
 
-`send_request`, `run_tests` and `run_flow` accept `env_name` to use a named environment from `.lazyapi/config.yml` (server, env file, variables and credentials).
+`send_request`, `run_tests`, `run_flow` and `export_curl` accept `env_name` to use a named environment from `.lazyapi/config.yml` (server, env file, variables and credentials).
 
 Tool failures (network errors, unknown operations) come back as results with `isError: true` and a readable message, so the agent can fix the call and retry.
 
