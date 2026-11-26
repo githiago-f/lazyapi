@@ -2,12 +2,15 @@ package permit
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func req(method, url string) *http.Request {
@@ -193,5 +196,77 @@ func TestClientGuardsRedirects(t *testing.T) {
 	_, err := client.Get(start.URL)
 	if !IsDenied(err) || !strings.Contains(err.Error(), "example.invalid") {
 		t.Fatalf("redirect to an origin nobody allowed: %v", err)
+	}
+}
+
+// slowAsker answers after delay, or gives up when ctx ends.
+func slowAsker(delay time.Duration, answer Scope) Asker {
+	return func(ctx context.Context, _ Prompt) (Scope, error) {
+		select {
+		case <-time.After(delay):
+			return answer, nil
+		case <-ctx.Done():
+			return Deny, ctx.Err()
+		}
+	}
+}
+
+// The user's thinking time does not count against the request's timeout
+// (http.Client.Timeout or a context deadline, like Request.Timeout).
+func TestQuestionDoesNotUseTheRequestTimeout(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) }))
+	defer api.Close()
+
+	p := &Policy{Ask: func() Asker { return slowAsker(300*time.Millisecond, Call) }}
+	client := p.Calls("t").Client(&http.Client{Timeout: 100 * time.Millisecond})
+	resp, err := client.Get(api.URL)
+	if err != nil {
+		t.Fatalf("Client.Timeout: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil || string(body) != "ok" {
+		t.Fatalf("body %q, %v", body, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, api.URL, nil)
+	resp, err = p.Calls("t").Client(nil).Do(r)
+	if err != nil {
+		t.Fatalf("context deadline: %v", err)
+	}
+	_ = resp.Body.Close()
+}
+
+// A question still ends with the tool call, and has its own limit.
+func TestQuestionEnds(t *testing.T) {
+	p := &Policy{Ask: func() Asker { return slowAsker(time.Hour, Call) }}
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	if err := p.Calls("t").Check(ctx, req("GET", "https://api.example.com/")); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled call: %v", err)
+	}
+
+	p.AskTimeout = 50 * time.Millisecond
+	if err := p.Calls("t").Check(context.Background(), req("GET", "https://api.example.com/")); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("AskTimeout: %v", err)
+	}
+}
+
+// The moved deadline still applies to a slow server.
+func TestPausedRequestStillTimesOut(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(2 * time.Second):
+		case <-r.Context().Done():
+		}
+	}))
+	defer api.Close()
+	p := &Policy{Ask: func() Asker { return slowAsker(100*time.Millisecond, Call) }}
+	start := time.Now()
+	_, err := p.Calls("t").Client(&http.Client{Timeout: 200 * time.Millisecond}).Get(api.URL)
+	if err == nil || time.Since(start) > time.Second {
+		t.Errorf("err %v after %v", err, time.Since(start))
 	}
 }

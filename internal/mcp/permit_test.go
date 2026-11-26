@@ -19,6 +19,17 @@ import (
 // client that does (or does not) declare elicitation.
 func guardedServer(t *testing.T, root string, elicit bool) (*client, *permit.Policy) {
 	t.Helper()
+	var elicitation any
+	if elicit {
+		elicitation = map[string]any{}
+	}
+	return guardedServerWith(t, root, "2025-06-18", elicitation)
+}
+
+// guardedServerWith is guardedServer for a protocol version and an
+// elicitation capability (nil: not declared).
+func guardedServerWith(t *testing.T, root, version string, elicitation any) (*client, *permit.Policy) {
+	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	policy := &permit.Policy{Store: &permit.Store{Path: filepath.Join(t.TempDir(), "permissions.json")}}
@@ -33,10 +44,10 @@ func guardedServer(t *testing.T, root string, elicit bool) (*client, *permit.Pol
 	sc.Buffer(make([]byte, 0, 1<<20), 16<<20)
 	c := &client{t: t, in: inW, out: sc}
 	caps := map[string]any{}
-	if elicit {
-		caps["elicitation"] = map[string]any{}
+	if elicitation != nil {
+		caps["elicitation"] = elicitation
 	}
-	c.call("initialize", map[string]any{"protocolVersion": "2025-06-18", "capabilities": caps,
+	c.call("initialize", map[string]any{"protocolVersion": version, "capabilities": caps,
 		"clientInfo": map[string]any{"name": "test", "version": "1"}})
 	return c, policy
 }
@@ -93,6 +104,77 @@ func TestSendAsksTheUserFirst(t *testing.T) {
 	}
 	if !policy.Store.Allowed(permit.Loopback, true) {
 		t.Error("not remembered")
+	}
+}
+
+// question calls send_request, returns the elicitation/create params it
+// asks with and declines.
+func question(t *testing.T, c *client) map[string]any {
+	t.Helper()
+	c.id++
+	data, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": c.id, "method": "tools/call",
+		"params": map[string]any{"name": "send_request", "arguments": map[string]any{"spec": "api/spec.yml", "operation": "getUser"}}})
+	c.send(string(data))
+	if !c.out.Scan() {
+		t.Fatal("no message")
+	}
+	var msg map[string]any
+	_ = json.Unmarshal(c.out.Bytes(), &msg)
+	if msg["method"] != "elicitation/create" {
+		t.Fatalf("expected a question, got %s", c.out.Text())
+	}
+	reply, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": msg["id"], "result": map[string]any{"action": "decline"}})
+	c.send(string(reply))
+	if !c.out.Scan() {
+		t.Fatal("no tool result")
+	}
+	return msg["params"].(map[string]any)
+}
+
+// The answer has no default (Claude Code preset it, so Accept meant
+// Deny); 2025-11-25 clients get titled enums, older ones enumNames.
+func TestQuestionFormatPerVersion(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer api.Close()
+	root := setupRoot(t, api.URL)
+	allowField := func(params map[string]any) map[string]any {
+		schema := params["requestedSchema"].(map[string]any)
+		if req, _ := schema["required"].([]any); len(req) != 1 || req[0] != "allow" {
+			t.Errorf("allow is not required: %v", schema)
+		}
+		f := schema["properties"].(map[string]any)["allow"].(map[string]any)
+		if _, ok := f["default"]; ok {
+			t.Errorf("the answer has a default: %v", f)
+		}
+		return f
+	}
+
+	c, _ := guardedServerWith(t, root, "2025-11-25", map[string]any{"form": map[string]any{}, "url": map[string]any{}})
+	params := question(t, c)
+	f := allowField(params)
+	if params["mode"] != "form" || f["enum"] != nil || f["enumNames"] != nil {
+		t.Errorf("2025-11-25 question = %v", params)
+	}
+	choices, _ := f["oneOf"].([]any)
+	if len(choices) != 2 || choices[0].(map[string]any)["const"] != "always" || choices[0].(map[string]any)["title"] != "Allow local servers" {
+		t.Errorf("titled choices = %v", f["oneOf"])
+	}
+
+	c, _ = guardedServerWith(t, root, "2025-06-18", map[string]any{})
+	params = question(t, c)
+	f = allowField(params)
+	if params["mode"] != nil || f["oneOf"] != nil || len(f["enum"].([]any)) != 2 || len(f["enumNames"].([]any)) != 2 {
+		t.Errorf("2025-06-18 question = %v", params)
+	}
+}
+
+// A client that only does URL elicitation cannot show the form.
+func TestURLOnlyElicitationCannotAsk(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer api.Close()
+	c, _ := guardedServerWith(t, setupRoot(t, api.URL), "2025-11-25", map[string]any{"url": map[string]any{}})
+	if _, text, _ := c.tool("send_request", map[string]any{"spec": "api/spec.yml", "operation": "getUser"}); !strings.Contains(text, "lazyapi allow localhost") {
+		t.Errorf("url-only client:\n%s", text)
 	}
 }
 

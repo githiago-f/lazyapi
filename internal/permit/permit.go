@@ -20,11 +20,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Loopback is the grant name for every local server.
@@ -88,6 +90,9 @@ type Policy struct {
 	AllowWrites []string
 	// Ask asks the user (nil: refuse what is not allowed).
 	Ask func() Asker
+	// AskTimeout bounds one question (0: DefaultAskTimeout). It does not
+	// count against the request's own timeout.
+	AskTimeout time.Duration
 
 	mu      sync.Mutex
 	session map[string]bool // grant key → allowed
@@ -186,10 +191,22 @@ func (p *Policy) allowed(k, origin string, write bool) bool {
 	return false
 }
 
+// DefaultAskTimeout is how long a question waits for the user's answer.
+const DefaultAskTimeout = 5 * time.Minute
+
 // Check allows req or returns a *DeniedError (asking the user when it can).
+// The question ignores ctx's deadline (it has its own, Policy.AskTimeout)
+// but ends when ctx is cancelled.
 func (c *Checker) Check(ctx context.Context, req *http.Request) error {
+	_, err := c.check(ctx, req)
+	return err
+}
+
+// check is Check; paused reports that it waited, for the user or for
+// another request's question, so the caller can give that time back.
+func (c *Checker) check(ctx context.Context, req *http.Request) (paused bool, err error) {
 	if c == nil || c.policy == nil {
-		return nil
+		return false, nil
 	}
 	p := c.policy
 	o := origin(req.URL)
@@ -197,34 +214,49 @@ func (c *Checker) Check(ctx context.Context, req *http.Request) error {
 	k := key(o, write)
 	prompt := Prompt{Origin: o, Method: req.Method, URL: redact(req.URL), Write: write, Loopback: o == Loopback, Tool: c.tool}
 
-	c.mu.Lock()
+	if !c.mu.TryLock() {
+		paused = true
+		c.mu.Lock()
+	}
 	defer c.mu.Unlock()
 	if answer, ok := c.call[k]; ok {
 		if answer == Call {
-			return nil
+			return paused, nil
 		}
-		return &DeniedError{Prompt: prompt, Asked: true} // refused earlier in this call
+		return paused, &DeniedError{Prompt: prompt, Asked: true} // refused earlier in this call
 	}
 
 	// One question at a time: a parallel run asks once per grant.
-	p.mu.Lock()
+	if !p.mu.TryLock() {
+		paused = true
+		p.mu.Lock()
+	}
 	defer p.mu.Unlock()
 	if p.session == nil {
 		p.session = map[string]bool{}
 	}
 	if p.allowed(k, o, write) {
-		return nil
+		return paused, nil
 	}
 	var ask Asker
 	if p.Ask != nil {
 		ask = p.Ask()
 	}
 	if ask == nil {
-		return &DeniedError{Prompt: prompt}
+		return paused, &DeniedError{Prompt: prompt}
 	}
-	scope, err := ask(ctx, prompt)
+	paused = true
+	timeout := p.AskTimeout
+	if timeout <= 0 {
+		timeout = DefaultAskTimeout
+	}
+	askCtx, release := detach(ctx)
+	defer release()
+	askCtx, cancel := context.WithTimeout(askCtx, timeout)
+	defer cancel()
+	scope, err := ask(askCtx, prompt)
 	if err != nil {
-		return fmt.Errorf("asking the user to allow %s: %w", o, err)
+		return paused, fmt.Errorf("asking the user to allow %s: %w", o, err)
 	}
 	if o == Loopback && scope != Deny {
 		scope = Always // local servers are asked once
@@ -238,14 +270,14 @@ func (c *Checker) Check(ctx context.Context, req *http.Request) error {
 		p.session[k] = true
 		if p.Store != nil {
 			if err := p.Store.Grant(o, write || o == Loopback); err != nil {
-				return fmt.Errorf("saving the permission for %s: %w", o, err)
+				return paused, fmt.Errorf("saving the permission for %s: %w", o, err)
 			}
 		}
 	default:
 		c.call[k] = Deny
-		return &DeniedError{Prompt: prompt, Asked: true}
+		return paused, &DeniedError{Prompt: prompt, Asked: true}
 	}
-	return nil
+	return paused, nil
 }
 
 // redact drops the query and credentials from a URL shown to the user.
@@ -278,13 +310,83 @@ type guard struct {
 }
 
 func (g guard) RoundTrip(req *http.Request) (*http.Response, error) {
-	if err := g.check.Check(req.Context(), req); err != nil {
+	start := time.Now()
+	paused, err := g.check.check(req.Context(), req)
+	if err != nil {
 		if req.Body != nil {
 			_ = req.Body.Close()
 		}
 		return nil, err
 	}
-	return g.base.RoundTrip(req)
+	if !paused {
+		return g.base.RoundTrip(req)
+	}
+	// The user's thinking time is not the server's: move the request's
+	// deadline (Request.Timeout, http.Client.Timeout) by the time it waited.
+	// http.Client also cancels through the deprecated Request.Cancel
+	// channel for transports it does not know; the moved deadline
+	// replaces both.
+	ctx, release := extend(req.Context(), time.Since(start))
+	resumed := req.WithContext(ctx)
+	resumed.Cancel = nil //nolint:staticcheck // the field http.Client sets
+	resp, err := g.base.RoundTrip(resumed)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	resp.Body = releaseOnClose{ReadCloser: resp.Body, release: release}
+	return resp, nil
+}
+
+type releaseOnClose struct {
+	io.ReadCloser
+	release context.CancelFunc
+}
+
+func (r releaseOnClose) Close() error {
+	err := r.ReadCloser.Close()
+	r.release()
+	return err
+}
+
+// detach returns a context without ctx's deadline that is still cancelled
+// when ctx is cancelled for another reason (the tool call ended).
+func detach(ctx context.Context) (context.Context, context.CancelFunc) {
+	out, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
+	stop := context.AfterFunc(ctx, func() {
+		if !expired(ctx) {
+			cancel(context.Cause(ctx))
+		}
+	})
+	return out, func() {
+		stop()
+		cancel(context.Canceled)
+	}
+}
+
+// expired reports whether ctx ended by reaching its deadline. http.Client
+// cancels a request at its Timeout with a plain cancel for transports it
+// does not know (like guard), so a cancel at or after the deadline counts.
+func expired(ctx context.Context) bool {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return true
+	}
+	d, ok := ctx.Deadline()
+	return ok && !time.Now().Before(d)
+}
+
+// extend returns ctx with its deadline (if any) moved by d.
+func extend(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	out, release := detach(ctx)
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return out, release
+	}
+	out, cancel := context.WithDeadline(out, deadline.Add(d))
+	return out, func() {
+		cancel()
+		release()
+	}
 }
 
 // IsDenied reports whether err (possibly wrapped, e.g. by http.Client) is

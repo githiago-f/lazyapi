@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -425,5 +426,30 @@ func TestSend_SetsContentTypeFromBodyType(t *testing.T) {
 	}
 	if got != "application/merge-patch+json" {
 		t.Errorf("explicit header overridden: %q", got)
+	}
+}
+
+// waitFirst is a RoundTripper that holds a request before sending it, like
+// the MCP permission guard while the user is asked.
+type waitFirst struct{ d time.Duration }
+
+func (w waitFirst) RoundTrip(r *http.Request) (*http.Response, error) {
+	time.Sleep(w.d)
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// Time spent before the transport asks for a connection is not the
+// server's: an "answers fast" test must not fail because the user took
+// 20 s to allow the host.
+func TestSendTimedExcludesTimeBeforeTheTransport(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) }))
+	defer srv.Close()
+	r := &Request{Method: GET, ServerURL: srv.URL, URI: "/", HTTPClient: &http.Client{Transport: waitFirst{300 * time.Millisecond}}}
+	_, body, timing, err := r.SendTimed(context.Background())
+	if err != nil || body != "ok" {
+		t.Fatalf("body %q, %v", body, err)
+	}
+	if timing.Total <= 0 || timing.Total >= 300*time.Millisecond {
+		t.Errorf("Total = %v, want the request only", timing.Total)
 	}
 }

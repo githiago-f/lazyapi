@@ -17,7 +17,11 @@ import (
 )
 
 // ProtocolVersions are the MCP revisions this server speaks, newest first.
-var ProtocolVersions = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
+var ProtocolVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
+
+// titledEnums is the first revision with titled single-select enums
+// (oneOf const/title) in elicitation forms; enumNames is legacy there.
+const titledEnums = "2025-11-25"
 
 const instructions = `LazyAPI tests HTTP APIs described by OpenAPI specs.
 Typical loop: list_specs → list_operations → describe_operation → send_request
@@ -84,12 +88,14 @@ type Server struct {
 	mu  sync.Mutex
 	out io.Writer
 
-	// canElicit is set when the client declared the elicitation capability
-	// at initialize: the server may then ask the user (permissions).
+	// canElicit is set when the client declared form elicitation at
+	// initialize: the server may then ask the user (permissions).
 	canElicit atomic.Bool
-	nextID    atomic.Int64
-	pmu       sync.Mutex
-	pending   map[string]chan reply
+	// titled is set when the negotiated revision has titled enums.
+	titled  atomic.Bool
+	nextID  atomic.Int64
+	pmu     sync.Mutex
+	pending map[string]chan reply
 }
 
 // Serve reads requests from in and writes responses to out until in closes
@@ -168,11 +174,12 @@ func (s *Server) dispatch(ctx context.Context, req request) (any, *rpcError) {
 			} `json:"capabilities"`
 		}
 		_ = json.Unmarshal(req.Params, &p)
-		s.canElicit.Store(len(p.Capabilities.Elicitation) > 0 && string(p.Capabilities.Elicitation) != "null")
+		s.canElicit.Store(formElicitation(p.Capabilities.Elicitation))
 		version := ProtocolVersions[0]
 		if slices.Contains(ProtocolVersions, p.ProtocolVersion) {
 			version = p.ProtocolVersion
 		}
+		s.titled.Store(version >= titledEnums)
 		return map[string]any{
 			"protocolVersion": version,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
@@ -201,6 +208,21 @@ func (s *Server) dispatch(ctx context.Context, req request) (any, *rpcError) {
 		}
 		return nil, &rpcError{Code: errMethodNotFound, Message: "method not found: " + req.Method}
 	}
+}
+
+// formElicitation reports whether an elicitation capability covers forms:
+// an empty object does (2025-06-18), an object with modes only when
+// "form" is one of them (2025-11-25 adds "url").
+func formElicitation(raw json.RawMessage) bool {
+	var modes map[string]json.RawMessage
+	if json.Unmarshal(raw, &modes) != nil || modes == nil {
+		return false
+	}
+	if len(modes) == 0 {
+		return true
+	}
+	_, ok := modes["form"]
+	return ok
 }
 
 // toolResult wraps a tool's output (or error) as MCP content. Tool errors
@@ -317,23 +339,34 @@ func (s *Server) askPermission(ctx context.Context, p permit.Prompt) (permit.Sco
 	default:
 		what := "read from (GET, HEAD, OPTIONS)"
 		if p.Write {
-			what = "change data on (" + p.Method + ", POST, PUT, PATCH, DELETE)"
+			what = "change data on (POST, PUT, PATCH, DELETE…)"
 		}
 		message = fmt.Sprintf("lazyapi (%s) wants to send %s %s.\n\nAllow it to %s %s?", p.Tool, p.Method, p.URL, what, p.Origin)
 		options = []string{string(permit.Call), string(permit.Session), string(permit.Always), string(permit.Deny)}
 		names = []string{"Only for this request", "For this session", "Always (remembered)", "Deny"}
 	}
+	// No default: Accept is only possible once the user picked an answer
+	// (a preset "deny" made Accept mean no).
+	allow := map[string]any{"type": "string", "title": "Allow?"}
+	if s.titled.Load() {
+		choices := make([]map[string]any, len(options))
+		for i, o := range options {
+			choices[i] = map[string]any{"const": o, "title": names[i]}
+		}
+		allow["oneOf"] = choices
+	} else {
+		allow["enum"], allow["enumNames"] = options, names
+	}
 	params := map[string]any{
 		"message": message,
 		"requestedSchema": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"allow": map[string]any{
-					"type": "string", "title": "Allow?", "enum": options, "enumNames": names, "default": string(permit.Deny),
-				},
-			},
-			"required": []string{"allow"},
+			"type":       "object",
+			"properties": map[string]any{"allow": allow},
+			"required":   []string{"allow"},
 		},
+	}
+	if s.titled.Load() {
+		params["mode"] = "form"
 	}
 	raw, err := s.call(ctx, "elicitation/create", params)
 	if err != nil {
