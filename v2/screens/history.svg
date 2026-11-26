@@ -150,7 +150,7 @@
 <line x1="1173.2" y1="75" x2="1177.4" y2="75" stroke="#45475a" stroke-width="1.2"/><line x1="1177.4" y1="75" x2="1181.6" y2="75" stroke="#45475a" stroke-width="1.2"/>
 <line x1="1181.6" y1="75" x2="1185.8" y2="75" stroke="#45475a" stroke-width="1.2"/><line x1="1185.8" y1="75" x2="1190.0" y2="75" stroke="#45475a" stroke-width="1.2"/>
 <text x="14.0" y="97.5" fill="#fab387" textLength="58.8" lengthAdjust="spacingAndGlyphs" font-weight="700">History</text>
-<text x="89.6" y="97.5" fill="#7f849c" textLength="210.0" lengthAdjust="spacingAndGlyphs">5 requests · newest first</text>
+<text x="89.6" y="97.5" fill="#7f849c" textLength="210.0" lengthAdjust="spacingAndGlyphs">8 requests · newest first</text>
 <path d="M18.2 120V115.2Q18.2 111 22.4 111H22.4" fill="none" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="22.4" y1="111" x2="26.6" y2="111" stroke="#cba6f7" stroke-width="1.2"/><line x1="26.6" y1="111" x2="30.8" y2="111" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="30.8" y1="111" x2="35.0" y2="111" stroke="#cba6f7" stroke-width="1.2"/><line x1="35.0" y1="111" x2="39.2" y2="111" stroke="#cba6f7" stroke-width="1.2"/>
@@ -297,7 +297,7 @@
 <line x1="480.2" y1="120" x2="480.2" y2="129" stroke="#cba6f7" stroke-width="1.2"/><line x1="480.2" y1="129" x2="480.2" y2="138" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="488.6" y1="120" x2="488.6" y2="129" stroke="#585b70" stroke-width="1.2"/><line x1="488.6" y1="129" x2="488.6" y2="138" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1185.8" y1="120" x2="1185.8" y2="129" stroke="#585b70" stroke-width="1.2"/><line x1="1185.8" y1="129" x2="1185.8" y2="138" stroke="#585b70" stroke-width="1.2"/>
-<text x="22.4" y="133.5" fill="#7f849c" textLength="67.2" lengthAdjust="spacingAndGlyphs">22:38:49</text>
+<text x="22.4" y="133.5" fill="#7f849c" textLength="67.2" lengthAdjust="spacingAndGlyphs">21:26:52</text>
 <text x="98.0" y="133.5" fill="#a6e3a1" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
 <text x="114.8" y="133.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs">GET /users/{id}</text>
 <text x="400.4" y="133.5" fill="#7f849c" textLength="75.6" lengthAdjust="spacingAndGlyphs">200 · 0ms</text>
@@ -312,10 +312,10 @@
 <line x1="480.2" y1="138" x2="480.2" y2="147" stroke="#cba6f7" stroke-width="1.2"/><line x1="480.2" y1="147" x2="480.2" y2="156" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="488.6" y1="138" x2="488.6" y2="147" stroke="#585b70" stroke-width="1.2"/><line x1="488.6" y1="147" x2="488.6" y2="156" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1185.8" y1="138" x2="1185.8" y2="147" stroke="#585b70" stroke-width="1.2"/><line x1="1185.8" y1="147" x2="1185.8" y2="156" stroke="#585b70" stroke-width="1.2"/>
-<text x="22.4" y="151.5" fill="#7f849c" textLength="67.2" lengthAdjust="spacingAndGlyphs">22:38:43</text>
+<text x="22.4" y="151.5" fill="#7f849c" textLength="67.2" lengthAdjust="spacingAndGlyphs">21:26:46</text>
 <text x="98.0" y="151.5" fill="#a6e3a1" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
 <text x="114.8" y="151.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs">GET /users/{id}</text>
-<text x="400.4" y="151.5" fill="#7f849c" textLength="75.6" lengthAdjust="spacingAndGlyphs">200 · 1ms</text>
+<text x="400.4" y="151.5" fill="#7f849c" textLength="75.6" lengthAdjust="spacingAndGlyphs">200 · 0ms</text>
 <text x="501.2" y="151.5" fill="#cba6f7" textLength="33.6" lengthAdjust="spacingAndGlyphs" font-weight="700" text-decoration="underline">Body</text>
 <text x="551.6" y="151.5" fill="#7f849c" textLength="58.8" lengthAdjust="spacingAndGlyphs">Headers</text>
 <text x="627.2" y="151.5" fill="#7f849c" textLength="58.8" lengthAdjust="spacingAndGlyphs">Cookies</text>
@@ -326,19 +326,19 @@
 <line x1="480.2" y1="156" x2="480.2" y2="165" stroke="#cba6f7" stroke-width="1.2"/><line x1="480.2" y1="165" x2="480.2" y2="174" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="488.6" y1="156" x2="488.6" y2="165" stroke="#585b70" stroke-width="1.2"/><line x1="488.6" y1="165" x2="488.6" y2="174" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1185.8" y1="156" x2="1185.8" y2="165" stroke="#585b70" stroke-width="1.2"/><line x1="1185.8" y1="165" x2="1185.8" y2="174" stroke="#585b70" stroke-width="1.2"/>
-<text x="22.4" y="169.5" fill="#7f849c" textLength="67.2" lengthAdjust="spacingAndGlyphs">22:11:43</text>
-<text x="98.0" y="169.5" fill="#f38ba8" textLength="8.4" lengthAdjust="spacingAndGlyphs">!</text>
-<text x="114.8" y="169.5" fill="#cdd6f4" textLength="134.4" lengthAdjust="spacingAndGlyphs">POST /auth/login</text>
+<text x="22.4" y="169.5" fill="#7f849c" textLength="100.8" lengthAdjust="spacingAndGlyphs">Nov 24 23:44</text>
+<text x="131.6" y="169.5" fill="#f38ba8" textLength="8.4" lengthAdjust="spacingAndGlyphs">!</text>
+<text x="148.4" y="169.5" fill="#cdd6f4" textLength="134.4" lengthAdjust="spacingAndGlyphs">POST /auth/login</text>
 <text x="434.0" y="169.5" fill="#7f849c" textLength="42.0" lengthAdjust="spacingAndGlyphs">error</text>
 <text x="492.8" y="169.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">{</text>
 <line x1="18.2" y1="174" x2="18.2" y2="183" stroke="#cba6f7" stroke-width="1.2"/><line x1="18.2" y1="183" x2="18.2" y2="192" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="480.2" y1="174" x2="480.2" y2="183" stroke="#cba6f7" stroke-width="1.2"/><line x1="480.2" y1="183" x2="480.2" y2="192" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="488.6" y1="174" x2="488.6" y2="183" stroke="#585b70" stroke-width="1.2"/><line x1="488.6" y1="183" x2="488.6" y2="192" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1185.8" y1="174" x2="1185.8" y2="183" stroke="#585b70" stroke-width="1.2"/><line x1="1185.8" y1="183" x2="1185.8" y2="192" stroke="#585b70" stroke-width="1.2"/>
-<text x="22.4" y="187.5" fill="#7f849c" textLength="100.8" lengthAdjust="spacingAndGlyphs">Nov 23 19:40</text>
-<text x="131.6" y="187.5" fill="#a6e3a1" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
-<text x="148.4" y="187.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs">GET /users/{id}</text>
-<text x="400.4" y="187.5" fill="#7f849c" textLength="75.6" lengthAdjust="spacingAndGlyphs">200 · 0ms</text>
+<text x="22.4" y="187.5" fill="#7f849c" textLength="100.8" lengthAdjust="spacingAndGlyphs">Nov 24 23:41</text>
+<text x="131.6" y="187.5" fill="#f38ba8" textLength="8.4" lengthAdjust="spacingAndGlyphs">!</text>
+<text x="148.4" y="187.5" fill="#cdd6f4" textLength="134.4" lengthAdjust="spacingAndGlyphs">POST /auth/login</text>
+<text x="434.0" y="187.5" fill="#7f849c" textLength="42.0" lengthAdjust="spacingAndGlyphs">error</text>
 <text x="509.6" y="187.5" fill="#cba6f7" textLength="58.8" lengthAdjust="spacingAndGlyphs">"email"</text>
 <text x="568.4" y="187.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
 <text x="585.2" y="187.5" fill="#a6e3a1" textLength="142.8" lengthAdjust="spacingAndGlyphs">"ana@example.com"</text>
@@ -347,10 +347,10 @@
 <line x1="480.2" y1="192" x2="480.2" y2="201" stroke="#cba6f7" stroke-width="1.2"/><line x1="480.2" y1="201" x2="480.2" y2="210" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="488.6" y1="192" x2="488.6" y2="201" stroke="#585b70" stroke-width="1.2"/><line x1="488.6" y1="201" x2="488.6" y2="210" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1185.8" y1="192" x2="1185.8" y2="201" stroke="#585b70" stroke-width="1.2"/><line x1="1185.8" y1="201" x2="1185.8" y2="210" stroke="#585b70" stroke-width="1.2"/>
-<text x="22.4" y="205.5" fill="#7f849c" textLength="100.8" lengthAdjust="spacingAndGlyphs">Nov 23 19:40</text>
-<text x="131.6" y="205.5" fill="#a6e3a1" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
-<text x="148.4" y="205.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs">GET /users/{id}</text>
-<text x="400.4" y="205.5" fill="#7f849c" textLength="75.6" lengthAdjust="spacingAndGlyphs">200 · 0ms</text>
+<text x="22.4" y="205.5" fill="#7f849c" textLength="100.8" lengthAdjust="spacingAndGlyphs">Nov 24 23:20</text>
+<text x="131.6" y="205.5" fill="#f38ba8" textLength="8.4" lengthAdjust="spacingAndGlyphs">!</text>
+<text x="148.4" y="205.5" fill="#cdd6f4" textLength="134.4" lengthAdjust="spacingAndGlyphs">POST /auth/login</text>
+<text x="434.0" y="205.5" fill="#7f849c" textLength="42.0" lengthAdjust="spacingAndGlyphs">error</text>
 <text x="509.6" y="205.5" fill="#cba6f7" textLength="33.6" lengthAdjust="spacingAndGlyphs">"id"</text>
 <text x="543.2" y="205.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
 <text x="560.0" y="205.5" fill="#fab387" textLength="8.4" lengthAdjust="spacingAndGlyphs">1</text>
@@ -359,6 +359,10 @@
 <line x1="480.2" y1="210" x2="480.2" y2="219" stroke="#cba6f7" stroke-width="1.2"/><line x1="480.2" y1="219" x2="480.2" y2="228" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="488.6" y1="210" x2="488.6" y2="219" stroke="#585b70" stroke-width="1.2"/><line x1="488.6" y1="219" x2="488.6" y2="228" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1185.8" y1="210" x2="1185.8" y2="219" stroke="#585b70" stroke-width="1.2"/><line x1="1185.8" y1="219" x2="1185.8" y2="228" stroke="#585b70" stroke-width="1.2"/>
+<text x="22.4" y="223.5" fill="#7f849c" textLength="100.8" lengthAdjust="spacingAndGlyphs">Nov 24 22:11</text>
+<text x="131.6" y="223.5" fill="#f38ba8" textLength="8.4" lengthAdjust="spacingAndGlyphs">!</text>
+<text x="148.4" y="223.5" fill="#cdd6f4" textLength="134.4" lengthAdjust="spacingAndGlyphs">POST /auth/login</text>
+<text x="434.0" y="223.5" fill="#7f849c" textLength="42.0" lengthAdjust="spacingAndGlyphs">error</text>
 <text x="509.6" y="223.5" fill="#cba6f7" textLength="50.4" lengthAdjust="spacingAndGlyphs">"name"</text>
 <text x="560.0" y="223.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
 <text x="576.8" y="223.5" fill="#a6e3a1" textLength="92.4" lengthAdjust="spacingAndGlyphs">"Ana Souza"</text>
@@ -367,6 +371,10 @@
 <line x1="480.2" y1="228" x2="480.2" y2="237" stroke="#cba6f7" stroke-width="1.2"/><line x1="480.2" y1="237" x2="480.2" y2="246" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="488.6" y1="228" x2="488.6" y2="237" stroke="#585b70" stroke-width="1.2"/><line x1="488.6" y1="237" x2="488.6" y2="246" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1185.8" y1="228" x2="1185.8" y2="237" stroke="#585b70" stroke-width="1.2"/><line x1="1185.8" y1="237" x2="1185.8" y2="246" stroke="#585b70" stroke-width="1.2"/>
+<text x="22.4" y="241.5" fill="#7f849c" textLength="100.8" lengthAdjust="spacingAndGlyphs">Nov 23 19:40</text>
+<text x="131.6" y="241.5" fill="#a6e3a1" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
+<text x="148.4" y="241.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs">GET /users/{id}</text>
+<text x="400.4" y="241.5" fill="#7f849c" textLength="75.6" lengthAdjust="spacingAndGlyphs">200 · 0ms</text>
 <text x="509.6" y="241.5" fill="#cba6f7" textLength="50.4" lengthAdjust="spacingAndGlyphs">"role"</text>
 <text x="560.0" y="241.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
 <text x="576.8" y="241.5" fill="#a6e3a1" textLength="58.8" lengthAdjust="spacingAndGlyphs">"admin"</text>
@@ -374,6 +382,10 @@
 <line x1="480.2" y1="246" x2="480.2" y2="255" stroke="#cba6f7" stroke-width="1.2"/><line x1="480.2" y1="255" x2="480.2" y2="264" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="488.6" y1="246" x2="488.6" y2="255" stroke="#585b70" stroke-width="1.2"/><line x1="488.6" y1="255" x2="488.6" y2="264" stroke="#585b70" stroke-width="1.2"/>
 <line x1="1185.8" y1="246" x2="1185.8" y2="255" stroke="#585b70" stroke-width="1.2"/><line x1="1185.8" y1="255" x2="1185.8" y2="264" stroke="#585b70" stroke-width="1.2"/>
+<text x="22.4" y="259.5" fill="#7f849c" textLength="100.8" lengthAdjust="spacingAndGlyphs">Nov 23 19:40</text>
+<text x="131.6" y="259.5" fill="#a6e3a1" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
+<text x="148.4" y="259.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs">GET /users/{id}</text>
+<text x="400.4" y="259.5" fill="#7f849c" textLength="75.6" lengthAdjust="spacingAndGlyphs">200 · 0ms</text>
 <text x="492.8" y="259.5" fill="#cdd6f4" textLength="8.4" lengthAdjust="spacingAndGlyphs">}</text>
 <line x1="18.2" y1="264" x2="18.2" y2="273" stroke="#cba6f7" stroke-width="1.2"/><line x1="18.2" y1="273" x2="18.2" y2="282" stroke="#cba6f7" stroke-width="1.2"/>
 <line x1="480.2" y1="264" x2="480.2" y2="273" stroke="#cba6f7" stroke-width="1.2"/><line x1="480.2" y1="273" x2="480.2" y2="282" stroke="#cba6f7" stroke-width="1.2"/>
