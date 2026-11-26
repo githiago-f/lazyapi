@@ -1,8 +1,14 @@
 # Installation
 
-## Build from source
+## Go install
 
-Requires Go 1.25 or later.
+Requires Go 1.26 or later.
+
+```bash
+go install github.com/githiago-f/lazyapi/cmd/lazyapi@latest
+```
+
+## Build from source
 
 ```bash
 git clone https://github.com/githiago-f/lazyapi.git

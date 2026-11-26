@@ -6,6 +6,8 @@ description: >
   accounting, and rendering validation with DebugRenderPane.
   Triggered by requests like "fix layout", "borders overflow", "sizing is wrong",
   "element doesn't fit", "align this component", "adjust the layout".
+metadata:
+  internal: true # for contributors to lazyapi; hidden from `npx skills add`
 ---
 
 # LazyAPI Layout Validation Skill

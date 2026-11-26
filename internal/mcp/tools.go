@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,6 +17,7 @@ import (
 	"github.com/githiago-f/lazyapi/internal/inspect"
 	"github.com/githiago-f/lazyapi/internal/jq"
 	"github.com/githiago-f/lazyapi/internal/model"
+	"github.com/githiago-f/lazyapi/internal/permit"
 	"github.com/githiago-f/lazyapi/internal/project"
 	"github.com/githiago-f/lazyapi/internal/report"
 	"github.com/githiago-f/lazyapi/internal/runner"
@@ -29,7 +31,11 @@ type Tools struct {
 	Root string
 	// FindSpecs lists OpenAPI files under Root (injected for testability).
 	FindSpecs func(root string) ([]string, error)
+	// Permit decides which servers requests may go to (nil: any).
+	Permit *permit.Policy
 }
+
+type toolKey struct{}
 
 type tool struct {
 	Name        string         `json:"name"`
@@ -114,8 +120,11 @@ var toolList = []tool{
 			"operations":    strList(`Only these operations (operationId or "METHOD /path")`),
 			"grep":          str("Regular expression over \"METHOD /path operationId summary\""),
 			"params":        strMap("Path parameters for every operation that declares them"),
+			"query":         strMap("Query parameters added to every request"),
 			"headers":       strMap("Headers added to every request"),
 			"env_file":      str("Environment file, relative to the root"),
+			"env_name":      str("Named environment from .lazyapi/config.yml (server, env file, vars, credentials, TLS/proxy)"),
+			"insecure":      boolean("Skip TLS certificate verification (self-signed development servers)"),
 			"no_contract":   boolean("Skip response schema validation"),
 			"bail":          boolean("Stop after the first failure"),
 			"dry_run":       boolean("List what would be sent without sending"),
@@ -225,7 +234,7 @@ func (t *Tools) Call(ctx context.Context, name string, args json.RawMessage) (an
 			if len(args) == 0 || string(args) == "null" {
 				args = json.RawMessage("{}")
 			}
-			return tl.call(t, ctx, args)
+			return tl.call(t, context.WithValue(ctx, toolKey{}, name), args)
 		}
 	}
 	return nil, fmt.Errorf("unknown tool %q", name)
@@ -349,7 +358,23 @@ type runArgs struct {
 	DryRun     bool              `json:"dry_run"`
 }
 
-func (t *Tools) options(a runArgs) (string, runner.Options, error) {
+// checker is the permission checker of the tool call in ctx.
+func (t *Tools) checker(ctx context.Context) *permit.Checker {
+	tool, _ := ctx.Value(toolKey{}).(string)
+	return t.Permit.Calls(tool)
+}
+
+// moduleLoader downloads the https:// imports of scripts through the
+// permission checker: a new import host needs the user's approval too.
+func (t *Tools) moduleLoader(ctx context.Context, lockDir string) *script.ModuleLoader {
+	m := script.NewModuleLoader(lockDir)
+	if t.Permit != nil {
+		m.Client = t.checker(ctx).Client(&http.Client{Timeout: 30 * time.Second})
+	}
+	return m
+}
+
+func (t *Tools) options(ctx context.Context, a runArgs) (string, runner.Options, error) {
 	specPath, err := t.path(a.Spec)
 	if err != nil {
 		return "", runner.Options{}, err
@@ -372,6 +397,12 @@ func (t *Tools) options(a runArgs) (string, runner.Options, error) {
 	if err != nil {
 		return "", runner.Options{}, err
 	}
+	modules := t.moduleLoader(ctx, filepath.Dir(specPath))
+	if t.Permit != nil {
+		// Every request of this call (scripts, flows, OAuth and redirects
+		// included) asks before reaching a server the user did not allow.
+		client = t.checker(ctx).Client(client)
+	}
 	return specPath, runner.Options{
 		HTTPClient:    client,
 		EnvName:       sel.Name,
@@ -383,7 +414,7 @@ func (t *Tools) options(a runArgs) (string, runner.Options, error) {
 		Query:         a.Query,
 		Headers:       a.Headers,
 		Timeout:       model.DefaultTimeout,
-		Modules:       script.NewModuleLoader(filepath.Dir(specPath)),
+		Modules:       modules,
 		ScriptTimeout: script.DefaultTimeout,
 		NoContract:    a.NoContract,
 		DryRun:        a.DryRun,
@@ -403,7 +434,7 @@ func (t *Tools) sendRequest(ctx context.Context, args json.RawMessage) (any, err
 	if err := jq.Check(a.JQ); err != nil {
 		return nil, err
 	}
-	specPath, opts, err := t.options(a.runArgs)
+	specPath, opts, err := t.options(ctx, a.runArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +497,7 @@ func (t *Tools) runTests(ctx context.Context, args json.RawMessage) (any, error)
 	if err := decode(args, &a); err != nil {
 		return nil, err
 	}
-	specPath, opts, err := t.options(a.runArgs)
+	specPath, opts, err := t.options(ctx, a.runArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -547,7 +578,7 @@ func (t *Tools) readTest(_ context.Context, args json.RawMessage) (any, error) {
 	return map[string]any{"path": t.rel(scriptPath), "exists": exists, "source": string(data)}, nil
 }
 
-func (t *Tools) writeTest(_ context.Context, args json.RawMessage) (any, error) {
+func (t *Tools) writeTest(ctx context.Context, args json.RawMessage) (any, error) {
 	var a struct {
 		opArgs
 		Source string `json:"source"`
@@ -578,7 +609,7 @@ func (t *Tools) writeTest(_ context.Context, args json.RawMessage) (any, error) 
 	out := map[string]any{"path": t.rel(scriptPath), "saved": true}
 	opts, err := script.OperationOptions(specPath, op, ref)
 	if err == nil {
-		opts.Modules = script.NewModuleLoader(filepath.Dir(specPath))
+		opts.Modules = t.moduleLoader(ctx, filepath.Dir(specPath))
 		_, err = script.Bundle(a.Source, opts)
 		if saveErr := opts.Modules.SaveLock(); err == nil {
 			err = saveErr
@@ -614,7 +645,7 @@ func (t *Tools) runFlow(ctx context.Context, args json.RawMessage) (any, error) 
 	if err := decode(args, &a); err != nil {
 		return nil, err
 	}
-	specPath, opts, err := t.options(a.runArgs)
+	specPath, opts, err := t.options(ctx, a.runArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -641,7 +672,7 @@ func (t *Tools) runFlow(ctx context.Context, args json.RawMessage) (any, error) 
 	return res, nil
 }
 
-func (t *Tools) writeFlow(_ context.Context, args json.RawMessage) (any, error) {
+func (t *Tools) writeFlow(ctx context.Context, args json.RawMessage) (any, error) {
 	var a struct {
 		Spec   string `json:"spec"`
 		Name   string `json:"name"`
@@ -668,7 +699,7 @@ func (t *Tools) writeFlow(_ context.Context, args json.RawMessage) (any, error) 
 	}
 	out := map[string]any{"path": t.rel(path), "saved": true}
 	specDir, _ := filepath.Abs(filepath.Dir(specPath))
-	modules := script.NewModuleLoader(specDir)
+	modules := t.moduleLoader(ctx, specDir)
 	if _, err := script.Bundle(a.Source, script.Options{Filename: path, ResolveDir: dir, Root: specDir, Modules: modules}); err != nil {
 		out["compileError"] = err.Error()
 	} else if err := modules.SaveLock(); err != nil {
@@ -720,7 +751,7 @@ func (t *Tools) exportCurl(ctx context.Context, args json.RawMessage) (any, erro
 	if err := decode(args, &a); err != nil {
 		return nil, err
 	}
-	specPath, opts, err := t.options(a.runArgs)
+	specPath, opts, err := t.options(ctx, a.runArgs)
 	if err != nil {
 		return nil, err
 	}

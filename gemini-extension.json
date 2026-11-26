@@ -1,0 +1,11 @@
+{
+  "name": "lazyapi",
+  "version": "2.2.0",
+  "description": "Explore, test and integrate with HTTP APIs from their OpenAPI spec: skills plus the lazyapi MCP server (requests only reach servers you allow).",
+  "mcpServers": {
+    "lazyapi": {
+      "command": "lazyapi",
+      "args": ["mcp", "--root", "${workspacePath}"]
+    }
+  }
+}

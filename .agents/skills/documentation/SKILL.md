@@ -7,6 +7,8 @@ description: >
   Triggered by requests like "document this", "update docs",
   "write documentation", "add doc comments", "update the website",
   "document the CLI", "document the TUI feature".
+metadata:
+  internal: true # for contributors to lazyapi; hidden from `npx skills add`
 ---
 
 # LazyAPI Documentation Skill

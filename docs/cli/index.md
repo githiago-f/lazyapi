@@ -22,6 +22,7 @@ Flags may appear before or after positional arguments.
 | [`mcp`](/agents) | Serve these tools to AI agents over MCP |
 | [`mock`](/cli/mock) | Fake API from the spec's examples, with request validation |
 | [`fake`](/cli/fake) | List the `{{$dynamic}}` variables (faker), or generate one |
+| [`allow`](/cli/allow) | Allow a server for agents (the MCP server asks before calling new servers); list or revoke |
 | [`login` / `logout`](/cli/login) | Log in to an OAuth2 / OpenID Connect scheme (browser or device code); sessions are refreshed automatically |
 | [`import`](/cli/import) | Add operations from curl, Postman collections or HAR captures |
 | [`create file`](/cli/create) | Create a new OpenAPI spec template |

@@ -8,7 +8,7 @@ import (
 )
 
 // Commands lists the first words that select CLI mode instead of the TUI.
-var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "fake", "mcp", "mock", "import", "login", "logout", "help"}
+var Commands = []string{"create", "remove", "add", "send", "smoke", "run", "list", "describe", "validate", "types", "fake", "mcp", "mock", "import", "login", "logout", "allow", "help"}
 
 // Run executes a CLI command and exits with its status code
 // (0 ok, 1 a check failed, 2 usage error, 3 something could not run).
@@ -100,6 +100,9 @@ func run(args []string) error {
 	case "mcp":
 		return ServeMCP(args[1:])
 
+	case "allow":
+		return Allow(args[1:])
+
 	case "mock":
 		return ServeMock(args[1:])
 
@@ -141,7 +144,8 @@ Usage:
   lazyapi fake [name] [--json]                      List the {{$dynamic}} variables (faker), or generate one
 
   Agents and local development
-  lazyapi mcp [--root dir]                          Serve the tools above over MCP (stdio)
+  lazyapi mcp [--root dir] [--allow origin]         Serve the tools above over MCP (stdio); asks before calling new servers
+  lazyapi allow <origin> [--writes] | --list        Allow a server for agents (MCP), list or --revoke grants
   lazyapi mock <spec.yml> [--port 4010]             Fake API from the spec's examples (validates requests)
 
   Editing
