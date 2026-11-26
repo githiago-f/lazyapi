@@ -142,6 +142,11 @@ func (r *Request) SendTimed(parent context.Context) (*http.Response, string, Tim
 		mu                                   sync.Mutex
 		timing                               Timing
 		dnsStart, connStart, tlsStart, wrote time.Time
+		// sent is when the transport first asked for a connection: the
+		// total starts there, not before Do, so time a wrapping
+		// RoundTripper spends first (the MCP server asking the user to
+		// allow the host) is not counted as the server's.
+		sent time.Time
 	)
 	locked := func(f func()) { mu.Lock(); defer mu.Unlock(); f() }
 	snapshot := func() Timing { mu.Lock(); defer mu.Unlock(); return timing }
@@ -152,8 +157,15 @@ func (r *Request) SendTimed(parent context.Context) (*http.Response, string, Tim
 		ConnectDone:       func(string, string, error) { locked(func() { timing.Connect = time.Since(connStart) }) },
 		TLSHandshakeStart: func() { locked(func() { tlsStart = time.Now() }) },
 		TLSHandshakeDone:  func(tls.ConnectionState, error) { locked(func() { timing.TLS = time.Since(tlsStart) }) },
-		GotConn:           func(info httptrace.GotConnInfo) { locked(func() { timing.Reused = info.Reused }) },
-		WroteRequest:      func(httptrace.WroteRequestInfo) { locked(func() { wrote = time.Now() }) },
+		GetConn: func(string) {
+			locked(func() {
+				if sent.IsZero() {
+					sent = time.Now()
+				}
+			})
+		},
+		GotConn:      func(info httptrace.GotConnInfo) { locked(func() { timing.Reused = info.Reused }) },
+		WroteRequest: func(httptrace.WroteRequestInfo) { locked(func() { wrote = time.Now() }) },
 		GotFirstResponseByte: func() {
 			locked(func() {
 				if !wrote.IsZero() {
@@ -179,7 +191,12 @@ func (r *Request) SendTimed(parent context.Context) (*http.Response, string, Tim
 		limit = DefaultMaxBody
 	}
 	bodyBytes, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
-	locked(func() { timing.Total = time.Since(start) })
+	locked(func() {
+		if !sent.IsZero() {
+			start = sent
+		}
+		timing.Total = time.Since(start)
+	})
 	if err != nil {
 		return nil, "", snapshot(), err
 	}

@@ -1,6 +1,7 @@
 package script
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -125,8 +126,7 @@ func (c *SpecContext) Send(target string, opts SendOptions) (*Response, error) {
 		return nil, err
 	}
 
-	start := time.Now()
-	httpResp, body, err := req.Send()
+	httpResp, body, timing, err := req.SendTimed(context.Background())
 	if err != nil {
 		c.observe(ref, req, nil, err)
 		return nil, err
@@ -136,7 +136,7 @@ func (c *SpecContext) Send(target string, opts SendOptions) (*Response, error) {
 		StatusText: httpResp.Status,
 		Header:     httpResp.Header,
 		Body:       body,
-		Duration:   time.Since(start),
+		Duration:   timing.Total,
 		Ref:        &ref,
 	}
 	c.observe(ref, req, resp, nil)

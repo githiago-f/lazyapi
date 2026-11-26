@@ -35,7 +35,9 @@ The MCP server never sends a request to a server you have not allowed. The first
 
 - "Only this request" lasts for the tool call, so `run_tests` over 50 operations asks once; a refusal also holds for the rest of the call.
 - Everything the server sends is covered: operations, `lazyapi.send` in test scripts and flows, OAuth token calls, every redirect hop, and `https://` imports of test scripts (a script cannot leak data through an import URL).
-- Clients that cannot show the question get a `lazyapi blocked …` result telling the agent to ask you. The skills and the server's instructions tell agents never to grant themselves access.
+- Pick an answer before accepting: the question has no preset answer. Your thinking time does not count against the request's timeout; an unanswered question gives up after 5 minutes.
+- Supported MCP revisions: 2025-11-25 (titled choices), 2025-06-18, 2025-03-26 and 2024-11-05.
+- Clients that cannot show the question (no elicitation, or URL mode only) get a `lazyapi blocked …` result telling the agent to ask you. The skills and the server's instructions tell agents never to grant themselves access.
 - "Always" answers are stored in your config directory (`~/.config/lazyapi/permissions.json` on Linux, `$LAZYAPI_PERMISSIONS` overrides), never in the project: a repository cannot pre-approve servers for whoever opens it. Manage them with [`lazyapi allow`](/cli/allow).
 
 Per server setup instead of answers: `--allow <origin>` (reads) and `--allow-writes <origin>` on the `lazyapi mcp` command; `--allow localhost` for local servers. `--permissions off` disables the check (trusted automation only).

@@ -142,6 +142,7 @@ internal/
 
 - Every request of an MCP tool call goes through `permit.Checker.Client` (set in `Tools.options` and `Tools.moduleLoader`): operations, `lazyapi.send`, flows, OAuth, redirects, `https://` script imports. Never build an `http.Client` in `internal/mcp` without it.
 - Not allowed → `elicitation/create` when the client declared the capability (`Server.Asker`), else a `*permit.DeniedError` telling the agent to ask the user. Grants are never stored in the project.
+- The question (`Server.askPermission`) has no default answer (a preset made Accept mean Deny in Claude Code); 2025-11-25 clients get titled enums (`oneOf` const/title) + `mode: "form"`, older ones `enum`/`enumNames`. Its wait runs on `Policy.AskTimeout`, not the request's: `permit.guard` moves the request deadline by the time it waited. Remaining 2025-11-25 work: #36.
 
 ## Key Types
 
