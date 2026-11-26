@@ -70,6 +70,11 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			h.focusPos = cell
 		}
 
+	case tea.PasteMsg:
+		if h.active {
+			return &h, h.grid.update(h.focusPos, msg)
+		}
+
 	case tea.KeyPressMsg:
 		if !h.active {
 			return &h, nil
@@ -96,3 +101,6 @@ func (h header) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // Completing reports whether the focused field has its menu open.
 func (h header) Completing() bool { return h.active && h.grid.completing(h.focusPos) }
+
+// HasSelection reports whether ctrl+c copies the focused field.
+func (h header) HasSelection() bool { return h.active && h.grid.canCopy(h.focusPos) }

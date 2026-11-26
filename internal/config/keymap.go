@@ -50,6 +50,8 @@ type KeyMap struct {
 	SwitchEnv  key.Binding
 	Cancel     key.Binding
 	CopyCurl   key.Binding
+	BodyType   key.Binding
+	FilePart   key.Binding
 	Palette    key.Binding
 	RunAll     key.Binding
 	History    key.Binding
@@ -207,6 +209,14 @@ var DefaultKeyMap = KeyMap{
 	Cancel: key.NewBinding(
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "cancel request"),
+	),
+	BodyType: key.NewBinding(
+		key.WithKeys("alt+t"),
+		key.WithHelp("alt+t", "body type"),
+	),
+	FilePart: key.NewBinding(
+		key.WithKeys("ctrl+f"),
+		key.WithHelp("ctrl+f", "file/text"),
 	),
 	CopyCurl: key.NewBinding(
 		key.WithKeys("alt+c"),

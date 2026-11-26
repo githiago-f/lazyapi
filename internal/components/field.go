@@ -2,7 +2,9 @@ package components
 
 import (
 	"regexp"
+	"strings"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -55,6 +57,8 @@ type Field struct {
 	Focused   bool
 	Style     lipgloss.Style
 	Kind      FieldKind
+	// Prefix is drawn before the value inside the box (e.g. a file marker).
+	Prefix string
 
 	offset    int // first visible rune
 	menu      *Completion
@@ -70,6 +74,8 @@ func InitField(placeholder, value string) Field {
 	ti := textinput.New()
 	ti.Placeholder = placeholder
 	ti.Prompt = ""
+	// ctrl+v is ours: PasteCmd also reaches the Windows clipboard from WSL.
+	ti.KeyMap.Paste = key.NewBinding(key.WithDisabled())
 	ti.SetValue(value)
 	ti.Focus()
 	return Field{TextInput: ti}
@@ -92,9 +98,18 @@ func (f Field) View() tea.View {
 	return tea.NewView(f.Style.Inherit(defaultStyle).Render(f.Content(f.TextInput.EchoMode == textinput.EchoPassword)))
 }
 
+var prefixStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Accent)).Bold(true)
+
 // Content draws the value (or the placeholder) without the box.
 func (f Field) Content(masked bool) string {
-	width := f.width()
+	if f.Prefix == "" {
+		return f.content(masked, f.width())
+	}
+	pw := lipgloss.Width(f.Prefix)
+	return prefixStyle.Render(f.Prefix) + f.content(masked, max(1, f.width()-pw))
+}
+
+func (f Field) content(masked bool, width int) string {
 	cursor := -1
 	if f.TextInput.Focused() {
 		cursor = f.TextInput.Position()
@@ -164,6 +179,7 @@ func clampOffset(offset, cursor, width, n int) int {
 func (f *Field) ClickAt(col int) {
 	value := []rune(f.TextInput.Value())
 	off := clampOffset(f.offset, f.TextInput.Position(), f.width(), len(value))
+	col -= lipgloss.Width(f.Prefix)
 	f.TextInput.SetCursor(max(0, min(len(value), off+col-1)))
 	f.offset = off
 	f.menu = nil
@@ -178,7 +194,32 @@ func (f Field) MenuView(width int) string {
 	return f.menu.View(width)
 }
 
+// CanCopy reports whether ctrl+c copies the field (it has a value) rather
+// than quitting.
+func (f Field) CanCopy() bool { return f.TextInput.Value() != "" }
+
 func (f Field) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			if !f.CanCopy() {
+				return f, nil
+			}
+			return f, CopyCmd(f.TextInput.Value(), "✓ Copied")
+		case "ctrl+v":
+			return f, PasteCmd()
+		}
+	case tea.PasteMsg:
+		// One line: line breaks become spaces; a dropped file is its path.
+		text := CleanDrop(msg.Content)
+		text = strings.TrimRight(strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ").Replace(text), " ")
+		var cmd tea.Cmd
+		f.TextInput, cmd = f.TextInput.Update(tea.PasteMsg{Content: text})
+		f.dismissed = ""
+		f.refresh()
+		return f, cmd
+	}
 	if k, ok := msg.(tea.KeyPressMsg); ok && f.menu != nil {
 		switch k.String() {
 		case "up", "ctrl+p":

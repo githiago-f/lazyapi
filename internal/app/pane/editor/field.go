@@ -9,8 +9,25 @@ import (
 
 type paramField struct {
 	enabled bool
-	name    components.Field
-	value   components.Field
+	// file marks a multipart file part: the value is a local path.
+	file  bool
+	name  components.Field
+	value components.Field
+}
+
+// filePrefix marks a file part's value.
+const filePrefix = "@ "
+
+// setFile makes the row a file part (its value a path) or a text field.
+func (pf *paramField) setFile(file bool) {
+	pf.file = file
+	if file {
+		pf.value.Prefix = filePrefix
+		pf.value.TextInput.Placeholder = config.T("editor.body.file_placeholder")
+		return
+	}
+	pf.value.Prefix = ""
+	pf.value.TextInput.Placeholder = config.T("editor.grid.value")
 }
 
 func createParam() paramField {

@@ -26,10 +26,16 @@ type Body struct {
 	Type MimeType
 	Raw  string
 	// Files are multipart file parts: field name → local path. They are only
-	// set by the user (CLI --file), never derived from Raw, so scripts and
-	// remote callers cannot make lazyapi read arbitrary files.
+	// set by the user (CLI --file, the TUI editor), never derived from Raw,
+	// so scripts and remote callers cannot make lazyapi read arbitrary files.
 	Files map[string]string `yaml:"files,omitempty"`
+	// File is a local file sent as the whole body (a binary body, with Type
+	// as its Content-Type). Like Files, only the user sets it.
+	File string `yaml:"file,omitempty"`
 }
+
+// OctetStream is the default type of a binary (file) body.
+const OctetStream MimeType = "application/octet-stream"
 
 // IsForm reports whether the body is form-urlencoded or multipart.
 func (b Body) IsForm() bool {
@@ -43,6 +49,15 @@ func (b Body) IsForm() bool {
 func (b Body) encode(raw string) (io.Reader, string, error) {
 	t := strings.ToLower(string(b.Type))
 	switch {
+	case b.File != "":
+		data, err := os.ReadFile(b.File)
+		if err != nil {
+			return nil, "", fmt.Errorf("body file: %w", err)
+		}
+		if b.Type == "" {
+			return bytes.NewReader(data), string(OctetStream), nil
+		}
+		return bytes.NewReader(data), string(b.Type), nil
 	case strings.HasPrefix(t, string(MultipartForm)):
 		return b.multipart(raw)
 	case strings.HasPrefix(t, string(FormURLEncoded)):

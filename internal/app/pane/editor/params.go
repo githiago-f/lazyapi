@@ -131,6 +131,14 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			p.focusPos = p.query.cells() + cell
 		}
 
+	case tea.PasteMsg:
+		if p.active {
+			if q := p.query.cells(); p.focusPos < q {
+				return &p, p.query.update(p.focusPos, msg)
+			}
+			return &p, p.params.update(p.focusPos-p.query.cells(), msg)
+		}
+
 	case tea.KeyPressMsg:
 		if !p.active {
 			return &p, nil
@@ -164,6 +172,17 @@ func (p params) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return &p, nil
+}
+
+// HasSelection reports whether ctrl+c copies the focused field.
+func (p params) HasSelection() bool {
+	if !p.active {
+		return false
+	}
+	if q := p.query.cells(); p.focusPos >= q {
+		return p.params.canCopy(p.focusPos - q)
+	}
+	return p.query.canCopy(p.focusPos)
 }
 
 // Completing reports whether the focused field has its menu open.

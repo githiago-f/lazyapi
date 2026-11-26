@@ -253,7 +253,13 @@ func TestCodeEditorSelection(t *testing.T) {
 		t.Errorf("shrink: %q", c.SelectedText())
 	}
 	c, cmd := c.Update(k("ctrl+c"))
-	if clip.text != "hello wor" || cmd == nil {
+	if cmd == nil {
+		t.Fatal("ctrl+c returns the copy")
+	}
+	if msg, ok := cmd().(ShowNotificationMsg); !ok || clip.text != "hello wor" {
+		t.Errorf("copy: %q (%v)", clip.text, msg)
+	}
+	if clip.text != "hello wor" {
 		t.Errorf("copy: %q", clip.text)
 	}
 	if !c.HasSelection() {
@@ -278,13 +284,27 @@ func TestCodeEditorSelection(t *testing.T) {
 	// Multi-line cut and paste.
 	c.SetValue("one\ntwo\nthree")
 	c = typeIn(c, k("shift+down"), k("shift+end"))
-	c, _ = c.Update(k("alt+x"))
+	c, cmd = c.Update(k("alt+x"))
+	cmd()
 	if c.Value() != "\nthree" || clip.text != "one\ntwo" {
 		t.Errorf("cut: %q / %q", c.Value(), clip.text)
 	}
-	c = typeIn(c, k("alt+v"))
+	for _, paste := range []string{"alt+v", "ctrl+v"} {
+		_, cmd = c.Update(k(paste))
+		msg, ok := cmd().(tea.PasteMsg)
+		if !ok || msg.Content != "one\ntwo" {
+			t.Fatalf("%s reads the clipboard as a paste: %#v", paste, msg)
+		}
+	}
+	c, _ = c.Update(tea.PasteMsg{Content: "one\ntwo"})
 	if c.Value() != "one\ntwo\nthree" {
 		t.Errorf("paste: %q", c.Value())
+	}
+	// A paste replaces the selection.
+	c = typeIn(c, k("alt+a"))
+	c, _ = c.Update(tea.PasteMsg{Content: "new"})
+	if c.Value() != "new" {
+		t.Errorf("paste over a selection: %q", c.Value())
 	}
 
 	// tab / shift+tab indent the selected lines.

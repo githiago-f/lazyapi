@@ -108,3 +108,32 @@ func TestBody_Multipart(t *testing.T) {
 		t.Error("a value starting with @ must not read a file")
 	}
 }
+
+func TestBody_File(t *testing.T) {
+	srv, last := capture(t)
+	file := filepath.Join(t.TempDir(), "report.pdf")
+	if err := os.WriteFile(file, []byte("%PDF-1.7"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req := &Request{URI: "/", Method: PUT, ServerURL: srv.URL, Body: Body{Type: "application/pdf", File: file}}
+	if _, _, err := req.Send(); err != nil {
+		t.Fatal(err)
+	}
+	r := last()
+	if data, _ := io.ReadAll(r.Body); string(data) != "%PDF-1.7" || r.Header.Get("Content-Type") != "application/pdf" {
+		t.Errorf("file body = %q (%s)", data, r.Header.Get("Content-Type"))
+	}
+
+	req.Body = Body{File: file} // no type: octet-stream
+	if _, _, err := req.Send(); err != nil {
+		t.Fatal(err)
+	}
+	if ct := last().Header.Get("Content-Type"); ct != string(OctetStream) {
+		t.Errorf("default type = %q", ct)
+	}
+
+	req.Body = Body{Type: OctetStream, File: filepath.Join(t.TempDir(), "missing")}
+	if _, _, err := req.Send(); err == nil || !strings.Contains(err.Error(), "body file") {
+		t.Errorf("missing file: %v", err)
+	}
+}

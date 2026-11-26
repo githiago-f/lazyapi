@@ -7,7 +7,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/atotto/clipboard"
 	"github.com/githiago-f/lazyapi/internal/app/pane/editor"
 	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
 	"github.com/githiago-f/lazyapi/internal/components"
@@ -136,7 +135,7 @@ func (t Tui) startLogin(msg loginMsg) (Tui, tea.Cmd) {
 				// The URL (or the device code) is also on the clipboard:
 				// notifications are short and browsers may not open.
 				if link := linkPattern.FindString(text); link != "" {
-					_ = clipboard.WriteAll(link)
+					_ = components.Clipboard.WriteAll(link)
 				}
 				ch <- loginNoticeMsg{text: text}
 			},

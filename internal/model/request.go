@@ -71,12 +71,13 @@ type Disabled struct {
 	Headers map[string]string `yaml:"headers,omitempty"`
 	Query   map[string]string `yaml:"query,omitempty"`
 	Params  map[string]string `yaml:"pathParams,omitempty"`
-	Form    map[string]string `yaml:"form,omitempty"` // form body fields
+	Form    map[string]string `yaml:"form,omitempty"`  // form body fields
+	Files   map[string]string `yaml:"files,omitempty"` // multipart file parts
 }
 
 // IsZero reports whether nothing is switched off (yaml omitempty).
 func (d Disabled) IsZero() bool {
-	return len(d.Headers) == 0 && len(d.Query) == 0 && len(d.Params) == 0 && len(d.Form) == 0
+	return len(d.Headers) == 0 && len(d.Query) == 0 && len(d.Params) == 0 && len(d.Form) == 0 && len(d.Files) == 0
 }
 
 func (r *Request) templateContext() env.Context {

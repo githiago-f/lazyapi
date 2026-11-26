@@ -106,6 +106,17 @@ func (m Model) Deselect() (Model, tea.Cmd) {
 	return m, cmd
 }
 
+// Activate focuses the current tab's content (like enter).
+func (m Model) Activate() (Model, tea.Cmd) {
+	if m.selected {
+		return m, nil
+	}
+	m.selected = true
+	var cmd tea.Cmd
+	m.Tabs[m.cursor].Content, cmd = m.Tabs[m.cursor].Content.Update(SetActiveTabMsg{Active: true})
+	return m, cmd
+}
+
 // click switches tabs on a label and focuses the content when clicked
 // inside it (the click is then forwarded so the content can focus a field).
 func (m Model) click(msg tea.MouseClickMsg) (Model, tea.Cmd, bool) {
