@@ -16,6 +16,7 @@ func (r *Request) Curl(ctx context.Context) (string, error) {
 	// File parts are referenced (-F name=@path), not read.
 	noFiles := *r
 	noFiles.Body.Files = nil
+	noFiles.Body.File = ""
 	req, err := noFiles.HTTPRequest(ctx)
 	if err != nil {
 		return "", err
@@ -42,6 +43,15 @@ func (r *Request) Curl(ctx context.Context) (string, error) {
 	}
 
 	switch {
+	case r.Body.File != "":
+		if req.Header.Get("Content-Type") == "" {
+			t := r.Body.Type
+			if t == "" {
+				t = OctetStream
+			}
+			parts = append(parts, "-H", shellQuote("Content-Type: "+string(t)))
+		}
+		parts = append(parts, "--data-binary", shellQuote("@"+r.Body.File))
 	case multipartBody:
 		tctx := r.templateContext()
 		if fields, ok := jsonFields(env.Resolve(r.Body.Raw, tctx)); ok {

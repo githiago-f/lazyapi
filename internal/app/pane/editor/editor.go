@@ -10,7 +10,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/atotto/clipboard"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/githiago-f/lazyapi/internal/app/pane/responses"
 	"github.com/githiago-f/lazyapi/internal/components"
 	"github.com/githiago-f/lazyapi/internal/components/scrollable"
@@ -82,9 +82,6 @@ type RequestPane struct {
 	draftPath string
 
 	openAPIRef *model.OpenAPIRef
-	// bodyType is the media type of the loaded request body (kept on save
-	// and send; the Body tab edits only the content).
-	bodyType model.MimeType
 
 	envStore *env.Store
 
@@ -250,7 +247,6 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	rp.fileName = formData.FileName
 	rp.draftPath = formData.DraftPath
 	rp.openAPIRef = formData.OpenAPIRef
-	rp.bodyType = formData.Body.Type
 	rp.Method.Cursor = int(formData.Method)
 	rp.URI.TextInput.SetValue(formData.URI)
 
@@ -266,10 +262,30 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 	docs := rp.RequestTabs.Tabs[Documentation].Content.(*documentation)
 	*docs = docs.SetValue(formData.About)
 
+	var spec *openapi3.T
+	if formData.FileName != "" {
+		spec, _ = store.ParseSpec(formData.FileName)
+	}
+
 	bd := rp.RequestTabs.Tabs[Body].Content.(*body)
-	bd.SetType(formData.Body.Type)
+	var declared []string
+	if spec != nil && formData.OpenAPIRef != nil {
+		declared = store.BodyTypes(spec, *formData.OpenAPIRef)
+	}
+	bodyType := formData.Body.Type
+	switch {
+	case bodyType == "" && formData.Body.Raw != "":
+		bodyType = model.ApplicationJSON // a body without a type was always JSON
+	case spec != nil && formData.OpenAPIRef != nil && len(declared) == 0 &&
+		formData.Body.Raw == "" && formData.Body.File == "" && len(formData.Body.Files) == 0:
+		bodyType = "" // the operation takes no body (requests default to JSON)
+	}
+	bd.SetTypes(declared)
+	bd.SetType(bodyType)
 	bd.SetValue(formData.Body.Raw)
 	bd.SetDisabled(formData.Disabled.Form)
+	bd.SetFiles(formData.Body.Files, formData.Disabled.Files)
+	bd.SetFile(formData.Body.File)
 
 	hd := rp.RequestTabs.Tabs[Header].Content.(scrollable.Model).Content.(*header)
 	hd.SetValue(formData.Headers, formData.Disabled.Headers)
@@ -279,10 +295,8 @@ func (rp RequestPane) SetValue(formData model.Request) RequestPane {
 
 	au := rp.authTab()
 	var known []model.AuthScheme
-	if formData.FileName != "" {
-		if spec, err := store.ParseSpec(formData.FileName); err == nil {
-			known = store.SecuritySchemes(spec)
-		}
+	if spec != nil {
+		known = store.SecuritySchemes(spec)
 	}
 	au.SetSpec(formData.FileName, known)
 	au.SetValue(formData.Auth)
@@ -336,8 +350,10 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 		ServerURL:  rp.Server.Value(),
 		Servers:    rp.Server.Labels,
 		Body: model.Body{
-			Type: rp.bodyTypeOrJSON(),
-			Raw:  bd.Value(),
+			Type:  bd.Type(),
+			Raw:   bd.Value(),
+			Files: bd.Files(),
+			File:  bd.File(),
 		},
 		Auth:    au.Value(),
 		Headers: hd.Value(),
@@ -348,17 +364,11 @@ func (rp RequestPane) GetAsRequestData() model.Request {
 			Query:   pr.DisabledQuery(),
 			Params:  pr.DisabledParams(),
 			Form:    bd.Disabled(),
+			Files:   bd.DisabledFiles(),
 		},
 		Tests: tp.Value(),
 		Env:   envMap,
 	}
-}
-
-func (rp RequestPane) bodyTypeOrJSON() model.MimeType {
-	if rp.bodyType == "" {
-		return model.ApplicationJSON
-	}
-	return rp.bodyType
 }
 
 // fingerprint identifies the persisted part of a request.
@@ -444,6 +454,9 @@ func (rp RequestPane) shouldBlockTabCommands() bool {
 
 func (rp RequestPane) editableTab() bool {
 	c := tab(rp.RequestTabs.Cursor())
+	if c == Body && !rp.RequestTabs.Tabs[Body].Content.(*body).Raw() {
+		return false // forms, files and no body have no text to edit
+	}
 	return field(rp.fieldsCursor) == reqTabs && (c == Body || c == Tests)
 }
 
@@ -552,6 +565,21 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		rp.dirty = true
 		return rp.autosave(nil)
+	case tea.PasteMsg:
+		// Files dropped where no field has the focus go to the body.
+		textFocus := field(rp.fieldsCursor) == uri || (field(rp.fieldsCursor) == reqTabs && rp.BlockTab)
+		if !textFocus && components.DroppedFiles(msg.Content) != nil {
+			cmd := rp.focusField(reqTabs)
+			rp.RequestTabs.SetCursor(int(Body))
+			var acmd tea.Cmd
+			rp.RequestTabs, acmd = rp.RequestTabs.Activate()
+			rp.BlockTab = true
+			cmd = tea.Batch(cmd, acmd)
+			m, pcmd := rp.RequestTabs.Update(msg)
+			rp.RequestTabs = m.(tabs.Model)
+			rp.dirty = true
+			return rp.autosave(tea.Batch(cmd, pcmd))
+		}
 	case tea.MouseClickMsg:
 		return rp.click(msg)
 	case tea.MouseWheelMsg:
@@ -579,6 +607,9 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return rp, rp.testsPane().runTestsCmd()
 		}
 	}
+
+	// esc on an open list closes the list, not the editor.
+	listOpen := rp.Method.Open || rp.Server.Open
 
 	if !rp.Response.Searching() {
 		switch field(rp.fieldsCursor) {
@@ -634,9 +665,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(cmd, rcmd)
 		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && field(rp.fieldsCursor) == response && !rp.Response.Searching() &&
 			key.Matches(keyMsg, config.DefaultKeyMap.CopyResponse) && rp.Response.Body() != "" {
-			if err := clipboard.WriteAll(rp.Response.Body()); err == nil {
-				cmd = tea.Batch(cmd, notify("✓ Response body copied", components.Success))
-			}
+			cmd = tea.Batch(cmd, components.CopyCmd(rp.Response.Body(), "✓ Response body copied"))
 		}
 		if rp.Response.Searching() {
 			return rp, cmd
@@ -663,6 +692,9 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd = rp.RequestTabs.Update(childrenMsg)
 		rp.RequestTabs, _ = model.(tabs.Model)
 
+	case tea.PasteMsg:
+		rp.dirty = true // a paste or a file drop changes a field
+
 	case tea.KeyPressMsg:
 		rp.dirty = true
 		if consumed || rp.shouldBlockTabCommands() {
@@ -688,7 +720,7 @@ func (rp RequestPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, config.DefaultKeyMap.Save) && !rp.BlockTab:
 			cmd = tea.Batch(cmd, store.SaveFile(rp.GetAsRequestData()))
 			rp.savedFingerprint = fingerprint(rp.GetAsRequestData())
-		case key.Matches(msg, config.DefaultKeyMap.Back) && !rp.BlockTab:
+		case key.Matches(msg, config.DefaultKeyMap.Back) && !rp.BlockTab && !listOpen:
 			return rp, closePane(false)
 		}
 		if field(rp.fieldsCursor) == response {
@@ -827,9 +859,12 @@ func menuKey(k tea.KeyPressMsg) bool {
 	return false
 }
 
-// HasSelection reports whether the open tab's editor has selected text:
-// ctrl+c then copies it instead of quitting.
+// HasSelection reports whether ctrl+c copies instead of quitting: the URI
+// or a field of the open tab has a value, or its editor has selected text.
 func (rp RequestPane) HasSelection() bool {
+	if field(rp.fieldsCursor) == uri {
+		return rp.URI.CanCopy()
+	}
 	if field(rp.fieldsCursor) != reqTabs || !rp.BlockTab {
 		return false
 	}

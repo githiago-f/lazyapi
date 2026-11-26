@@ -43,13 +43,14 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `F5` | Run the test script on the last response (sends first if there is none) |
 | `ctrl+o` | Save to the spec (definitions, test script) |
 | `ctrl+e` | Save the last response as an example in the spec (outside text fields and editors, where `ctrl+e` is "end of line") |
-| `ctrl+x` | Open the Body or Tests tab in `$VISUAL` / `$EDITOR` |
+| `ctrl+x` | Open a text Body or the Tests tab in `$VISUAL` / `$EDITOR` |
 | `alt+c` | Copy the request as cURL (with the active environment's server and credentials) |
 | `{{` or `$name` | Open the variable menu; `↑`/`↓` choose, `tab` inserts, `esc` closes |
 | `alt+f` | Format the JSON body |
 | `ctrl+z` / `ctrl+y` | Undo / redo in Body, Tests and the description |
 | `shift` + movement, `alt+a` | Select in the code editor (`esc` clears) |
-| `ctrl+c` / `alt+x` / `alt+v` | Copy (only with a selection; otherwise quit) / cut / paste |
+| `ctrl+c` | Copy the focused field's value, or the code editor's selection (with nothing to copy: quit) |
+| `ctrl+v` | Paste into the focused field or editor (`alt+v` too; `alt+x` cuts in code editors) |
 | `esc` | Leave tab content, then back to the list |
 
 ### Tabs
@@ -61,7 +62,9 @@ The bottom bar always shows the keys that work in the current context. Press `?`
 | `ctrl+q` | Params | Add query parameter |
 | `ctrl+p` | Params | Add path parameter |
 | `ctrl+g` | Headers | Add header |
+| `alt+t` | Body | Change the body type (none, JSON, XML, text, forms, file…) |
 | `ctrl+g` | Body (form) | Add form field |
+| `ctrl+f` | Body (multipart) | Make the row a file part / a text field |
 | `ctrl+r` | Auth | Add auth scheme |
 | `del` / `⌫` | Auth | Delete the selected auth scheme |
 

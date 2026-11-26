@@ -34,6 +34,15 @@ func TestCurl(t *testing.T) {
 		t.Errorf("multipart curl = %s", got)
 	}
 
+	bin := &Request{URI: "/up", Method: PUT, ServerURL: "http://x", Body: Body{Type: "image/png", File: "/tmp/a b.png"}}
+	got, err = bin.Curl(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `curl -X PUT http://x/up -H 'Content-Type: image/png' --data-binary '@/tmp/a b.png'`; got != want {
+		t.Errorf("file curl = %s\nwant       %s", got, want)
+	}
+
 	get := &Request{URI: "/", Method: GET, ServerURL: "http://x"}
 	if got, _ := get.Curl(t.Context()); got != "curl http://x/" {
 		t.Errorf("GET = %s", got)

@@ -273,3 +273,18 @@ func ResponseExample(op *openapi3.Operation, status int) (mediaType, body string
 	}
 	return "", "", false
 }
+
+// BodyTypes lists the request body media types an operation declares,
+// sorted (nil when it has no request body).
+func BodyTypes(spec *openapi3.T, ref model.OpenAPIRef) []string {
+	op := FindOperation(spec, ref)
+	if op == nil || op.RequestBody == nil || op.RequestBody.Value == nil {
+		return nil
+	}
+	types := make([]string, 0, len(op.RequestBody.Value.Content))
+	for mt := range op.RequestBody.Value.Content {
+		types = append(types, mt)
+	}
+	slices.Sort(types)
+	return types
+}

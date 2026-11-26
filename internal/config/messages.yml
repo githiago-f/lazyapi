@@ -38,8 +38,21 @@ editor:
     hint: "{add} adds a header"
 
   body:
+    none: none
+    # After binary types in the type select.
+    file_suffix: (file)
+    type_hint: "{type} changes the type"
+    none_hint: "No body. {type} picks a type, or drop a file here to send it."
     form_title: Form fields
-    form_hint: "{add} adds a field · file parts are sent from the CLI (--file)"
+    form_hint: "{add} adds a field"
+    multipart_hint: "{add} adds a field · {file} makes it a file · drop files here"
+    file_title: File
+    file_hint: "Sent as the whole body · drop a file here or type its path"
+    file_placeholder: "path/to/file · drop a file here"
+    file_missing: file not found
+    dropped_binary: "The file is the body now · {type} changes the type"
+    one_file: Only the first file is sent (a binary body is one file)
+    files_need_multipart: "Files need multipart/form-data · {type} changes the body type"
 
   auth:
     empty: |-

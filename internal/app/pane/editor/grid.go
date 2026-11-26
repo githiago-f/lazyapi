@@ -166,6 +166,17 @@ func (g kvGrid) completing(cell int) bool {
 	return g.rows[cell/2].value.Completing()
 }
 
+// canCopy reports whether the cell's field has a value (ctrl+c copies it).
+func (g kvGrid) canCopy(cell int) bool {
+	if cell < 0 || cell >= g.cells() {
+		return false
+	}
+	if cell%2 == 0 {
+		return g.rows[cell/2].name.CanCopy()
+	}
+	return g.rows[cell/2].value.CanCopy()
+}
+
 // update sends msg to a cell.
 func (g *kvGrid) update(cell int, msg tea.Msg) tea.Cmd {
 	if cell < 0 || cell >= g.cells() {

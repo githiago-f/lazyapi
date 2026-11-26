@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/atotto/clipboard"
 	"github.com/evanw/esbuild/pkg/api"
 	"regexp"
 	"strings"
@@ -62,18 +61,6 @@ type CodeEditor struct {
 type textPos struct{ row, col int }
 
 func (p textPos) before(o textPos) bool { return p.row < o.row || p.row == o.row && p.col < o.col }
-
-// Clipboard is how the editor copies and pastes (replaced in tests).
-var Clipboard interface {
-	WriteAll(string) error
-	ReadAll() (string, error)
-} = SystemClipboard{}
-
-// SystemClipboard uses the OS clipboard.
-type SystemClipboard struct{}
-
-func (SystemClipboard) WriteAll(s string) error  { return clipboard.WriteAll(s) }
-func (SystemClipboard) ReadAll() (string, error) { return clipboard.ReadAll() }
 
 type snapshot struct {
 	text     string
@@ -405,7 +392,9 @@ func leadingSpaces(l []rune) string {
 }
 
 // selectionKey handles selecting (shift+movement, alt+a), the clipboard
-// (ctrl+c copy, alt+x cut, alt+v paste) and keys that act on a selection.
+// (ctrl+c copy, alt+x cut, ctrl+v / alt+v paste) and keys that act on a
+// selection. Copy and paste run in the background (the WSL clipboard is a
+// powershell.exe away); a paste comes back as a tea.PasteMsg.
 func (c *CodeEditor) selectionKey(k tea.KeyPressMsg) (bool, tea.Cmd) {
 	s := k.String()
 	if strings.Contains(s, "shift+") && s != "shift+tab" {
@@ -427,30 +416,21 @@ func (c *CodeEditor) selectionKey(k tea.KeyPressMsg) (bool, tea.Cmd) {
 		c.row = len(c.buf) - 1
 		c.col = len(c.buf[c.row])
 		return true, nil
-	case "alt+v":
-		text, err := Clipboard.ReadAll()
-		if err != nil {
-			return true, notifyCmd("Clipboard unavailable: "+err.Error(), Error)
-		}
-		c.checkpoint()
-		c.deleteSelection()
-		c.insert(strings.ReplaceAll(text, "\r\n", "\n"))
-		return true, nil
+	case "alt+v", "ctrl+v":
+		return true, PasteCmd()
 	}
 	if !c.HasSelection() {
 		return false, nil
 	}
 	switch s {
 	case "ctrl+c", "alt+x":
-		if err := Clipboard.WriteAll(c.SelectedText()); err != nil {
-			return true, notifyCmd("Clipboard unavailable: "+err.Error(), Error)
-		}
+		text := c.SelectedText()
 		if s == "alt+x" {
 			c.checkpoint()
 			c.deleteSelection()
-			return true, notifyCmd("✓ Cut", Success)
+			return true, CopyCmd(text, "✓ Cut")
 		}
-		return true, notifyCmd("✓ Copied", Success)
+		return true, CopyCmd(text, "✓ Copied")
 	case "esc":
 		c.anchor = nil
 		return true, nil
@@ -613,6 +593,7 @@ func (c CodeEditor) Update(msg tea.Msg) (CodeEditor, tea.Cmd) {
 	}
 	if paste, ok := msg.(tea.PasteMsg); ok {
 		c.checkpoint()
+		c.deleteSelection()
 		c.insert(strings.ReplaceAll(paste.Content, "\r\n", "\n"))
 		c.after(true)
 		return c, nil

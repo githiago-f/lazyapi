@@ -17,7 +17,7 @@ internal/
       editor/              #   Request editor (method, URL, headers, body, params, tests, auth)
         editor.go          #     RequestPane — top-level Update/View, cursor field cycle
         documentation.go   #     Summary + Description fields
-        body.go            #     Body textarea
+        body.go            #     Body tab: type select (alt+t; none, spec types, presets) over a CodeEditor, form rows (multipart rows can be files: ctrl+f, drops) or a file path (binary types)
         grid.go            #     kvGrid — name/value rows shared by headers, params and form fields, each with an on/off checkbox (ctrl+t / click); toMap = enabled rows, disabledMap = the others; view renders focus on copies
         header.go          #     Header key/value pairs (ctrl+g to add)
         params.go          #     Query + Path params (n+q / n+p to add)
@@ -70,6 +70,8 @@ internal/
     spec.go                #   SpecContext (lazyapi.send + contract; "METHOD https://…" targets mapped with store.MatchPath and sent to that host), ResolveTarget, OperationOptions
     lazyapi.d.ts           #   Public script API (embedded; printed by `lazyapi types`)
   components/              # Reusable UI components
+    clipboard.go           #   Clipboard (atotto, then powershell.exe under WSL), CopyCmd (async, OSC 52 fallback), PasteCmd (→ tea.PasteMsg)
+    drop.go                #   DroppedFiles/CleanDrop (a typed drop is caught by internal/app/burst.go) — a file drop is a paste of paths (quoted, escaped, file://, Windows paths under WSL)
     button.go              #   Button with click debounce
     field.go               #   Field wraps textinput.Model
     modal.go               #   Empty file (package decl only)
@@ -104,7 +106,7 @@ internal/
     request.go             #   Request, OpenAPIRef, Send()/SendContext(), HTTPRequest (the exact *http.Request sent; empty credentials are skipped), ResolvedURL, MissingPathParams
     oauth.go               #   AuthSecrets (issuer, grantType, redirectUri, params…), ApplySecrets (by scheme name), OAuthConfig (templates resolved → oauth.Config), OAuthSchemes (login candidates)
     client.go              #   HTTPOptions (insecure, CA, mTLS, proxy, redirects) → *http.Client; Timing
-    body.go                #   Body encoding: JSON object → form-urlencoded / multipart; file parts only from Body.Files (never from Raw)
+    body.go                #   Body encoding: JSON object → form-urlencoded / multipart; file parts only from Body.Files, a binary body from Body.File (never from Raw)
     curl.go                #   Request.Curl — exact request as a curl command
     method.go              #   Method iota (POST=0..HEAD), MarshalYAML/UnmarshalYAML/Label
     body.go                #   Body {MimeType, Raw}, MimeType constants
@@ -148,6 +150,7 @@ internal/
 - **Errors** — `tea.Cmd` wrappers return `store.ErrorMsg{Message}` on failure; the TUI shows it as a notification. Never return `tea.Quit`/`tea.Println` as a `tea.Msg` and never `panic` in store code.
 - **Temp/draft files** — stored in `.lazyapi/.local/drafts/` next to the spec (git-ignored; `workspace.Ensure` writes the .gitignore before anything goes there). Format: `tmp.<METHOD>.<sanitized-path>` for spec-ref'd operations, `draft.new.<N>` for new unsaved requests. On "save", merged into spec via `AddOperationToSpec` (new) or `ApplyRequestToOperation` (existing).
 - **Disabled rows** — `syncParameters` keeps the definitions of `Request.Disabled` params; disabled auth schemes are still written to the spec. Only the editor and drafts know the on/off state.
+- **Files** — `Body.Files` (multipart parts) and `Body.File` (binary body) are local paths chosen by the user (editor, CLI `--file`); drafts keep them, the spec and history never do.
 - **Key functions**: `ParseSpec`, `SaveSpec`, `ListOperations` (→ `[]model.RequestItem` with Tags), `OperationToRequest` (pre-fills path params and required query/header params from spec examples), `AddOperationToSpec`, `RemoveOperationFromSpec`, `ApplyRequestToOperation` (persists Summary/Description/content type/param defs/auth schemes — does NOT persist Body.Raw, header/param/query values), `LoadServers`, `SaveResponseExample`, `IsOpenAPIFile`, `UpdateOperationTags`.
 - **`Glob`** — custom double-star (`**`) glob in `filepath.go` using `strings.Split` + `filepath.Walk`.
 
@@ -179,6 +182,7 @@ internal/
 - Runs with writes (every method) and flows go through `Tui.confirmRun` (y/N), like destructive sends through `Tui.confirm`.
 - History is recorded on every `responses.ResultMsg` (`ResultMsg.Request` is the unresolved request). Never store `Request.Env`, auth secrets or resolved bodies.
 - `components.TemplateSource` (the TUI's `templateSource`: env file keys + environment vars to offer, the whole env to resolve) feeds completions and template colors in every Field and CodeEditor. While a menu is open (`Completing()`), tab/esc/arrows belong to it: containers (grid, auth, docs, editor URI, tabs) must check `Completing()` before using those keys (`menuKey`). `Tui.missingRefs()` lists references without a value for the editor help bar.
+- Keyboard input: `Tui.Update` holds printable keys until `burstWindow` (12 ms) passes without another (internal/app/burst.go): a burst spelling existing files becomes a `tea.PasteMsg` (terminals that type drops), anything else is replayed key by key; held keys reuse the last frame (`Tui.frame`) because View is called after every message. Tests set `burstWindow = 0` (TestMain): `finalScreen` quits from outside and would drop held keys. Two quick `esc` arrive as one `alt+esc`; `Tui.Update` replays it as two `esc`. `ctrl+c` copies when `RequestPane.HasSelection()` (a focused field with a value — `Field.CanCopy` — or an editor selection), else quits. `ctrl+v` in a Field/CodeEditor runs `components.PasteCmd`; containers must route `tea.PasteMsg` to the focused field (a terminal paste and a file drop arrive the same way).
 - Mouse: components mark what they draw with `components.Z.Mark` (unique ids: `Z.NewPrefix()` per instance, `Selector.ID`, `Button.ID`) and handle `tea.MouseClickMsg` with `Z.Get(id).InBounds`. `RequestPane.click` routes clicks to the area under the pointer (selects, URI, Send, tabs via `tabs.Model.click`, response); an open select gets the click first. Open lists make `Completing()` true so esc/tab reach them.
 - Do not use `textarea` for code: it re-renders the whole content on every key (slow past a few hundred lines) and its legacy `MaxHeight` (99) truncates content. Use `components.CodeEditor`.
 - `store.SampleBody`/`FillSampleBody` (schema → body) are for the editor only; `run` must never invent bodies.

@@ -12,7 +12,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/githiago-f/lazyapi/internal/app/pane/editor"
 	"github.com/githiago-f/lazyapi/internal/app/pane/historyview"
@@ -64,6 +63,15 @@ type Tui struct {
 	confirm *responses.SendMsg
 	// confirmRun is a run with writes waiting for y/N.
 	confirmRun *runview.Run
+
+	// burst holds printable keys for a moment: a file drop typed by the
+	// terminal is delivered as a paste (see burst.go).
+	burst     []tea.KeyPressMsg
+	burstID   int
+	replaying bool
+	// frame is the last view; Update sets reuse when nothing visible
+	// changed (a held key), so View skips the render.
+	frame *frame
 
 	palette     *palette.Model
 	runner      runview.Model
@@ -117,6 +125,7 @@ func NewTui(defaultFile string, envFile string) Tui {
 	h.Styles.ShortSeparator = lipgloss.NewStyle().Foreground(lipgloss.Color(config.Surface2))
 
 	tui := Tui{
+		frame:       &frame{},
 		defaultFile: defaultFile,
 		titleBar: components.TitleBar{
 			Style: lipgloss.NewStyle().
@@ -229,6 +238,19 @@ func (t Tui) keyMap() viewKeyMap {
 }
 
 func (t Tui) View() tea.View {
+	if t.frame != nil {
+		if t.frame.reuse && t.frame.drawn {
+			t.frame.reuse = false
+			return t.frame.last
+		}
+		v := t.render()
+		t.frame.last, t.frame.drawn, t.frame.reuse = v, true, false
+		return v
+	}
+	return t.render()
+}
+
+func (t Tui) render() tea.View {
 	var currentView string
 	vkm := t.keyMap()
 
@@ -525,6 +547,35 @@ func (t Tui) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		subModel tea.Model
 		cmd      tea.Cmd
 	)
+
+	if f, ok := msg.(burstFlushMsg); ok {
+		if f.id != t.burstID {
+			t.unchanged()
+			return t, nil
+		}
+		return t.flushBurst()
+	}
+	if held, hcmd, ok := t.holdKey(msg); ok {
+		if len(held.burst) > 0 {
+			held.unchanged()
+		}
+		return held, hcmd
+	}
+	if len(t.burst) > 0 && !t.replaying && interrupts(msg) {
+		m, first := t.flushBurst()
+		m, second := m.Update(msg)
+		return m, tea.Batch(first, second)
+	}
+
+	// Two esc pressed quickly reach us as one alt+esc (an escape-prefixed
+	// escape): handle them as the two presses they were, or each pair of a
+	// hurried "esc esc esc" is lost and the view seems stuck.
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "alt+esc" {
+		esc := tea.KeyPressMsg{Code: tea.KeyEscape}
+		m, first := t.Update(esc)
+		m, second := m.Update(esc)
+		return m, tea.Batch(first, second)
+	}
 
 	if lt, lcmd, ok := t.updateLogin(msg); ok {
 		return lt, lcmd
@@ -1053,10 +1104,7 @@ func (t Tui) copyCurl() tea.Cmd {
 	if err != nil {
 		return notify("Cannot build curl: "+err.Error(), components.Error)
 	}
-	if err := clipboard.WriteAll(cmd); err != nil {
-		return notify("Clipboard unavailable: "+err.Error(), components.Error)
-	}
-	return notify("✓ Request copied as cURL", components.Success)
+	return components.CopyCmd(cmd, "✓ Request copied as cURL")
 }
 
 // resultNotification summarises a finished request.

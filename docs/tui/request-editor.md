@@ -69,12 +69,24 @@ Custom HTTP headers as key/value pairs. Add with `n` + `h`. Common headers like 
 
 ### Body
 
-The request body, in the operation's media type:
+The request body. A select at the top of the tab picks its type: `none`, the types the operation declares in the spec, then `application/json`, `application/xml`, `text/plain`, `application/x-www-form-urlencoded`, `multipart/form-data` and `application/octet-stream`. `alt+t` (or a click) opens it from anywhere in the tab; in forms and file bodies `tab` also reaches it. Changing the type carries the content over: a JSON object becomes form rows, and form rows become a JSON object.
 
+- **none** — no body is sent (nor a `requestBody` added to the spec on save).
 - **JSON, text, XML, …** — the code editor (below): JSON is colored, validated as you type (templates count as values) and formatted with `alt+f`. `ctrl+x` opens it in `$EDITOR`.
-- **`application/x-www-form-urlencoded` and `multipart/form-data`** — **Form fields**: one name/value row per field, like the Headers tab. `tab` / `shift+tab` move between cells, `ctrl+g` adds a field, a row without a name is dropped, and a repeated name sends the field several times. The rows are kept as a JSON object, which is encoded as form fields when sending; `ctrl+x` edits that object in `$EDITOR`. File parts are only sent from the CLI (`--file`).
+- **`application/x-www-form-urlencoded` and `multipart/form-data`** — **Form fields**: one name/value row per field, like the Headers tab. `tab` / `shift+tab` move between cells, `ctrl+g` adds a field, a row without a name is dropped, and a repeated name sends the field several times. The rows are kept as a JSON object, which is encoded as form fields when sending.
+  In a multipart form, `ctrl+f` turns the focused row into a **file part** (its value, marked `@`, is the path of a local file) and back into text. Dropping files on the form makes the focused row a file part and adds a row for each other file.
+- **Binary types** (`application/octet-stream`, `image/png`, `application/pdf`, …, shown with `(file)`) — a file path: the file is sent as the whole body, with the type as its `Content-Type`. The tab shows its size, or `✗ file not found`. Dropping a file on a body set to `none` makes it a binary body with that file.
 
-Select the type from the dropdown.
+File paths stay in the request's draft (`.lazyapi/.local/drafts/`, git-ignored). They are never written to the spec, and never taken from the body text, scripts or MCP: only you choose which files are sent.
+
+## Copy, paste and dropping files
+
+- `ctrl+c` in a field with a value (URI, headers, params, auth, form rows, summary) copies the whole value; in a code editor it copies the selection. With nothing to copy, `ctrl+c` quits as everywhere.
+- `ctrl+v` pastes the system clipboard into the focused field or editor; the terminal's own paste (`ctrl+shift+v`, right click) works too. Line breaks pasted into a one-line field become spaces.
+- The clipboard is reached through `wl-clipboard`, `xclip` or `xsel` on Linux. Under WSL without them, lazyapi uses the Windows clipboard through `powershell.exe`. When no clipboard is reachable (SSH, for example), copies go through the terminal (OSC 52), which most terminals support.
+- **Drag and drop**: dropping files on the terminal window pastes their paths, and lazyapi recognizes them in the format every terminal uses: quoted (`'/a b.png'`, `"C:\a b.png"`), with escaped spaces (`/a\ b.png`), as `file://` URIs, one per line or space-separated. Under WSL, Windows paths (`C:\…`, `\\wsl.localhost\…`) become WSL paths. Terminals that deliver a drop as typed text rather than as a paste (Windows Terminal, some tmux setups) work too: keys that arrive within a few milliseconds of each other and spell existing files are taken as a drop, so the letters of the path never trigger shortcuts. In a text field the drop inserts the bare path; on the Body tab it sets the files to send (above). Dropped anywhere else in the editor (the method, Send, the tab bar, the response), files go to the Body tab.
+
+  Dropping needs a terminal that turns a drop into text: Windows Terminal, GNOME Terminal, Konsole, kitty, WezTerm, iTerm2 and most others do (inside tmux too). Under WSL, use Windows Terminal: it gives WSL paths (`/mnt/c/…`) for Windows files. Some bridges from Windows, such as kitty running through an adapter, do not deliver drops at all; there, paste the path (`ctrl+v`) or type it.
 
 ### Tests
 
@@ -98,7 +110,7 @@ Body, Tests and the Docs description use the same editor:
 - `alt+f` formats JSON (key order kept);
 - `ctrl+z` / `ctrl+y` undo and redo; pasting keeps line breaks;
 - **selection**: `shift` + any movement (arrows, `home`/`end`, `alt+←/→`, `pgup`/`pgdown`) selects, `alt+a` selects everything, `esc` clears it. Typing replaces the selection, and an opening bracket or quote wraps it; `tab` / `shift+tab` indent or dedent the selected lines; `backspace` deletes it;
-- **clipboard**: `ctrl+c` copies the selection (with nothing selected it quits, as everywhere), `alt+x` cuts, `alt+v` pastes from the system clipboard (terminal paste works too);
+- **clipboard**: `ctrl+c` copies the selection (with nothing selected it quits, as everywhere), `alt+x` cuts, `ctrl+v` (or `alt+v`) pastes from the system clipboard, replacing the selection (terminal paste works too);
 - `home` goes to the indentation, then column 0; `ctrl+home` / `ctrl+end`; `alt+←` / `alt+→` move by word; `ctrl+w` deletes the word before the cursor; `ctrl+u` deletes to the line start;
 - in Tests, syntax errors as you type (JavaScript and TypeScript, checked with esbuild: the line gets a red `●`, the message goes to the status line) and the **signature** of the call the cursor is in (`ƒ lazyapi.send(target, options?)`, `toHaveProperty(path, value?)`, …);
 - dynamic values: `{{$` (or `$name`) offers the built-in faker variables and the helpers the Tests script exports, with a description; unknown names are drawn as missing and listed in the help bar;
@@ -110,7 +122,7 @@ Body, Tests and the Docs description use the same editor:
 
 - `Tab` / `Shift+Tab` cycles through: Method → Server → URI → Send → Tabs → Response
 - `Enter` inside a tab activates tab content (Blocker mode)
-- `Esc` blurs tab content; a second `Esc` exits the tab back to field cycling
+- `Esc` blurs tab content; a second `Esc` exits the tab back to field cycling. On an open select, `Esc` only closes the list
 - Within tab content (e.g., Params rows), Tab/Shift+Tab wraps cyclically
 
 ## Saving

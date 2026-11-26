@@ -156,5 +156,8 @@ func (d documentation) Completing() bool {
 
 // HasSelection reports whether the description has selected text.
 func (d documentation) HasSelection() bool {
+	if d.active && docField(d.fieldCursor) == summary {
+		return d.Summary.CanCopy()
+	}
 	return d.active && docField(d.fieldCursor) == description && d.Description.HasSelection()
 }

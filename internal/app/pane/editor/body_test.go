@@ -72,7 +72,7 @@ func TestBodyFormEditing(t *testing.T) {
 	// Text mode is unchanged.
 	txt := BodyTab()
 	txt.SetValue(`{"raw": true}`)
-	if txt.Value() != `{"raw": true}` || txt.form {
+	if txt.Value() != `{"raw": true}` || txt.mode != modeRaw {
 		t.Errorf("text body = %q", txt.Value())
 	}
 }

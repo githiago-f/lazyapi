@@ -711,6 +711,24 @@ func (a auth) Completing() bool {
 	return f != nil && f.Completing()
 }
 
+// HasSelection reports whether ctrl+c copies the focused field.
+func (a auth) HasSelection() bool {
+	if !a.active || a.focusPos < 0 || len(a.schemes) == 0 {
+		return false
+	}
+	si, fi := a.resolveField(a.focusPos)
+	r, ok := a.schemes[si].row(fi)
+	switch {
+	case !ok:
+		return false
+	case r.field != nil:
+		return r.field.CanCopy()
+	case r.pass != nil:
+		return r.pass.CanCopy()
+	}
+	return false
+}
+
 // SelectOpen reports whether a select of the tab shows its list.
 func (a auth) SelectOpen() bool {
 	for i := range a.schemes {
